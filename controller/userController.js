@@ -73,7 +73,7 @@ export const registerUser = async (req, res, next) => {
 
         await user.save();
 
-        res.status(201).json({
+        res.status(200).json({
             success: true,
             message: "User registered successfully",
             otp,
@@ -126,6 +126,12 @@ export const loginUser = async (req, res, next) => {
         if (!isPasswordMatched) {
             const error = new Error("Invalid email/phone or password");
             error.status = 401;
+            throw error;
+        }
+
+        if (user.isActive === false) {
+            const error = new Error("Your account has been deactivated. Please contact support.");
+            error.status = 403;
             throw error;
         }
 
@@ -366,6 +372,8 @@ export const logoutUser = async (req, res, next) => {
 
 
 
+
+
 // website
 
 export const createAdmin = async (req, res, next) => {
@@ -380,7 +388,7 @@ export const createAdmin = async (req, res, next) => {
             error.status = 400;
             throw error;
         }
-
+  
         if (!email) {
             const error = new Error("Email is required");
             error.status = 400;
@@ -459,13 +467,15 @@ export const adminLogin = async (req, res, next) => {
             throw error;
         }
 
-        const admin = await User.findOne({ phone, role: "admin" }).select("+password");
+        const admin = await User.findOne({ phone }).select("+password");
 
-        if (!admin) {
-            const error = new Error("Only Admin can access");
-            error.status = 401;
-            throw error;
-        }
+// , role: "admin"
+
+        // if (!admin) {
+        //     const error = new Error("Only Admin can access");
+        //     error.status = 401;
+        //     throw error;
+        // }
 
         const isPasswordMatched = await admin.comparePassword(password);
 
@@ -681,3 +691,37 @@ export const adminLogout = async (req, res, next) => {
     next(error);
   }
 };
+
+
+export const getCurrentUser = async (req,res, next) =>{
+    try{
+        if (!req.user) {
+            const error = new Error("User not authenticated");
+            error.status = 401;
+            throw error;
+        }
+
+        if (req.user.isActive === false) {
+            const error = new Error("User account is inactive");
+            error.status = 403;
+            throw error;
+        }
+
+        res.status(200).json({
+            success: true,
+            message: "Current user fetched successfully",
+            user: {
+                id: req.user._id,
+                name: req.user.name,
+                email: req.user.email,
+                phone: req.user.phone,
+                role: req.user.role,
+                isActive: req.user.isActive,
+            },
+        });
+
+    }
+    catch(error){
+        next(error);
+    }
+}

@@ -3,6 +3,8 @@ import UserDetails from "../models/userDetails.js";
 const sanitizeInput = (value) =>
     typeof value === "string" ? value.trim() : value;
 
+
+
 export const createUserDetails = async (req, res, next) => {
     try {
         const dob = sanitizeInput(req.body.dob);
@@ -129,15 +131,7 @@ export const createUserDetails = async (req, res, next) => {
             }
         }
 
-        const existingUserDetails = await UserDetails.findOne({ userId: req.user._id });
-
-        if (existingUserDetails) {
-            const error = new Error("User details already exist");
-            error.status = 409;
-            throw error;
-        }
-
-        const userDetails = await UserDetails.create({
+        const detailsData = {
             userId: req.user._id,
             dob,
             gender,
@@ -154,11 +148,17 @@ export const createUserDetails = async (req, res, next) => {
             yearOfExperience,
             hearAboutUs,
             others,
-        });
+        };
 
-        res.status(201).json({
+        const userDetails = await UserDetails.findOneAndUpdate(
+            { userId: req.user._id },
+            { $set: detailsData },
+            { upsert: true, new: true, runValidators: true }
+        );
+
+        res.status(userDetails.createdAt === userDetails.updatedAt ? 201 : 200).json({
             success: true,
-            message: "User details created successfully",
+            message: `User details ${userDetails.createdAt === userDetails.updatedAt ? "created" : "updated"} successfully`,
             userDetails,
         });
     } catch (error) {

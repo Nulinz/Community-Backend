@@ -5,7 +5,6 @@ const userSchema = new mongoose.Schema(
   {
     name: {
       type: String,
-      required: [true, "Name is required"],
       trim: true,
     },
     email: {
@@ -22,9 +21,7 @@ const userSchema = new mongoose.Schema(
     },
     password: {
       type: String,
-      required: [true, "Password is required"],
-      minlength: [6, "Password must be at least 6 characters"],
-      select: false,
+      default:null
     },
     phone: {
       type: String,
@@ -32,10 +29,6 @@ const userSchema = new mongoose.Schema(
       trim: true,
     },
 
-    isActive:{
-        type:Boolean,
-        default:true
-    },
 
     otp: {
       type: String,
@@ -52,7 +45,11 @@ const userSchema = new mongoose.Schema(
     fcmToken:{
         type:String,
         default:null
-    }
+    },
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
   },
   {
     timestamps: true,
@@ -62,7 +59,7 @@ const userSchema = new mongoose.Schema(
 
 // hashpassword
 userSchema.pre("save", async function (next) {
-  if (!this.isModified("password")) {
+  if (!this.isModified("password") || !this.password) {
     return next();
   }
 
@@ -73,6 +70,7 @@ userSchema.pre("save", async function (next) {
 
 // comparepassword
 userSchema.methods.comparePassword = async function (enteredPassword) {
+  if (!this.password) return false;
   return bcrypt.compare(enteredPassword, this.password);
 };
 

@@ -78,6 +78,10 @@ const userDetailsSchema = new mongoose.Schema(
       trim: true,
       default: null,
     },
+    isActive: {
+      type: Boolean,
+      default: true
+    },
     others: {
       type: String,
       trim: true,
@@ -88,6 +92,7 @@ const userDetailsSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+
 
 const UserDetails =
   mongoose.models.UserDetails ||

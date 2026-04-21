@@ -9,14 +9,19 @@ import {
 } from "../controller/userDetailController.js"
 
 
+
 const router = express.Router();
 const uploader = multer();
+
 
 
 
 router.post("/createUserDetails",isAuthenticated,uploader.none(),createUserDetails)
 router.get("/getUserDetails",isAuthenticated,getUserDetails)
 router.put("/updateUserDetails",isAuthenticated,uploader.none(),updateUserDetails)
+
+
+
 
 
 
