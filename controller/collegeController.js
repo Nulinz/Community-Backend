@@ -138,7 +138,8 @@ export const createCollegeForm = async (req, res, next) => {
                 email: mailId,
                 phone: phoneNumber,
                 role: "college",
-                password: null
+                password: null,
+            
             });
         }
 

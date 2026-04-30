@@ -17,7 +17,7 @@ import conferenceRoutes from "./routes/conferenceRoutes.js"
 import seminarRoutes from "./routes/seminarRoutes.js"
 import internshipRoutes from "./routes/internshipRoutes.js"
 import freelanceRoutes from "./routes/freelanceRoutes.js"
-
+import adminRoutes from "./routes/adminRoutes.js"
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -61,7 +61,7 @@ app.use("/api/conference", conferenceRoutes)
 app.use("/api/seminar", seminarRoutes)
 app.use("/api/internship", internshipRoutes)
 app.use("/api/freelance", freelanceRoutes)
-
+app.use("/api/admin", adminRoutes)
 
 
 
