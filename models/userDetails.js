@@ -19,6 +19,9 @@ const userDetailsSchema = new mongoose.Schema(
       enum: ["Male", "Female"],
       trim: true,
     },
+    profile_pic:{
+        type: String,
+    },
     currentStatus: {
       type: String,
       required: [true, "Current status is required"],

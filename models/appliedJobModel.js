@@ -11,11 +11,12 @@ const appliedJobSchema = new mongoose.Schema(
     jobId: {
       type: mongoose.Schema.Types.ObjectId,
       required: true,
+      refPath: "jobType",
     },
 
     jobType: {
       type: String,
-      enum: ["internship", "freelance"],
+      enum: ["Internship", "Freelance"],
       required: true,
     },
   },

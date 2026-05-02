@@ -530,3 +530,93 @@ export const getCurrentUser = async (req, res) => {
     });
   }
 };
+
+export const logout = async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    await User.findByIdAndUpdate(userId, {
+      fcm_token: null,
+      device_type: null,
+      last_login: new Date(),
+    });
+
+    return res.status(200).json({
+      status: true,
+      message: "Logged out successfully",
+    });
+  } catch (error) {
+    console.error("Logout Error:", error.message);
+    return res.status(500).json({
+      status: false,
+      message: "Failed to logout",
+      error: error.message,
+    });
+  }
+};
+
+export const changePassword = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { currentPassword, newPassword, confirmPassword } = req.body;
+
+    // Validate required fields
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      return res.status(400).json({
+        status: false,
+        message: "currentPassword, newPassword and confirmPassword are required",
+      });
+    }
+
+    // Check new password and confirm match
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({
+        status: false,
+        message: "newPassword and confirmPassword do not match",
+      });
+    }
+
+    // Minimum password length
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        status: false,
+        message: "New password must be at least 6 characters",
+      });
+    }
+
+    // Get user with password
+    const user = await User.findById(userId).select("+password");
+    if (!user) {
+      return res.status(404).json({
+        status: false,
+        message: "User not found",
+      });
+    }
+
+    // Verify current password using model method
+    const isMatch = await user.comparePassword(currentPassword);
+    if (!isMatch) {
+      return res.status(401).json({
+        status: false,
+        message: "Current password is incorrect",
+      });
+    }
+
+    // Update password — pre save hook will hash it automatically
+    user.password = newPassword;
+    await user.save();
+
+    return res.status(200).json({
+      status: true,
+      message: "Password changed successfully",
+    });
+  } catch (error) {
+    console.error("Change Password Error:", error.message);
+    return res.status(500).json({
+      status: false,
+      message: "Failed to change password",
+      error: error.message,
+    });
+  }
+};
+

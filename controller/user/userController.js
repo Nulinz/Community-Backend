@@ -218,7 +218,7 @@ const getJobs = async (req, res) => {
           return {
             ...obj,
             companyImage,
-            is_saved: await checkIsSaved(userId, item._id, "internship"),
+            is_saved: await checkIsSaved(userId, item._id, "Internship"),
             is_applied: await checkIsApplied(userId, item._id),
           };
         })
@@ -245,7 +245,7 @@ const getJobs = async (req, res) => {
           return {
             ...obj,
             companyImage,
-            is_saved: await checkIsSaved(userId, item._id, "freelance"),
+            is_saved: await checkIsSaved(userId, item._id, "Freelance"),
             is_applied: await checkIsApplied(userId, item._id),
           };
         })
@@ -273,7 +273,7 @@ const getJobs = async (req, res) => {
 const getAllInternships = async (req, res) => {
   try {
     const userId = req.user._id;
-
+   
     const internships = await Internship.find()
       .sort({ createdAt: -1 })
       .select("jobTitle location companyName duration salary eligibility createdAt c_by")
@@ -299,7 +299,7 @@ const getAllInternships = async (req, res) => {
         return {
           ...obj,
           companyImage,
-          is_saved: await checkIsSaved(userId, item._id, "internship"),
+          is_saved: await checkIsSaved(userId, item._id, "Internship"),
           is_applied: await checkIsApplied(userId, item._id),
         };
       })
@@ -349,7 +349,7 @@ const getAllFreelances = async (req, res) => {
         return {
           ...obj,
           companyImage,
-          is_saved: await checkIsSaved(userId, item._id, "freelance"),
+          is_saved: await checkIsSaved(userId, item._id, "Freelance"),
           is_applied: await checkIsApplied(userId, item._id),
         };
       })
@@ -376,7 +376,7 @@ const toggleSavedJob = async (req, res) => {
   try {
     const userId = req.user._id;
     const { jobId, jobType } = req.body;
-
+    console.log(jobId, jobType,userId)
     // Validate required fields
     if (!jobId || !jobType) {
       return res.status(400).json({
@@ -386,7 +386,7 @@ const toggleSavedJob = async (req, res) => {
     }
 
     // Validate jobType
-    if (!["internship", "freelance"].includes(jobType)) {
+    if (!["Internship", "Freelance"].includes(jobType)) {
       return res.status(400).json({
         success: false,
         message: "jobType must be 'internship' or 'freelance'",
@@ -428,13 +428,53 @@ const getSavedJobs = async (req, res) => {
     const userId = req.user._id;
 
     const savedJobs = await SavedJob.find({ userId })
-      .populate("jobId")
+      .populate({
+        path: "jobId",
+        populate: {
+          path: "c_by",
+          select: "role",
+        },
+      })
       .sort({ createdAt: -1 });
+
+    const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
+
+    const enrichedSavedJobs = await Promise.all(
+      savedJobs.map(async (item) => {
+        const job = item.jobId;
+
+        if (!job) return null; // safety
+
+        let companyImage = null;
+
+        if (job.c_by?.role === "admin") {
+          companyImage = STATIC_ADMIN_IMAGE;
+        } else if (job.c_by?.role === "company") {
+          const company = await Company.findOne({
+            c_by: job.c_by._id,
+          })
+            .select("companyLogo")
+            .lean();
+
+          companyImage = company?.companyLogo || null;
+        }
+
+        return {
+          ...item.toObject(),
+          jobId: {
+            ...job.toObject(),
+            companyImage,
+            is_saved: true,
+            is_applied: await checkIsApplied(userId, job._id),
+          },
+        };
+      })
+    );
 
     return res.status(200).json({
       success: true,
-      count: savedJobs.length,
-      data: savedJobs,
+      count: enrichedSavedJobs.length,
+      data: enrichedSavedJobs.filter(Boolean),
     });
   } catch (error) {
     console.error("Get Saved Jobs Error:", error.message);
@@ -460,7 +500,7 @@ const applyJob = async (req, res) => {
     }
 
     // Validate jobType
-    if (!["internship", "freelance"].includes(jobType)) {
+    if (!["Internship", "Freelance"].includes(jobType)) {
       return res.status(400).json({
         status: false,
         message: "jobType must be 'internship' or 'freelance'",
@@ -499,13 +539,61 @@ const getAppliedJobs = async (req, res) => {
     const userId = req.user._id;
 
     const appliedJobs = await AppliedJob.find({ userId })
-      .populate("jobId")
+      .populate({
+        path: "jobId",
+        populate: {
+          path: "c_by",
+          select: "role",
+        },
+      })
       .sort({ createdAt: -1 });
+
+    const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
+
+    const enrichedAppliedJobs = await Promise.all(
+      appliedJobs.map(async (item) => {
+        const job = item.jobId;
+
+        if (!job) return null;
+
+        let companyImage = null;
+
+        if (job.c_by?.role === "admin") {
+          companyImage = STATIC_ADMIN_IMAGE;
+        } else if (job.c_by?.role === "company") {
+          const company = await Company.findOne({
+            c_by: job.c_by._id,
+          })
+            .select("companyLogo")
+            .lean();
+
+          companyImage = company?.companyLogo || null;
+        }
+
+        return {
+          ...item.toObject(),
+          jobId: {
+            ...job.toObject(),
+            companyImage,
+
+            // ✅ KEY DIFFERENCE
+            is_applied: true,
+
+            // ✅ Need to check saved
+            is_saved: await checkIsSaved(
+              userId,
+              job._id,
+              item.jobType // important for refPath
+            ),
+          },
+        };
+      })
+    );
 
     return res.status(200).json({
       status: true,
-      count: appliedJobs.length,
-      data: appliedJobs,
+      count: enrichedAppliedJobs.length,
+      data: enrichedAppliedJobs.filter(Boolean),
     });
   } catch (error) {
     console.error("Get Applied Jobs Error:", error.message);
@@ -670,7 +758,7 @@ const createEventRegistration = async (req, res) => {
     }
 
     // Validate eventType
-    if (!["conference", "competition", "seminar", "event"].includes(eventType)) {
+    if (!["Conference", "Competition", "Seminar", "Event"].includes(eventType)) {
       return res.status(400).json({
         status: false,
         message: "eventType must be 'conference', 'competition', 'seminar' or 'event'",
@@ -719,7 +807,7 @@ const createEventRegistration = async (req, res) => {
       accommodationType: accommodation === "yes" ? accommodationType : null,
     });
 
-    return res.status(201).json({
+    return res.status(200).json({
       status: true,
       message: "Registered successfully",
       data: registration,

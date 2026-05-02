@@ -10,7 +10,7 @@ const savedJobSchema = new mongoose.Schema(
 
     jobType: {
       type: String,
-      enum: ["internship", "freelance"],
+      enum: ["Internship", "Freelance"],
       required: true,
     },
 

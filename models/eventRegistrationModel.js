@@ -6,10 +6,11 @@ const eventRegistrationSchema = new mongoose.Schema(
     eventId: {
       type: mongoose.Schema.Types.ObjectId,
       required: true,
+      refPath: " eventType",
     },
     eventType: {
       type: String,
-      enum: ["conference", "competition", "seminar", "event"],
+      enum: ["Conference", "Competition", "Seminar", "Event"],
       required: true,
     },
 

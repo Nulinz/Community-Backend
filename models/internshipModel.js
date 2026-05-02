@@ -20,6 +20,12 @@ const internshipSchema = new mongoose.Schema(
     applicationDeadline: { type: Date },
     salary: { type: Number, default: 0 },
     responsibilities: [{ type: String, trim: true }],
+    skill_set: [{ type: String, trim: true }],
+    benefits: [{ type: String, trim: true }],
+    learning_outcomes: [{ type: String, trim: true }],
+    development_benefits: [{ type: String, trim: true }],
+   development_resources: [{ type: String, trim: true }],
+    // skill_set
     eligibility: [{ type: String, trim: true }],
     description: { type: String, trim: true },
     certificateAvailability: { type: String, trim: true },

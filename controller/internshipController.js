@@ -11,7 +11,7 @@ export const createInternshipForm = async (req, res, next) => {
         const { id, _id, ...rest } = req.body;
         const targetId = id || _id;
         const isUpdate = !!targetId;
-
+        console.log(rest) 
         const {
             internshipType,
             jobTitle,
@@ -27,7 +27,12 @@ export const createInternshipForm = async (req, res, next) => {
             responsibilities,
             eligibility,
             description,
-            certificateAvailability
+            certificateAvailability,
+            skill_set,
+            benefits,
+            learning_outcomes,
+            development_benefits,
+            development_resources
         } = rest;
 
         // Validation
@@ -67,7 +72,7 @@ export const createInternshipForm = async (req, res, next) => {
         internship.salary = Number(salary) || 0;
         internship.description = toCleanString(description);
         internship.certificateAvailability = toCleanString(certificateAvailability);
-
+        
         // Handle dynamic arrays (sent as JSON strings or raw arrays depending on frontend)
         const parseArray = (val) => {
             if (Array.isArray(val)) return val;
@@ -79,7 +84,11 @@ export const createInternshipForm = async (req, res, next) => {
 
         internship.responsibilities = parseArray(responsibilities);
         internship.eligibility = parseArray(eligibility);
-
+        internship.skill_set=parseArray(skill_set)
+        internship.benefits=parseArray(benefits)
+        internship.learning_outcomes=parseArray(learning_outcomes)
+        internship.development_benefits=parseArray(development_benefits)
+        internship.development_resources=parseArray(development_resources)
         await internship.save();
 
         res.status(isUpdate ? 200 : 201).json({

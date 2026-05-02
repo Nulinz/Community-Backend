@@ -62,7 +62,7 @@ router.post("/forgot-password", uploader.none(), forgotPassword);
 router.post("/reset-password", uploader.none(), resetPassword);
 router.post("/forgot-otp-verify", uploader.none(), forgotOtpVerify);
 
-router.post("/apply-job", isAuthenticated, applyJob);
+router.post("/apply-job",uploader.none(), isAuthenticated, applyJob);
 router.get("/my-applied-job", isAuthenticated, getAppliedJobs);
 
 router.get("/dashboard", isAuthenticated, userDashboard)
@@ -70,26 +70,25 @@ router.get("/jobs", isAuthenticated, getJobs)
 router.get("/internships", isAuthenticated, getAllInternships)
 router.get("/freelances", isAuthenticated, getAllFreelances)
 router.post("/job-toggle", uploader.none(),isAuthenticated, toggleSavedJob);
-router.post("/job-profile", isAuthenticated, getJobProfile);
+router.post("/job-profile",uploader.none(), isAuthenticated, getJobProfile);
 // GET /api/saved-jobs          → get all saved jobs (auth required)
-router.get("/my-saved-job", isAuthenticated, getSavedJobs);
+router.get("/my-saved-job", uploader.none(),isAuthenticated, getSavedJobs);
 
-router.get("/competitions", isAuthenticated, getAllCompetitions);
+router.get("/competitions",uploader.none(), isAuthenticated, getAllCompetitions);
 
 // GET /api/competitions/:id    → single competition profile
-router.post("/Competition-profile", isAuthenticated, getCompetitionProfile);
-
+router.post("/Competition-profile",uploader.none(), isAuthenticated, getCompetitionProfile);
 
 // GET  /api/conferences          → all conferences list
-router.get("/conferences", isAuthenticated, getAllConferences);
+router.get("/conferences",uploader.none(), isAuthenticated, getAllConferences);
 
 // POST /api/conferences/profile  → single conference profile (id in body)
-router.post("/conference-profile", isAuthenticated, getConferenceProfile);
+router.post("/conference-profile", uploader.none(),isAuthenticated, getConferenceProfile);
 
 
-router.post("/event-register", isAuthenticated, createEventRegistration);
+router.post("/event-register", uploader.none(),isAuthenticated, createEventRegistration);
 // admin
-router.post("/create-admin", isAuthenticated, authorizeRoles("admin"), uploader.none(), createAdmin);
+router.post("/create-admin",uploader.none(), isAuthenticated, authorizeRoles("admin"), uploader.none(), createAdmin);
 router.post("/adminlogin", uploader.none(), adminLogin);
 router.post("/adminforgot", uploader.none(), adminForgotPassword);
 router.post("/adminverify", uploader.none(), adminVerifyOtp);
