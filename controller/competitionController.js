@@ -78,7 +78,8 @@ export const createCompetitionForm = async (req, res, next) => {
             description,
             rounds,
             schedule,
-            incharges
+            incharges,
+            certificateAvailability
         } = rest;
 
         // Validation
@@ -161,7 +162,7 @@ export const createCompetitionForm = async (req, res, next) => {
 
         competition.additionalRules = toCleanString(additionalRules);
         competition.description = toCleanString(description);
-
+        competition.certificateAvailability = toCleanString(certificateAvailability);
         competition.rounds = parseDynamicArray(rounds);
         competition.schedule = parseDynamicArray(schedule);
         competition.incharges = parseDynamicArray(incharges);

@@ -77,7 +77,8 @@ export const createConferenceForm = async (req, res, next) => {
             rounds,
             schedule,
             incharges,
-            description
+            description,
+            certificateAvailability
         } = rest;
 
         // Validation
@@ -133,7 +134,7 @@ export const createConferenceForm = async (req, res, next) => {
         conference.placementOpportunity = toCleanString(placementOpportunity);
         conference.industryExposure = toCleanString(industryExposure);
         conference.industryPartners = toCleanString(industryPartners);
-
+        conference.certificateAvailability=toCleanString(certificateAvailability)
         conference.venueName = toCleanString(venueName);
         conference.venueAddress = toCleanString(venueAddress);
         conference.geoLocation = toCleanString(geoLocation);

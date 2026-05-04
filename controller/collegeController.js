@@ -304,6 +304,8 @@ export const setPassword = async (req, res, next) => {
 
         // The pre-save hook in userModel will hash this
         user.password = password;
+        user.is_active = true
+        user.register_status="completed"
         await user.save();
 
         res.status(200).json({

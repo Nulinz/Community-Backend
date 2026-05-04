@@ -82,7 +82,8 @@ export const createSeminarForm = async (req, res, next) => {
             description,
             rounds,
             schedule,
-            incharges
+            incharges,
+            certificateAvailability
         } = rest;
 
         // Validation
@@ -134,7 +135,7 @@ export const createSeminarForm = async (req, res, next) => {
         seminar.secondPrize = toCleanString(secondPrize);
         seminar.thirdPrize = toCleanString(thirdPrize);
         seminar.participationPrize = toCleanString(participationPrize);
-
+        seminar.certificateAvailability = toCleanString(certificateAvailability);
         seminar.internshipOpportunity = toCleanString(internshipOpportunity);
         seminar.placementOpportunity = toCleanString(placementOpportunity);
         seminar.industryExposure = toCleanString(industryExposure);

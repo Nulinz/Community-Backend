@@ -469,6 +469,13 @@ export const adminLogin = async (req, res, next) => {
 
         const admin = await User.findOne({ phone }).select("+password");
 
+
+        if(!admin){
+            const error = new Error("Invaild User");
+            error.status = 500;
+            throw error;
+        }
+
 // , role: "admin"
 
         // if (!admin) {

@@ -52,7 +52,7 @@ const competitionSchema = new mongoose.Schema(
     placementOpportunity: { type: String },
     industryExposure: { type: String },
     industryPartners: { type: String },
-
+ certificateAvailability: { type: String, trim: true },
     // Prizes
     firstPrize: { type: String, trim: true },
     secondPrize: { type: String, trim: true },
@@ -75,7 +75,9 @@ const competitionSchema = new mongoose.Schema(
     // Team & Eligibility
     incharges: [inchargeSchema],
     eligibilityDetails: { type: String, trim: true },
-    allowedDepartments: { type: String },
+    allowedDepartments: {
+  type: [String],
+},
     teamOrIndividualEvent: { type: String },
     teamSizeMinimum: { type: Number },
     teamSizeMaximum: { type: Number },

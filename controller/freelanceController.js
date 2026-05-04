@@ -32,7 +32,11 @@ export const createFreelanceForm = async (req, res, next) => {
             referenceWebsite,
             learning,
             certificateAvailability,
-            description
+            description,
+            supporting_files,
+            payment_structure,
+            rules,
+            eligibility_criteria
         } = rest;
 
         // Validation
@@ -71,7 +75,10 @@ export const createFreelanceForm = async (req, res, next) => {
         freelance.eligibility = parseArray(eligibility);
         freelance.security = parseArray(security);
         freelance.referenceWebsite = parseArray(referenceWebsite);
-
+    freelance.rules = parseArray(rules);
+    freelance.payment_structure = parseArray(payment_structure);
+    freelance.supporting_files = parseArray(supporting_files);
+     freelance. eligibility_criteria = parseArray( eligibility_criteria);
         await freelance.save();
 
         res.status(isUpdate ? 200 : 201).json({

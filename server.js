@@ -18,6 +18,7 @@ import seminarRoutes from "./routes/seminarRoutes.js"
 import internshipRoutes from "./routes/internshipRoutes.js"
 import freelanceRoutes from "./routes/freelanceRoutes.js"
 import adminRoutes from "./routes/adminRoutes.js"
+import { seedTamilNaduLocations } from "./services/uploadLocation.js";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -41,7 +42,7 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
-
+// seedTamilNaduLocations()
 
 app.get("/", (req, res) => {
   res.status(200).json({

@@ -1,7 +1,7 @@
 import SavedJob from "../models/savedJobModel.js";
-export const checkIsSaved = async (userId, jobId, jobType) => {
+export const checkIsSaved = async (userId, jobId, jobType=null) => {
   if (!userId || !jobId) return false;
-  const saved = await SavedJob.findOne({ userId, jobId, jobType });
+  const saved = await SavedJob.findOne({ userId, jobId });
   return !!saved;
 };
  

@@ -38,7 +38,7 @@ const eventSchema = new mongoose.Schema(
     registrationEndDate: { type: Date },
     totalSeats: { type: Number },
     coverImage: { type: String, required: true },
-
+   certificateAvailability: { type: String, trim: true },
     // Advanced Details
     rounds: [roundSchema],
     schedule: [scheduleSchema],

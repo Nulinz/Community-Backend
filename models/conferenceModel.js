@@ -79,7 +79,7 @@ const conferenceSchema = new mongoose.Schema(
     teamOrIndividualEvent: { type: String },
     teamSizeMinimum: { type: Number },
     teamSizeMaximum: { type: Number },
-
+ certificateAvailability: { type: String, trim: true },
     // Rules & Description
     description: { type: String, trim: true },
 

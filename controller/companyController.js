@@ -1,3 +1,4 @@
+import { register } from "module";
 import Company from "../models/companyModel.js";
 import User from "../models/userModel.js";
 import fs from "fs";
@@ -150,6 +151,7 @@ export const createCompanyForm = async (req, res, next) => {
             targetUser.name = companyName;
             targetUser.phone = phoneNumber;
             targetUser.role = "company";
+            
             await targetUser.save();
         } else {
             // Create new user account for the company
@@ -158,6 +160,7 @@ export const createCompanyForm = async (req, res, next) => {
                 email: mailId,
                 phone: phoneNumber,
                 role: "company",
+                is_active:false,
                 password: null
             });
         }
@@ -393,8 +396,6 @@ export const addPost = async (req, res, next) => {
     }
 };
 
-
-
 export const setPassword = async (req, res, next) => {
     try {
         const { id, password, confirmPassword } = req.body;
@@ -427,6 +428,8 @@ export const setPassword = async (req, res, next) => {
 
         // The pre-save hook in userModel will hash this
         user.password = password;
+        user.is_active=true
+        register_status="completed"
         await user.save();
 
         res.status(200).json({
@@ -455,7 +458,7 @@ export const toggleCompanyStatus = async (req, res, next) => {
             throw error;
         }
 
-        user.isActive = !user.isActive;
+        user.is_active = !user.is_active;
         await user.save();
 
         res.status(200).json({

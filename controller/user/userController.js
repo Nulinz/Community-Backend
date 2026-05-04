@@ -16,83 +16,85 @@ import { checkIsRegistered } from "../../helper/isRegistered.js";
 
 import Conference from "../../models/conferenceModel.js";
 import Seminar from "../../models/seminarModel.js";
-
+import mongoose from "mongoose";
 
 import CompanyFollow from "../../models/companyFollowModel.js";
 
-const userDashboard = async (req, res) => {
-  try {
-    const userId = req.user._id
-    const [popularEvents, preferredInternships, topCompanies] =
-      await Promise.all([
-        // ── Popular Events ─────────────────────────────────────────
+import Location from "../../models/locationModel.js";
 
-        Event.find({ isActive: true })
-          .sort({ createdAt: -1 })
-          .limit(3)
-          .select("eventName coverImage organizer c_by mode description individualFees teamFees lateFees totalSeats eventDate geoLocation image isActive createdAt"),
+// const userDashboard = async (req, res) => {
+//   try {
+//     const userId = req.user._id
+//     const [popularEvents, preferredInternships, topCompanies] =
+//       await Promise.all([
+//         // ── Popular Events ─────────────────────────────────────────
 
-        // ── Preferred Internships ──────────────────────────────────
-        // No condition, latest 3
-        Internship.find({ isActive: true })
-          .sort({ createdAt: -1 })
-          .limit(3)
-          .select("jobTitle c_by location companyName duration salary eligibility createdAt")
-          .populate("c_by", "role"),
-        // ── Top Companies ──────────────────────────────────────────
-        // Latest 4 companies
-        Company.find()
-          .sort({ createdAt: -1 })
-          .limit(4)
-          .select("companyName technologies companyTagLine companyLogo address state address industry website location createdAt"),
-      ]);
+//         Event.find({ isActive: true })
+//           .sort({ createdAt: -1 })
+//           .limit(3)
+//           .select("eventName coverImage organizer c_by mode description individualFees teamFees lateFees totalSeats eventDate geoLocation image isActive createdAt"),
 
-    const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
-    console.log()
-    const data = await Promise.all(
-      preferredInternships.map(async (item) => {
-        const obj = item.toObject();
+//         // ── Preferred Internships ──────────────────────────────────
+//         // No condition, latest 3
+//         Internship.find({ isActive: true })
+//           .sort({ createdAt: -1 })
+//           .limit(3)
+//           .select("jobTitle c_by location companyName duration salary eligibility createdAt")
+//           .populate("c_by", "role"),
+//         // ── Top Companies ──────────────────────────────────────────
+//         // Latest 4 companies
+//         Company.find()
+//           .sort({ createdAt: -1 })
+//           .limit(4)
+//           .select("companyName technologies companyTagLine companyLogo address state address industry website location createdAt"),
+//       ]);
 
-        let companyImage = null;
+//     const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
+//     console.log()
+//     const data = await Promise.all(
+//       preferredInternships.map(async (item) => {
+//         const obj = item.toObject();
 
-        if (item.c_by?.role === "admin") {
-          companyImage = STATIC_ADMIN_IMAGE;
+//         let companyImage = null;
 
-        } else if (item.c_by?.role === "company") {
+//         if (item.c_by?.role === "admin") {
+//           companyImage = STATIC_ADMIN_IMAGE;
 
-          const company = await Company.findOne({
-            c_by: item.c_by,
-          }).select("companyLogo").lean();
-          companyImage = company?.companyLogo || null;
-          console.log(company)
-        }
+//         } else if (item.c_by?.role === "company") {
 
-        return {
-          ...obj,
-          companyImage,
-          is_saved: await checkIsSaved(userId, item._id, "internship"),
-          is_applied: await checkIsApplied(userId, item._id),
-        };
-      })
-    );
+//           const company = await Company.findOne({
+//             c_by: item.c_by,
+//           }).select("companyLogo").lean();
+//           companyImage = company?.companyLogo || null;
+//           console.log(company)
+//         }
 
-    return res.status(200).json({
-      status: true,
-      data: {
-        popularEvents,
-        preferredInternships: data,
-        topCompanies,
-      },
-    });
-  } catch (error) {
-    console.error("Dashboard API Error:", error.message);
-    return res.status(500).json({
-      status: false,
-      message: "Failed to load dashboard data",
-      error: error.message,
-    });
-  }
-};
+//         return {
+//           ...obj,
+//           companyImage,
+//           is_saved: await checkIsSaved(userId, item._id, "internship"),
+//           is_applied: await checkIsApplied(userId, item._id),
+//         };
+//       })
+//     );
+
+//     return res.status(200).json({
+//       status: true,
+//       data: {
+//         popularEvents,
+//         preferredInternships: data,
+//         topCompanies,
+//       },
+//     });
+//   } catch (error) {
+//     console.error("Dashboard API Error:", error.message);
+//     return res.status(500).json({
+//       status: false,
+//       message: "Failed to load dashboard data",
+//       error: error.message,
+//     });
+//   }
+// };
 // const getJobs = async (req, res) => {
 //   try {
 //     const [internships, freelance] = await Promise.all([
@@ -170,94 +172,274 @@ const userDashboard = async (req, res) => {
 
 
 
+// const getJobs = async (req, res) => {
+//   try {
+//     const userId = req.user._id;
+
+//     const [internships, freelances] = await Promise.all([
+//       // ── Internships ────────────────────────────────────────────
+//       Internship.find()
+//         .sort({ createdAt: -1 })
+//         .limit(3)
+//         .select("jobTitle location c_by companyName duration salary eligibility createdAt")
+//         .populate("c_by", "role"),
+
+//       // ── Freelance ──────────────────────────────────────────────
+//       Freelance.find()
+//         .sort({ createdAt: -1 })
+//         .limit(3)
+//         .select("eligibility c_by description  companyName jobTitle jobStartDate totalOpenings mode salary createdAt")
+//         .populate("c_by", "role")
+//     ]);
+
+//     const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
+
+//     const [internshipsWithSaved, freelancesWithSaved] = await Promise.all([
+
+//       // =========================
+//       // INTERNSHIPS
+//       // =========================
+//       Promise.all(
+//         internships.map(async (item) => {
+//           const obj = item.toObject();
+
+//           let companyImage = null;
+
+//           if (item.c_by?.role === "admin") {
+//             companyImage = STATIC_ADMIN_IMAGE;
+
+//           } else if (item.c_by?.role === "company") {
+//             const company = await Company.findOne({
+//               c_by: item.c_by._id,
+
+//             }).select("companyLogo").lean();
+
+//             companyImage = company?.companyLogo || null;
+//           }
+
+//           return {
+//             ...obj,
+//             companyImage,
+//             is_saved: await checkIsSaved(userId, item._id, "Internship"),
+//             is_applied: await checkIsApplied(userId, item._id),
+//           };
+//         })
+//       ),
+
+//       Promise.all(
+//         freelances.map(async (item) => {
+//           const obj = item.toObject();
+
+//           let companyImage = null;
+
+//           if (item.c_by?.role === "admin") {
+//             companyImage = STATIC_ADMIN_IMAGE;
+
+//           } else if (item.c_by?.role === "company") {
+//             const company = await Company.findOne({
+//               c_by: item.c_by._id,
+
+//             }).select("companyLogo").lean();
+
+//             companyImage = company?.companyLogo || null;
+//           }
+
+//           return {
+//             ...obj,
+//             companyImage,
+//             is_saved: await checkIsSaved(userId, item._id, "Freelance"),
+//             is_applied: await checkIsApplied(userId, item._id),
+//           };
+//         })
+//       ),
+
+//     ]);
+
+//     return res.status(200).json({
+//       status: true,
+//       data: {
+//         internships: internshipsWithSaved,
+//         freelance: freelancesWithSaved,
+//       },
+//     });
+//   } catch (error) {
+//     console.error("Jobs API Error:", error.message);
+//     return res.status(500).json({
+//       status: false,
+//       message: "Failed to load jobs data",
+//       error: error.message,
+//     });
+//   }
+// };
+
+const userDashboard = async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    // ── Step 1: Get applied job IDs ─────────────────────────────
+    const appliedJobs = await AppliedJob.find({ userId }).select("jobId");
+
+    const appliedIds = appliedJobs.map(
+      (a) => new mongoose.Types.ObjectId(a.jobId)
+    );
+
+    // ── Step 2: Fetch data ──────────────────────────────────────
+    const [popularEvents, preferredInternships, topCompanies] =
+      await Promise.all([
+        // ── Popular Events ─────────────────────────────────────
+        Event.find({ isActive: true })
+          .sort({ createdAt: -1 })
+          .limit(3)
+          .select(
+            "eventName coverImage organizer c_by mode description individualFees teamFees lateFees totalSeats eventDate geoLocation image isActive createdAt"
+          ),
+
+        // ── Preferred Internships (EXCLUDE APPLIED) ─────────────
+        Internship.find({
+          isActive: true,
+          _id: { $nin: appliedIds }, // ✅ FILTER APPLIED ONLY
+        })
+          .sort({ createdAt: -1 })
+          .limit(3)
+          .select(
+            "jobTitle c_by location companyName duration salary eligibility createdAt"
+          )
+          .populate("c_by", "role"),
+
+        // ── Top Companies ──────────────────────────────────────
+        Company.find()
+          .sort({ createdAt: -1 })
+          .limit(4)
+          .select(
+            "companyName technologies companyTagLine companyLogo address state address industry website location createdAt"
+          ),
+      ]);
+
+    const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
+
+    // ── Step 3: Enrich internships ──────────────────────────────
+    const data = await Promise.all(
+      preferredInternships.map(async (item) => {
+        const obj = item.toObject();
+
+        let companyImage = null;
+
+        if (item.c_by?.role === "admin") {
+          companyImage = STATIC_ADMIN_IMAGE;
+        } else if (item.c_by?.role === "company") {
+          const company = await Company.findOne({
+            c_by: item.c_by._id,
+          })
+            .select("companyLogo")
+            .lean();
+
+          companyImage = company?.companyLogo || null;
+        }
+
+        return {
+          ...obj,
+          companyImage,
+
+          // ✅ still needed
+          is_saved: await checkIsSaved(userId, item._id, "Internship"),
+
+          // ✅ always false (because filtered)
+          is_applied: false,
+        };
+      })
+    );
+
+    return res.status(200).json({
+      status: true,
+      data: {
+        popularEvents,
+        preferredInternships: data,
+        topCompanies,
+      },
+    });
+  } catch (error) {
+    console.error("Dashboard API Error:", error.message);
+    return res.status(500).json({
+      status: false,
+      message: "Failed to load dashboard data",
+      error: error.message,
+    });
+  }
+};
 const getJobs = async (req, res) => {
   try {
     const userId = req.user._id;
 
+    // ── Step 1: Get excluded jobIds (saved + applied) ─────────────
+    const [applied] = await Promise.all([
+      AppliedJob.find({ userId }).select("jobId"),
+    ]);
+
+    const excludedIds = [
+      ...applied.map((a) => new mongoose.Types.ObjectId(a.jobId)),
+    ];
+
+    // ── Step 2: Fetch jobs (excluding saved + applied) ────────────
     const [internships, freelances] = await Promise.all([
-      // ── Internships ────────────────────────────────────────────
-      Internship.find()
+      Internship.find({
+        _id: { $nin: excludedIds }, // ✅ FILTER
+      })
         .sort({ createdAt: -1 })
         .limit(3)
         .select("jobTitle location c_by companyName duration salary eligibility createdAt")
         .populate("c_by", "role"),
 
-      // ── Freelance ──────────────────────────────────────────────
-      Freelance.find()
+      Freelance.find({
+        _id: { $nin: excludedIds }, // ✅ FILTER
+      })
         .sort({ createdAt: -1 })
         .limit(3)
-        .select("eligibility c_by description  companyName jobTitle jobStartDate totalOpenings mode salary createdAt")
-        .populate("c_by", "role")
+        .select("eligibility c_by description companyName jobTitle jobStartDate totalOpenings mode salary createdAt")
+        .populate("c_by", "role"),
     ]);
 
     const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
 
-    const [internshipsWithSaved, freelancesWithSaved] = await Promise.all([
+    // ── Step 3: Enrich function ───────────────────────────────────
+    const enrichJob = async (item) => {
+      const obj = item.toObject();
 
-      // =========================
-      // INTERNSHIPS
-      // =========================
-      Promise.all(
-        internships.map(async (item) => {
-          const obj = item.toObject();
+      let companyImage = null;
 
-          let companyImage = null;
-
-          if (item.c_by?.role === "admin") {
-            companyImage = STATIC_ADMIN_IMAGE;
-
-          } else if (item.c_by?.role === "company") {
-            const company = await Company.findOne({
-              c_by: item.c_by._id,
-
-            }).select("companyLogo").lean();
-
-            companyImage = company?.companyLogo || null;
-          }
-
-          return {
-            ...obj,
-            companyImage,
-            is_saved: await checkIsSaved(userId, item._id, "Internship"),
-            is_applied: await checkIsApplied(userId, item._id),
-          };
+      if (item.c_by?.role === "admin") {
+        companyImage = STATIC_ADMIN_IMAGE;
+      } else if (item.c_by?.role === "company") {
+        const company = await Company.findOne({
+          c_by: item.c_by._id,
         })
-      ),
+          .select("companyLogo")
+          .lean();
 
-      Promise.all(
-        freelances.map(async (item) => {
-          const obj = item.toObject();
+        companyImage = company?.companyLogo || null;
+      }
 
-          let companyImage = null;
+      return {
+        ...obj,
+        companyImage,
 
-          if (item.c_by?.role === "admin") {
-            companyImage = STATIC_ADMIN_IMAGE;
+        // ✅ Always false (because filtered)
+        is_saved: await checkIsSaved(userId, item._id),
+        is_applied: false,
+      };
+    };
 
-          } else if (item.c_by?.role === "company") {
-            const company = await Company.findOne({
-              c_by: item.c_by._id,
-
-            }).select("companyLogo").lean();
-
-            companyImage = company?.companyLogo || null;
-          }
-
-          return {
-            ...obj,
-            companyImage,
-            is_saved: await checkIsSaved(userId, item._id, "Freelance"),
-            is_applied: await checkIsApplied(userId, item._id),
-          };
-        })
-      ),
-
+    // ── Step 4: Process results ───────────────────────────────────
+    const [internshipsData, freelancesData] = await Promise.all([
+      Promise.all(internships.map(enrichJob)),
+      Promise.all(freelances.map(enrichJob)),
     ]);
 
+    // ── Response ──────────────────────────────────────────────────
     return res.status(200).json({
       status: true,
       data: {
-        internships: internshipsWithSaved,
-        freelance: freelancesWithSaved,
+        internships: internshipsData,
+        freelance: freelancesData,
       },
     });
   } catch (error) {
@@ -269,7 +451,6 @@ const getJobs = async (req, res) => {
     });
   }
 };
-
 const getAllInternships = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -320,20 +501,32 @@ const getAllInternships = async (req, res) => {
     });
   }
 };
-
-
 const getAllFreelances = async (req, res) => {
   try {
     const userId = req.user._id;
 
-    const freelances = await Freelance.find()
+    // ── Step 1: Get applied job IDs ─────────────
+    const appliedJobs = await AppliedJob.find({ userId }).select("jobId");
+
+    const appliedIds = appliedJobs.map(
+      (a) => new mongoose.Types.ObjectId(a.jobId)
+    );
+
+    // ── Step 2: Fetch freelances (exclude applied) ─────────────
+    const freelances = await Freelance.find({
+      _id: { $nin: appliedIds }, // ✅ ONLY applied filtered
+    })
       .sort({ createdAt: -1 })
-      .select("eligibility  description companyName jobTitle jobStartDate totalOpenings mode salary createdAt")
-      .populate("c_by", "role"); // 🔴 required
+      .select("eligibility description companyName jobTitle jobStartDate totalOpenings mode salary createdAt c_by")
+      .populate("c_by", "role");
+
     const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
+
+    // ── Step 3: Enrich ─────────────
     const data = await Promise.all(
       freelances.map(async (item) => {
         const obj = item.toObject();
+
         let companyImage = null;
 
         if (item.c_by?.role === "admin") {
@@ -341,19 +534,26 @@ const getAllFreelances = async (req, res) => {
         } else if (item.c_by?.role === "company") {
           const company = await Company.findOne({
             c_by: item.c_by._id,
-
-          }).select("companyLogo").lean();
+          })
+            .select("companyLogo")
+            .lean();
 
           companyImage = company?.companyLogo || null;
         }
+
         return {
           ...obj,
           companyImage,
+
+          // ✅ still needed
           is_saved: await checkIsSaved(userId, item._id, "Freelance"),
-          is_applied: await checkIsApplied(userId, item._id),
+
+          // ✅ always false (filtered)
+          is_applied: false,
         };
       })
     );
+
     return res.status(200).json({
       status: true,
       count: data.length,
@@ -368,10 +568,6 @@ const getAllFreelances = async (req, res) => {
     });
   }
 };
-
-
-
-
 const toggleSavedJob = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -422,20 +618,21 @@ const toggleSavedJob = async (req, res) => {
     });
   }
 };
-
 const getSavedJobs = async (req, res) => {
   try {
     const userId = req.user._id;
 
     const savedJobs = await SavedJob.find({ userId })
-      .populate({
-        path: "jobId",
-        populate: {
-          path: "c_by",
-          select: "role",
-        },
-      })
-      .sort({ createdAt: -1 });
+  .populate({
+    path: "jobId",
+    select:
+      "jobTitle location c_by companyName duration salary eligibility createdAt description jobStartDate totalOpenings mode",
+    populate: {
+      path: "c_by",
+      select: "role",
+    },
+  })
+  .sort({ createdAt: -1 });
 
     const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
 
@@ -485,7 +682,6 @@ const getSavedJobs = async (req, res) => {
     });
   }
 };
-
 const applyJob = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -533,20 +729,21 @@ const applyJob = async (req, res) => {
     });
   }
 };
-
 const getAppliedJobs = async (req, res) => {
   try {
     const userId = req.user._id;
 
     const appliedJobs = await AppliedJob.find({ userId })
-      .populate({
-        path: "jobId",
-        populate: {
-          path: "c_by",
-          select: "role",
-        },
-      })
-      .sort({ createdAt: -1 });
+  .populate({
+    path: "jobId",
+    select:
+      "jobTitle location c_by companyName duration salary eligibility createdAt description jobStartDate totalOpenings mode",
+    populate: {
+      path: "c_by",
+      select: "role",
+    },
+  })
+  .sort({ createdAt: -1 });
 
     const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
 
@@ -604,8 +801,6 @@ const getAppliedJobs = async (req, res) => {
     });
   }
 };
-
-
 const getJobProfile = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -618,13 +813,13 @@ const getJobProfile = async (req, res) => {
       });
     }
 
-    // Search internship first, then freelance
-    let job = await Internship.findById(id);
-    let jobType = "internship";
+    // ── Find Job ─────────────────────────────
+    let job = await Internship.findById(id).populate("c_by", "role email phone");
+    let jobType = "Internship";
 
     if (!job) {
-      job = await Freelance.findById(id);
-      jobType = "freelance";
+      job = await Freelance.findById(id).populate("c_by", "role email phone");
+      jobType = "Freelance";
     }
 
     if (!job) {
@@ -634,9 +829,43 @@ const getJobProfile = async (req, res) => {
       });
     }
 
-    const [is_saved, is_applied] = await Promise.all([
+    const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
+
+    // ── Get Company Details ─────────────────────────────
+    let companyDetails = {
+      companyLogo: null,
+      email: job?.c_by?.email || null,
+      phone: job?.c_by?.phone || null,
+      aboutUs:null,
+      websiteLink:null
+    };
+
+    if (job.c_by?.role === "admin") {
+      companyDetails.companyLogo = STATIC_ADMIN_IMAGE;
+    } else if (job.c_by?.role === "company") {
+      const company = await Company.findOne({
+        c_by: job.c_by._id,
+      })
+        .select("companyLogo aboutUs websiteLink")
+        .lean();
+       console.log(company)
+        companyDetails = {
+          companyLogo: company?.companyLogo || null,
+          aboutUs:company?.aboutUs|| null,
+          website:company?.websiteLink|| null
+        };
+    }
+
+    // ── Parallel Checks ─────────────────────────────
+    const [is_saved, is_applied, appliedCount] = await Promise.all([
       checkIsSaved(userId, id, jobType),
       checkIsApplied(userId, id),
+
+      // ✅ total applicants count
+      AppliedJob.countDocuments({
+        jobId: id,
+        jobType: jobType,
+      }),
     ]);
 
     return res.status(200).json({
@@ -644,8 +873,16 @@ const getJobProfile = async (req, res) => {
       jobType,
       data: {
         ...job.toObject(),
+
+        // ✅ attach company info
+        company: companyDetails,
+
+        // ✅ flags
         is_saved,
         is_applied,
+
+        // ✅ count
+        applied_count: appliedCount,
       },
     });
   } catch (error) {
@@ -657,14 +894,13 @@ const getJobProfile = async (req, res) => {
     });
   }
 };
-
 const getAllCompetitions = async (req, res) => {
   try {
     const userId = req.user._id;
 
     const competitions = await Competition.find()
       .sort({ createdAt: -1 })
-      .select("eventName eventDate eligibilityDetails venueAddress geoLocation totalSeats individualFees teamFees lateFees mode registrationStartDate createdAt");
+      .select("eventName coverImage organizer eventDate eligibilityDetails venueAddress geoLocation totalSeats individualFees teamFees lateFees mode registrationStartDate createdAt");
 
     const data = await Promise.all(
       competitions.map(async (item) => ({
@@ -687,8 +923,6 @@ const getAllCompetitions = async (req, res) => {
     });
   }
 };
-
-
 const getCompetitionProfile = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -730,7 +964,6 @@ const getCompetitionProfile = async (req, res) => {
     });
   }
 };
-
 const createEventRegistration = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -853,7 +1086,6 @@ const getAllConferences = async (req, res) => {
     });
   }
 };
-
 const getConferenceProfile = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -895,7 +1127,6 @@ const getConferenceProfile = async (req, res) => {
     });
   }
 };
-
 const getAllTechnicalEvents = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -928,8 +1159,6 @@ const getAllTechnicalEvents = async (req, res) => {
     });
   }
 };
-
-
 const getAllNonTechnicalEvents = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -962,8 +1191,6 @@ const getAllNonTechnicalEvents = async (req, res) => {
     });
   }
 };
-
-
 const getEventProfile = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -1005,9 +1232,6 @@ const getEventProfile = async (req, res) => {
     });
   }
 };
-
-
-
 const getAllTechnicalSeminars = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -1039,8 +1263,6 @@ const getAllTechnicalSeminars = async (req, res) => {
     });
   }
 };
-
-
 const getAllNonTechnicalSeminars = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -1073,11 +1295,6 @@ const getAllNonTechnicalSeminars = async (req, res) => {
   }
 };
 
-/**
- * POST /api/seminars/profile
- * Body: { id }
- * Returns single seminar full profile with is_saved & is_registered
- */
 const getSeminarProfile = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -1127,12 +1344,13 @@ const getMyRegistrations = async (req, res) => {
     const userId = req.user._id;
 
     const registrations = await EventRegistration.find({ userId })
+       .select("eventId eventType")
       .sort({ createdAt: -1 })
       .populate({
         path: "eventId",
         select:
-          "eventName eventType organizer mode eventDate coverImage venueAddress geoLocation individualFees teamFees isActive",
-      });
+          "eventName eventType totalSeats organizer mode eventDate coverImage venueAddress geoLocation individualFees teamFees isActive",
+      })
 
     return res.status(200).json({
       status: true,
@@ -1382,6 +1600,44 @@ const getSeminarsPage = async (req, res) => {
     });
   }
 };
+
+
+
+
+const getLocations = async (req, res) => {
+  try {
+    const { state="Tamil Nadu" } = req.query;
+
+    const filter = { isActive: true };
+    if (state) filter.state = state;
+
+    const locations = await Location.find(filter)
+      .sort({ state: 1, city: 1 })
+      .select("state city");
+
+    // Group by state
+    const grouped = locations.reduce((acc, loc) => {
+      if (!acc[loc.state]) acc[loc.state] = [];
+      acc[loc.state].push(loc.city);
+      return acc;
+    }, {});
+
+    return res.status(200).json({
+      status: true,
+      count: locations.length,
+      data: grouped,
+    });
+  } catch (error) {
+    console.error("Locations API Error:", error.message);
+    return res.status(500).json({
+      status: false,
+      message: "Failed to fetch locations",
+      error: error.message,
+    });
+  }
+};
+
+
 export {
   userDashboard,
   getJobs,
@@ -1408,5 +1664,7 @@ export {
   toggleFollow, 
   getFollowingList, 
   getCompanyProfile,
-  getEventsPage, getSeminarsPage
+  getEventsPage,
+  getSeminarsPage,
+  getLocations
 };

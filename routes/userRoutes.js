@@ -18,7 +18,7 @@ import {
 
 } from "../controller/userController.js";
 import { isAuthenticated, authorizeRoles } from "../middleware/authMiddleware.js";
-import { forgotOtpVerify, getCurrentUser, loginUser, forgotPassword, registerUser, resendOtp, resetPassword, verifyOtp } from "../controller/user/authController.js";
+import { forgotOtpVerify, getCurrentUser, loginUser, forgotPassword, registerUser, resendOtp, resetPassword, verifyOtp, logout } from "../controller/user/authController.js";
 import {
   userDashboard,
   getJobs,
@@ -33,8 +33,16 @@ import {
   getCompetitionProfile,
   createEventRegistration,
   getAllConferences,
-  getConferenceProfile
+  getConferenceProfile,
+  getLocations,
+  getEventsPage,
+  getSeminarsPage,
+  getMyRegistrations,
+  getAllNonTechnicalEvents,
+  getAllTechnicalEvents
 } from "../controller/user/userController.js";
+import fileUploader from "../middleware/fileUploader.js";
+import { getNotifications, markAsRead, updateProfilePic, uploadResume } from "../controller/user/profileController.js";
 
 const router = express.Router();
 const uploader = multer();
@@ -48,6 +56,7 @@ const uploader = multer();
 // router.post("/logout", isAuthenticated, logoutUser);
 
 router.post("/register", uploader.none(), registerUser);
+router.get("/logout",isAuthenticated,logout)
 router.post("/login", uploader.none(), loginUser)
 // 🔹 VERIFY OTP (after register)
 router.post("/verify-otp", uploader.none(), verifyOtp);
@@ -86,7 +95,43 @@ router.get("/conferences",uploader.none(), isAuthenticated, getAllConferences);
 router.post("/conference-profile", uploader.none(),isAuthenticated, getConferenceProfile);
 
 
+router.get("/events", isAuthenticated, getEventsPage);
+router.get("/my-booked", isAuthenticated, getMyRegistrations);
+// Seminars landing page
+router.get("/seminars", isAuthenticated, getSeminarsPage);
+router.get("/locations", getLocations);
 router.post("/event-register", uploader.none(),isAuthenticated, createEventRegistration);
+router.get(
+  "/event-technical",
+ isAuthenticated,
+  getAllTechnicalEvents
+);
+
+// ✅ Non-Technical Events
+router.get(
+  "/event-non-technical",
+  isAuthenticated,
+  getAllNonTechnicalEvents
+);
+
+router.post(
+  "/update-profile-pic",
+  isAuthenticated,
+  fileUploader.single("profile_pic"),
+  updateProfilePic
+);
+router.post(
+  "/upload-resume",
+  isAuthenticated,
+  fileUploader.single("resume"), // 👈 field name must match
+  uploadResume
+);
+
+router.get("/notifications", isAuthenticated, getNotifications);
+
+// Mark notification(s) as read
+router.post("/notifications/read", isAuthenticated, markAsRead);
+
 // admin
 router.post("/create-admin",uploader.none(), isAuthenticated, authorizeRoles("admin"), uploader.none(), createAdmin);
 router.post("/adminlogin", uploader.none(), adminLogin);

@@ -6,7 +6,7 @@ const eventRegistrationSchema = new mongoose.Schema(
     eventId: {
       type: mongoose.Schema.Types.ObjectId,
       required: true,
-      refPath: " eventType",
+      refPath: "eventType",
     },
     eventType: {
       type: String,
