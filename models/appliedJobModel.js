@@ -13,7 +13,11 @@ const appliedJobSchema = new mongoose.Schema(
       required: true,
       refPath: "jobType",
     },
-
+    c_by:{
+   type: mongoose.Schema.Types.ObjectId,
+      required: true,
+        ref: "User",
+},
     jobType: {
       type: String,
       enum: ["Internship", "Freelance"],

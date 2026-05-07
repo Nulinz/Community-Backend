@@ -21,7 +21,7 @@ const postsUploader = seminarUpload.fields([
 ]);
 
 router.post("/create", isAuthenticated, uploader, createSeminarForm);
-router.get("/all", getAllSeminars);
+router.get("/all",isAuthenticated, getAllSeminars);
 router.get("/getById/:id", getSeminarById);
 router.patch("/toggle-status/:id", isAuthenticated, toggleSeminarStatus);
 router.post("/add-posts/:id", isAuthenticated, postsUploader, addSeminarPosts);

@@ -4,6 +4,16 @@ import User from "../models/userModel.js";
 import fs from "fs";
 
 import path from "path";
+import CompanyFollow from "../models/companyFollowModel.js";
+import Internship from "../models/internshipModel.js";
+
+
+import Freelance from "../models/freelanceModel.js";
+
+
+import AppliedJob from "../models/appliedJobModel.js";
+
+
 
 const toCleanString = (value) =>
     typeof value === "string" ? value.trim() : "";
@@ -59,6 +69,78 @@ const cleanupUploadedFiles = (files = []) => {
 const PHONE_REGEX = /^\d{10}$/;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+
+const getCompanyDashboard = async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    // Get company by userId
+    const company = await Company.findOne({ userId }).select("_id");
+    if (!company) {
+      return res.status(404).json({
+        status: false,
+        message: "Company not found",
+      });
+    }
+
+    const companyId = company._id;
+
+    // ── All stats in parallel ──────────────────────────────────
+    const [
+      totalFollowers,
+      activeInternships,
+      activeFreelances,
+      lastApplied,
+    ] = await Promise.all([
+      CompanyFollow.countDocuments({companyId: userId  }),
+      Internship.countDocuments({ c_by: userId, isActive: true }),
+      Freelance.countDocuments({ c_by: userId, isActive: true }),
+
+      // Last 5 applied jobs under this company
+      AppliedJob.find({c_by:userId})
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .populate({ path: "userId", select: "name email phone" })
+        .populate({ path: "jobId", select: "jobTitle c_by companyName" }),
+    ]);
+
+    // Filter only applications belonging to this company's jobs
+
+
+    return res.status(200).json({
+      status: true,
+      data: {
+        // stats — each key has { total } to match frontend data.total
+        stats: {
+          totalFollowers:    { total: totalFollowers },
+          activeInternships: { total: activeInternships },
+          activeFreelances:  { total: activeFreelances },
+        },
+
+        // lastApplied — column keys match frontend table exactly
+        lastApplied: lastApplied.map((item, i) => ({
+          _id:               item._id,
+          index:             `0${i + 1}`,
+          name:       item.userId?.name          ?? "—",
+          title:       item.jobId?.jobTitle          ?? "—",
+          type:       item.jobType               ?? "—",
+          email:      item.userId?.email         ?? "—",
+          phone:              item.userId?.phone         ?? "—",
+          createdAt:         item.createdAt,
+        })),
+      },
+    });
+  } catch (error) {
+    console.error("Company Dashboard Error:", error.message);
+    return res.status(500).json({
+      status: false,
+      message: "Failed to load company dashboard",
+      error: error.message,
+    });
+  }
+};
+
+export { getCompanyDashboard };
 
 
 
@@ -237,7 +319,7 @@ export const createCompanyForm = async (req, res, next) => {
 
         res.status(isUpdate ? 200 : 201).json({
             success: true,
-            message: `Company form ${isUpdate ? "updated" : "created"} successfully`,
+            message: `Company  ${isUpdate ? "updated" : "created"} successfully`,
             data: company,
         });
     } catch (error) {
@@ -300,6 +382,7 @@ export const getCompanyNames = async (req, res, next) => {
 export const getMyCompany = async (req, res, next) => {
     try {
         const company = await Company.findOne({ userId: req.user._id }).populate("userId", "name email phone role isActive");
+        const companyUserId=req.user._id
         if (!company) {
             const error = new Error("Company profile not found for this user");
             error.status = 404;
@@ -315,45 +398,176 @@ export const getMyCompany = async (req, res, next) => {
             isActive: userId?.isActive ?? true
         };
 
-        res.status(200).json({
-            success: true,
-            data: flattenedCompany,
-        });
-    } catch (error) {
-        next(error);
-    }
+    // ── 2. Get Internships (c_by = companyUserId) ──────────────
+    const internships = await Internship.find({ c_by: companyUserId })
+      .sort({ createdAt: -1 })
+      .select("jobTitle location companyName duration salary eligibility createdAt")
+      .lean();
+
+    // ── 3. Get Freelances (c_by = companyUserId) ───────────────
+    const freelances = await Freelance.find({ c_by: companyUserId })
+      .sort({ createdAt: -1 })
+      .select("jobTitle location  companyName eligibility jobStartDate duration totalOpenings mode salary createdAt")
+      .lean();
+
+    // ── 4. Get Followers ───────────────────────────────────────
+    const followers = await CompanyFollow.find({ companyId: companyUserId })
+      .populate("userId", "email phone")
+      .lean();
+
+    // ── 5. Enrich each follower with UserDetails ───────────────
+    const followersData = await Promise.all(
+      followers.map(async (follow) => {
+        const userDetails = await UserDetails.findOne({
+          userId: follow.userId?._id,
+        })
+          .select("dob gender profile_pic currentStatus education ugDegree ugFieldOfStudy ugYear pgDegree pgFieldOfStudy pgYear companyName jobTitle yearOfExperience")
+          .lean();
+
+        return {
+          userId: follow.userId?._id,
+          email: follow.userId?.email || "",
+          phone: follow.userId?.phone || "",
+          followedAt: follow.createdAt,
+          ...userDetails,
+        };
+      })
+    );
+
+    // ── 6. Send Response ───────────────────────────────────────
+    return res.status(200).json({
+      success: true,
+      data: {
+        company: flattenedCompany,
+        jobs: {
+          internships,
+          internshipsCount: internships.length,
+          freelances,
+          freelancesCount: freelances.length,
+        },
+        followers: {
+          count: followersData.length,
+          data: followersData,
+        },
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
 };
+
+// export const getCompanyById = async (req, res, next) => {
+//     try {
+//         const { id } = req.params;
+//         const company = await Company.findById(id).populate("userId", "email phone role isActive").lean();
+
+//         if (!company) {
+//             const error = new Error("Company not found");
+//             error.status = 404;
+//             throw error;
+//         }
+
+//         const { userId, ...rest } = company;
+//         const flattenedCompany = {
+//             ...rest,
+//             email: userId?.email || "",
+//             phone: userId?.phone || "",
+//             role: userId?.role || "",
+//             isActive: userId?.isActive ?? true
+//         };
+
+//         res.status(200).json({
+//             success: true,
+//             data: flattenedCompany,
+//         });
+//     } catch (error) {
+//         next(error);
+//     }
+// };
 
 export const getCompanyById = async (req, res, next) => {
-    try {
-        const { id } = req.params;
-        const company = await Company.findById(id).populate("userId", "email phone role isActive").lean();
+  try {
+    const { id } = req.params;
 
-        if (!company) {
-            const error = new Error("Company not found");
-            error.status = 404;
-            throw error;
-        }
+    // ── 1. Get Company ─────────────────────────────────────────
+    const company = await Company.findById(id)
+      .populate("userId", "email phone role isActive")
+      .lean();
 
-        const { userId, ...rest } = company;
-        const flattenedCompany = {
-            ...rest,
-            email: userId?.email || "",
-            phone: userId?.phone || "",
-            role: userId?.role || "",
-            isActive: userId?.isActive ?? true
-        };
-
-        res.status(200).json({
-            success: true,
-            data: flattenedCompany,
-        });
-    } catch (error) {
-        next(error);
+    if (!company) {
+      const error = new Error("Company not found");
+      error.status = 404;
+      throw error;
     }
+
+    const { userId, ...rest } = company;
+    const companyUserId = userId?._id; // this is the c_by value in internship/freelance
+
+    const flattenedCompany = {
+      ...rest,
+      email: userId?.email || "",
+      phone: userId?.phone || "",
+      role: userId?.role || "",
+      is_active: userId?.is_active ?? true,
+    };
+
+    // ── 2. Get Internships (c_by = companyUserId) ──────────────
+    const internships = await Internship.find({ c_by: companyUserId })
+      .sort({ createdAt: -1 })
+      .select("jobTitle location companyName duration salary eligibility createdAt")
+      .lean();
+
+    // ── 3. Get Freelances (c_by = companyUserId) ───────────────
+    const freelances = await Freelance.find({ c_by: companyUserId })
+      .sort({ createdAt: -1 })
+      .select("jobTitle location  companyName eligibility jobStartDate duration totalOpenings mode salary createdAt")
+      .lean();
+
+    // ── 4. Get Followers ───────────────────────────────────────
+    const followers = await CompanyFollow.find({ companyId: companyUserId })
+      .populate("userId", "email phone")
+      .lean();
+
+    // ── 5. Enrich each follower with UserDetails ───────────────
+    const followersData = await Promise.all(
+      followers.map(async (follow) => {
+        const userDetails = await UserDetails.findOne({
+          userId: follow.userId?._id,
+        })
+          .select("dob gender profile_pic currentStatus education ugDegree ugFieldOfStudy ugYear pgDegree pgFieldOfStudy pgYear companyName jobTitle yearOfExperience")
+          .lean();
+
+        return {
+          userId: follow.userId?._id,
+          email: follow.userId?.email || "",
+          phone: follow.userId?.phone || "",
+          followedAt: follow.createdAt,
+          ...userDetails,
+        };
+      })
+    );
+
+    // ── 6. Send Response ───────────────────────────────────────
+    return res.status(200).json({
+      success: true,
+      data: {
+        company: flattenedCompany,
+        jobs: {
+          internships,
+          internshipsCount: internships.length,
+          freelances,
+          freelancesCount: freelances.length,
+        },
+        followers: {
+          count: followersData.length,
+          data: followersData,
+        },
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
 };
-
-
 
 export const addPost = async (req, res, next) => {
     try {
@@ -429,7 +643,7 @@ export const setPassword = async (req, res, next) => {
         // The pre-save hook in userModel will hash this
         user.password = password;
         user.is_active=true
-        register_status="completed"
+        user.register_status="completed"
         await user.save();
 
         res.status(200).json({
@@ -463,8 +677,8 @@ export const toggleCompanyStatus = async (req, res, next) => {
 
         res.status(200).json({
             success: true,
-            message: `Account ${user.isActive ? "activated" : "deactivated"} successfully`,
-            data: { ...company.toObject(), isActive: user.isActive }
+            message: `Account ${user.is_active ? "activated" : "deactivated"} successfully`,
+            data: { ...company.toObject(), is_active: user.is_active }
         });
     } catch (error) {
         next(error);

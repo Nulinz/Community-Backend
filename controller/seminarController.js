@@ -2,7 +2,7 @@ import Seminar from "../models/seminarModel.js";
 import fs from "fs";
 import path from "path";
 import mongoose from "mongoose";
-
+import EventRegistration from "../models/eventRegistrationModel.js";
 const toCleanString = (value) =>
     typeof value === "string" ? value.trim() : "";
 
@@ -153,7 +153,7 @@ export const createSeminarForm = async (req, res, next) => {
         seminar.onlyForOutstationParticipants = toCleanString(onlyForOutstationParticipants);
 
         seminar.eligibilityDetails = toCleanString(eligibilityDetails);
-        seminar.allowedDepartments = toCleanString(allowedDepartments);
+        seminar.allowedDepartments =  parseDynamicArray(allowedDepartments);
         seminar.teamOrIndividualEvent = toCleanString(teamOrIndividualEvent);
         seminar.teamSizeMinimum = Number(teamSizeMinimum) || 0;
         seminar.teamSizeMaximum = Number(teamSizeMaximum) || 0;
@@ -184,7 +184,15 @@ export const createSeminarForm = async (req, res, next) => {
 
 export const getAllSeminars = async (req, res, next) => {
     try {
-        const seminars = await Seminar.find({}).sort({ createdAt: -1 });
+        const user=req.user
+
+        let query={
+           
+        }
+        if(req.user.role==="college"){
+        query.c_by=user._id
+        }
+        const seminars = await Seminar.find(query).sort({ createdAt: -1 });
         res.status(200).json({
             success: true,
             data: seminars,
@@ -195,27 +203,65 @@ export const getAllSeminars = async (req, res, next) => {
 };
 
 
+
+
 export const getSeminarById = async (req, res, next) => {
-    try {
-        const { id } = req.params;
+  try {
+    const { id } = req.params;
 
-        if (!mongoose.Types.ObjectId.isValid(id)) {
-            throw Object.assign(new Error("Invalid Seminar ID format"), { status: 400 });
-        }
-
-        const seminar = await Seminar.findById(id);
-
-        if (!seminar) {
-            throw Object.assign(new Error("Seminar not found"), { status: 404 });
-        }
-
-        res.status(200).json({
-            success: true,
-            data: seminar,
-        });
-    } catch (error) {
-        next(error);
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      throw Object.assign(new Error("Invalid Seminar ID format"), { status: 400 });
     }
+
+    // ── 1. Get Seminar ──────────────────────────────────────
+    const seminar = await Seminar.findById(id).lean();
+
+    if (!seminar) {
+      throw Object.assign(new Error("Seminar not found"), { status: 404 });
+    }
+
+    // ── 2. Get Registered List ──────────────────────────────
+    
+    const registrations = await EventRegistration.find({
+      eventId: id,
+      eventType: "Seminar",
+    })
+      .populate("userId", "email phone")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const registeredList = registrations.map((reg, index) => ({
+      sNo: index + 1,
+      registrationId: reg._id,
+      userId: reg.userId?._id,
+      email: reg.userId?.email || reg.mailId,
+      phone: reg.userId?.phone || reg.phoneNumber,
+      fullName: reg.fullName,
+      department: reg.department,
+      collegeName: reg.collegeName,
+      year: reg.year,
+      phoneNumber: reg.phoneNumber,
+      mailId: reg.mailId,
+      food: reg.food,
+      foodType: reg.foodType,
+      accommodation: reg.accommodation,
+      accommodationType: reg.accommodationType,
+      registeredAt: reg.createdAt,
+    }));
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        seminar,
+        registrations: {
+          count: registeredList.length,
+          list: registeredList,
+        },
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
 };
 
 export const toggleSeminarStatus = async (req, res, next) => {

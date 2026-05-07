@@ -2,6 +2,7 @@ import Event from "../models/eventModel.js";
 import fs from "fs";
 import path from "path";
 import mongoose from "mongoose";
+import EventRegistration from "../models/eventRegistrationModel.js";
 
 const toCleanString = (value) =>
     typeof value === "string" ? value.trim() : "";
@@ -149,7 +150,7 @@ export const createEventForm = async (req, res, next) => {
         event.onlyForOutstationParticipants = toCleanString(onlyForOutstationParticipants);
 
         event.eligibilityDetails = toCleanString(eligibilityDetails);
-        event.allowedDepartments = toCleanString(allowedDepartments);
+        event.allowedDepartments = parseDynamicArray(allowedDepartments);
         event.teamOrIndividualEvent = toCleanString(teamOrIndividualEvent);
         event.teamSizeMinimum = Number(teamSizeMinimum) || 0;
         event.teamSizeMaximum = Number(teamSizeMaximum) || 0;
@@ -179,7 +180,15 @@ export const createEventForm = async (req, res, next) => {
 
 export const getAllEvents = async (req, res, next) => {
     try {
-        const events = await Event.find({}).sort({ createdAt: -1 });
+        const user=req.user
+
+        let query={
+           
+        }
+        if(req.user.role==="college"){
+        query.c_by=user._id
+        }
+        const events = await Event.find(query).sort({ createdAt: -1 });
         res.status(200).json({
             success: true,
             data: events,
@@ -189,27 +198,63 @@ export const getAllEvents = async (req, res, next) => {
     }
 };
 
+
 export const getEventById = async (req, res, next) => {
-    try {
-        const { id } = req.params;
+  try {
+    const { id } = req.params;
 
-        if (!mongoose.Types.ObjectId.isValid(id)) {
-            throw Object.assign(new Error("Invalid Event ID format"), { status: 400 });
-        }
-
-        const event = await Event.findById(id);
-
-        if (!event) {
-            throw Object.assign(new Error("Event not found"), { status: 404 });
-        }
-
-        res.status(200).json({
-            success: true,
-            data: event,
-        });
-    } catch (error) {
-        next(error);
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      throw Object.assign(new Error("Invalid Event ID format"), { status: 400 });
     }
+
+    // ── 1. Get Event ────────────────────────────────────────
+    const event = await Event.findById(id).lean();
+
+    if (!event) {
+      throw Object.assign(new Error("Event not found"), { status: 404 });
+    }
+
+    // ── 2. Get Registered List ──────────────────────────────
+    const registrations = await EventRegistration.find({
+      eventId: id,
+      eventType: "Event",
+    })
+      .populate("userId", "email phone")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const registeredList = registrations.map((reg, index) => ({
+      sNo: index + 1,
+      registrationId: reg._id,
+      userId: reg.userId?._id,
+      email: reg.userId?.email || reg.mailId,
+      phone: reg.userId?.phone || reg.phoneNumber,
+      fullName: reg.fullName,
+      department: reg.department,
+      collegeName: reg.collegeName,
+      year: reg.year,
+      phoneNumber: reg.phoneNumber,
+      mailId: reg.mailId,
+      food: reg.food,
+      foodType: reg.foodType,
+      accommodation: reg.accommodation,
+      accommodationType: reg.accommodationType,
+      registeredAt: reg.createdAt,
+    }));
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        event,
+        registrations: {
+          count: registeredList.length,
+          list: registeredList,
+        },
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
 };
 
 export const toggleEventStatus = async (req, res, next) => {

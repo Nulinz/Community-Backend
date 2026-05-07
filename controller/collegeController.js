@@ -2,6 +2,25 @@ import College from "../models/collegeModel.js";
 import User from "../models/userModel.js";
 import fs from "fs";
 import path from "path";
+import Event from "../models/eventModel.js";
+import Internship from "../models/internshipModel.js";
+import Company from "../models/companyModel.js";
+
+import Freelance from "../models/freelanceModel.js";
+import SavedJob from "../models/savedJobModel.js";
+import AppliedJob from "../models/appliedJobModel.js";
+
+import { checkIsSaved } from "../helper/isSaved.js";
+import { checkIsApplied } from "../helper/isApplied.js";
+
+import Competition from "../models/competitionModel.js";
+import EventRegistration from "../models/eventRegistrationModel.js";
+
+import Conference from "../models/conferenceModel.js";
+import Seminar from "../models/seminarModel.js";
+
+
+
 
 const toCleanString = (value) =>
     typeof value === "string" ? value.trim() : "";
@@ -54,6 +73,80 @@ const cleanupUploadedFiles = (files = []) => {
 const PHONE_REGEX = /^\d{10}$/;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+
+export const getCollegeDashboard = async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    const [
+      totalConferences,
+      activeConferences,
+      totalCompetitions,
+      activeCompetitions,
+      totalSeminars,
+      activeSeminars,
+      totalEvents,
+      activeEvents,
+      lastRegistrations,
+    ] = await Promise.all([
+      // ── Conference ─────────────────────────────────────────
+      Conference.countDocuments({ c_by: userId }),
+      Conference.countDocuments({ c_by: userId, isActive: true }),
+
+      // ── Competition ────────────────────────────────────────
+      Competition.countDocuments({ c_by: userId }),
+      Competition.countDocuments({ c_by: userId, isActive: true }),
+
+      // ── Seminar ────────────────────────────────────────────
+      Seminar.countDocuments({ c_by: userId }),
+      Seminar.countDocuments({ c_by: userId, isActive: true }),
+
+      // ── Event ──────────────────────────────────────────────
+      Event.countDocuments({ c_by: userId }),
+      Event.countDocuments({ c_by: userId, isActive: true }),
+
+      // ── Last 5 registrations for this college's events ─────
+      EventRegistration.find({ c_by: userId })
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .populate({ path: "userId", select: "name email phone" }),
+    ]);
+
+    return res.status(200).json({
+      status: true,
+      data: {
+        stats: {
+          conferences:  { total: totalConferences,  active: activeConferences },
+          competitions: { total: totalCompetitions, active: activeCompetitions },
+          seminars:     { total: totalSeminars,      active: activeSeminars },
+          events:       { total: totalEvents,        active: activeEvents },
+        },
+
+        // Last 5 registered users
+        lastRegistrations: lastRegistrations.map((item, i) => ({
+          _id:         item._id,
+          index:       `0${i + 1}`,
+          fullName:    item.fullName,
+          department:  item.department,
+          collegeName: item.collegeName,
+          year:        item.year,
+          phoneNumber: item.phoneNumber,
+          mailId:      item.mailId,
+          eventType:   item.eventType,
+          createdAt:   item.createdAt,
+          user:        item.userId,
+        })),
+      },
+    });
+  } catch (error) {
+    console.error("College Dashboard Error:", error.message);
+    return res.status(500).json({
+      status: false,
+      message: "Failed to load college dashboard",
+      error: error.message,
+    });
+  }
+};
 
 
 export const createCollegeForm = async (req, res, next) => {
@@ -259,13 +352,13 @@ export const toggleCollegeStatus = async (req, res, next) => {
             throw error;
         }
 
-        user.isActive = !user.isActive;
+        user.is_active= !user.is_active;
         await user.save();
 
         res.status(200).json({
             success: true,
-            message: `Account ${user.isActive ? "activated" : "deactivated"} successfully`,
-            data: { ...college.toObject(), isActive: user.isActive }
+            message: `Account ${user.is_active ? "activated" : "deactivated"} successfully`,
+            data: { ...college.toObject(), is_active: user.is_active }
         });
     } catch (error) {
         next(error);
@@ -318,31 +411,237 @@ export const setPassword = async (req, res, next) => {
 };
 
 
+// export const getCollegeById = async (req, res, next) => {
+//     try {
+//         const { id } = req.params;
+//         const college = await College.findById(id).populate("userId", "email phone role isActive").lean();
+
+//         if (!college) {
+//             const error = new Error("College not found");
+//             error.status = 404;
+//             throw error;
+//         }
+
+//         const { userId, ...rest } = college;
+//         const flattenedCollege = {
+//             ...rest,
+//             email: userId?.email || "",
+//             phone: userId?.phone || "",
+//             role: userId?.role || "",
+//             isActive: userId?.isActive ?? true
+//         };
+
+//         res.status(200).json({
+//             success: true,
+//             data: flattenedCollege,
+//         });
+//     } catch (error) {
+//         next(error);
+//     }
+// };
+
+
 export const getCollegeById = async (req, res, next) => {
-    try {
-        const { id } = req.params;
-        const college = await College.findById(id).populate("userId", "email phone role isActive").lean();
+  try {
+    const { id } = req.params;
 
-        if (!college) {
-            const error = new Error("College not found");
-            error.status = 404;
-            throw error;
-        }
+    const college = await College.findById(id)
+      .populate("userId", "email phone role is_active")
+      .lean();
 
-        const { userId, ...rest } = college;
-        const flattenedCollege = {
-            ...rest,
-            email: userId?.email || "",
-            phone: userId?.phone || "",
-            role: userId?.role || "",
-            isActive: userId?.isActive ?? true
-        };
-
-        res.status(200).json({
-            success: true,
-            data: flattenedCollege,
-        });
-    } catch (error) {
-        next(error);
+    if (!college) {
+      const error = new Error("College not found");
+      error.status = 404;
+      throw error;
     }
+
+    const { userId, ...rest } = college;
+    const collegeUserId = userId?._id;
+
+    const flattenedCollege = {
+      ...rest,
+      email: userId?.email || "",
+      phone: userId?.phone || "",
+      role: userId?.role || "",
+      isActive: userId?.isActive ?? true,
+    };
+
+    // ── Fetch all events by c_by = collegeUserId ────────────
+    const [conferences, events, competitions, seminars] = await Promise.all([
+      Conference.find({ c_by: collegeUserId })
+        .sort({ createdAt: -1 })
+        .select("eventName organizer mode eventDate registrationType totalSeats individualFees isActive createdAt")
+        .lean(),
+
+      Event.find({ c_by: collegeUserId })
+        .sort({ createdAt: -1 })
+        .select("eventName eventType organizer mode eventDate registrationType totalSeats individualFees isActive createdAt")
+        .lean(),
+
+      Competition.find({ c_by: collegeUserId })
+        .sort({ createdAt: -1 })
+        .select("eventName organizer mode eventDate registrationType totalSeats individualFees isActive createdAt")
+        .lean(),
+
+      Seminar.find({ c_by: collegeUserId })
+        .sort({ createdAt: -1 })
+        .select("eventName eventType organizer mode eventDate registrationType totalSeats individualFees isActive createdAt")
+        .lean(),
+    ]);
+
+    // ── Helper: attach appliedCount to each event list ──────
+    const attachAppliedCount = async (list, eventTypeName) => {
+      return Promise.all(
+        list.map(async (item) => {
+          const appliedCount = await EventRegistration.countDocuments({
+            eventId: item._id,
+            eventType: eventTypeName,
+          });
+          return { ...item, appliedCount };
+        })
+      );
+    };
+
+    // ── Attach applied counts in parallel ───────────────────
+    const [
+      conferencesWithCount,
+      eventsWithCount,
+      competitionsWithCount,
+      seminarsWithCount,
+    ] = await Promise.all([
+      attachAppliedCount(conferences, "Conference"),
+      attachAppliedCount(events, "Event"),
+      attachAppliedCount(competitions, "Competition"),
+      attachAppliedCount(seminars, "Seminar"),
+    ]);
+
+    const totalCount =
+      conferences.length +
+      events.length +
+      competitions.length +
+      seminars.length;
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        college: flattenedCollege,
+        events: {
+          conferences: conferencesWithCount,
+          conferencesCount: conferences.length,
+          events: eventsWithCount,
+          eventsCount: events.length,
+          competitions: competitionsWithCount,
+          competitionsCount: competitions.length,
+          seminars: seminarsWithCount,
+          seminarsCount: seminars.length,
+          totalCount,
+        },
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+export const getMyCollege= async (req, res, next) => {
+  try {
+    const  id  = req.user._id;
+
+    const college = await College.findOne({userId:id})
+      .populate("userId", "email phone role is_active")
+      .lean();
+
+    if (!college) {
+      const error = new Error("College not found");
+      error.status = 404;
+      throw error;
+    }
+
+    const { userId, ...rest } = college;
+    const collegeUserId = userId?._id;
+
+    const flattenedCollege = {
+      ...rest,
+      email: userId?.email || "",
+      phone: userId?.phone || "",
+      role: userId?.role || "",
+      isActive: userId?.is_active ?? true,
+    };
+
+    // ── Fetch all events by c_by = collegeUserId ────────────
+    const [conferences, events, competitions, seminars] = await Promise.all([
+      Conference.find({ c_by: collegeUserId })
+        .sort({ createdAt: -1 })
+        .select("eventName organizer mode eventDate registrationType totalSeats individualFees isActive createdAt")
+        .lean(),
+
+      Event.find({ c_by: collegeUserId })
+        .sort({ createdAt: -1 })
+        .select("eventName eventType organizer mode eventDate registrationType totalSeats individualFees isActive createdAt")
+        .lean(),
+
+      Competition.find({ c_by: collegeUserId })
+        .sort({ createdAt: -1 })
+        .select("eventName organizer mode eventDate registrationType totalSeats individualFees isActive createdAt")
+        .lean(),
+
+      Seminar.find({ c_by: collegeUserId })
+        .sort({ createdAt: -1 })
+        .select("eventName eventType organizer mode eventDate registrationType totalSeats individualFees isActive createdAt")
+        .lean(),
+    ]);
+
+    // ── Helper: attach appliedCount to each event list ──────
+    const attachAppliedCount = async (list, eventTypeName) => {
+      return Promise.all(
+        list.map(async (item) => {
+          const appliedCount = await EventRegistration.countDocuments({
+            eventId: item._id,
+            eventType: eventTypeName,
+          });
+          return { ...item, appliedCount };
+        })
+      );
+    };
+
+    // ── Attach applied counts in parallel ───────────────────
+    const [
+      conferencesWithCount,
+      eventsWithCount,
+      competitionsWithCount,
+      seminarsWithCount,
+    ] = await Promise.all([
+      attachAppliedCount(conferences, "Conference"),
+      attachAppliedCount(events, "Event"),
+      attachAppliedCount(competitions, "Competition"),
+      attachAppliedCount(seminars, "Seminar"),
+    ]);
+
+    const totalCount =
+      conferences.length +
+      events.length +
+      competitions.length +
+      seminars.length;
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        college: flattenedCollege,
+        events: {
+          conferences: conferencesWithCount,
+          conferencesCount: conferences.length,
+          events: eventsWithCount,
+          eventsCount: events.length,
+          competitions: competitionsWithCount,
+          competitionsCount: competitions.length,
+          seminars: seminarsWithCount,
+          seminarsCount: seminars.length,
+          totalCount,
+        },
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
 };

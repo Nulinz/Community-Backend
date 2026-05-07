@@ -10,7 +10,7 @@ const companyFollowSchema = new mongoose.Schema(
     },
     companyId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Company",
+      ref: "User",
       required: true,
       index: true,
     },

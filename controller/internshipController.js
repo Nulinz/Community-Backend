@@ -1,4 +1,6 @@
 import Internship from "../models/internshipModel.js";
+import AppliedJob from "../models/appliedJobModel.js";
+import UserDetails from "../models/userDetails.js";
 
 const toCleanString = (value) =>
     typeof value === "string" ? value.trim() : "";
@@ -102,45 +104,119 @@ export const createInternshipForm = async (req, res, next) => {
     }
 };
 
-export const getAllInternships = async (req, res, next) => {
-    try {
-        const query = {};
-        if (req.user?.role === "company") {
-            query.c_by = req.user._id;
-        }
 
-        const internships = await Internship.find(query).sort({ createdAt: -1 });
-        res.status(200).json({
-            success: true,
-            data: internships,
-        });
-    } catch (error) {
-        next(error);
+
+export const getAllInternships = async (req, res, next) => {
+  try {
+    const query = {};
+    if (req.user?.role === "company") {
+      query.c_by = req.user._id;
     }
+
+    const internships = await Internship.find(query)
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // ── Attach appliedCount to each internship ──────────────
+    const data = await Promise.all(
+      internships.map(async (item) => {
+        const appliedCount = await AppliedJob.countDocuments({
+          jobId: item._id,
+          jobType: "Internship",
+        });
+        return { ...item, appliedCount };
+      })
+    );
+
+    res.status(200).json({
+      success: true,
+      count: data.length,
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
 };
 
 
 
 
+
 export const getInternshipById = async (req, res, next) => {
-    try {
-        const { id } = req.params;
-        const internship = await Internship.findById(id);
+  try {
+    const { id } = req.params;
 
-        if (!internship) {
-            throw Object.assign(new Error("Internship not found"), { status: 404 });
-        }
-        if (req.user?.role === "company" && internship.c_by?.toString() !== req.user._id?.toString()) {
-            throw Object.assign(new Error("Internship not found"), { status: 404 });
-        }
+    const internship = await Internship.findById(id).lean();
 
-        res.status(200).json({
-            success: true,
-            data: internship,
-        });
-    } catch (error) {
-        next(error);
+    if (!internship) {
+      throw Object.assign(new Error("Internship not found"), { status: 404 });
     }
+
+    if (
+      req.user?.role === "company" &&
+      internship.c_by?.toString() !== req.user._id?.toString()
+    ) {
+      throw Object.assign(new Error("Internship not found"), { status: 404 });
+    }
+
+    // ── Get Applied List ────────────────────────────────────
+    const applications = await AppliedJob.find({
+      jobId: id,
+      jobType: "Internship",
+    })
+      .populate("userId", "email phone")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // ── Enrich with UserDetails ─────────────────────────────
+    const appliedList = await Promise.all(
+      applications.map(async (app, index) => {
+        const userDetails = await UserDetails.findOne({
+          userId: app.userId?._id,
+        })
+          .select(
+            "profile_pic gender dob currentStatus education ugDegree ugFieldOfStudy ugYear pgDegree pgFieldOfStudy pgYear companyName jobTitle yearOfExperience"
+          )
+          .lean();
+
+        return {
+          sNo: index + 1,
+          applicationId: app._id,
+          userId: app.userId?._id,
+          email: app.userId?.email || "",
+          phone: app.userId?.phone || "",
+          appliedAt: app.createdAt,
+          // UserDetails
+          profile_pic: userDetails?.profile_pic || null,
+          gender: userDetails?.gender || "",
+          currentStatus: userDetails?.currentStatus || "",
+          education: userDetails?.education || "",
+          ugDegree: userDetails?.ugDegree || "",
+          ugFieldOfStudy: userDetails?.ugFieldOfStudy || "",
+          ugYear: userDetails?.ugYear || null,
+          pgDegree: userDetails?.pgDegree || "",
+          pgFieldOfStudy: userDetails?.pgFieldOfStudy || "",
+          pgYear: userDetails?.pgYear || null,
+          companyName: userDetails?.companyName || "",
+          jobTitle: userDetails?.jobTitle || "",
+          yearOfExperience: userDetails?.yearOfExperience || null,
+        };
+      })
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        internship,
+        applications: {
+          count: appliedList.length,
+          list: appliedList,
+        },
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
 };
 
 export const toggleInternshipStatus = async (req, res, next) => {

@@ -23,6 +23,8 @@ export const adminDashBoard = async (req, res) => {
     const baseFilter = {
       // is_deleted: false,
       // is_active: true,
+      c_by:req?.user?._id,
+      
     };
 
     // 📊 Helper
@@ -134,3 +136,4 @@ export const adminDashBoard = async (req, res) => {
     });
   }
 };
+

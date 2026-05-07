@@ -2,7 +2,7 @@ import Conference from "../models/conferenceModel.js";
 import fs from "fs";
 import path from "path";
 import mongoose from "mongoose";
-
+import EventRegistration from "../models/eventRegistrationModel.js";
 const toCleanString = (value) =>
     typeof value === "string" ? value.trim() : "";
 
@@ -147,7 +147,7 @@ export const createConferenceForm = async (req, res, next) => {
         conference.onlyForOutstationParticipants = toCleanString(onlyForOutstationParticipants);
 
         conference.eligibilityDetails = toCleanString(eligibilityDetails);
-        conference.allowedDepartments = toCleanString(allowedDepartments);
+        conference.allowedDepartments = parseDynamicArray(allowedDepartments);
         conference.teamOrIndividualEvent = toCleanString(teamOrIndividualEvent);
         conference.teamSizeMinimum = Number(teamSizeMinimum) || 0;
         conference.teamSizeMaximum = Number(teamSizeMaximum) || 0;
@@ -183,7 +183,16 @@ export const createConferenceForm = async (req, res, next) => {
 
 export const getAllConference = async (req, res, next) => {
     try {
-        const conferences = await Conference.find({ }).sort({ createdAt: -1 });
+        const user=req.user
+
+        let query={
+           
+        }
+        if(req.user.role==="college"){
+        query.c_by=user._id
+        }
+        const conferences = await Conference.find(query).sort({ createdAt: -1 });
+
         res.status(200).json({
             success: true,
             data: conferences,
@@ -193,27 +202,64 @@ export const getAllConference = async (req, res, next) => {
     }
 };
 
+
+
 export const getConferenceById = async (req, res, next) => {
-    try {
-        const { id } = req.params;
+  try {
+    const { id } = req.params;
 
-        if (!mongoose.Types.ObjectId.isValid(id)) {
-            throw Object.assign(new Error("Invalid Conference ID format"), { status: 400 });
-        }
-
-        const conference = await Conference.findById(id);
-
-        if (!conference) {
-            throw Object.assign(new Error("Conference not found"), { status: 404 });
-        }
-
-        res.status(200).json({
-            success: true,
-            data: conference,
-        });
-    } catch (error) {
-        next(error);
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      throw Object.assign(new Error("Invalid Conference ID format"), { status: 400 });
     }
+
+    // ── 1. Get Conference ───────────────────────────────────
+    const conference = await Conference.findById(id).lean();
+
+    if (!conference) {
+      throw Object.assign(new Error("Conference not found"), { status: 404 });
+    }
+
+    // ── 2. Get Registered List ──────────────────────────────
+    const registrations = await EventRegistration.find({
+      eventId: id,
+      eventType: "Conference",
+    })
+      .populate("userId", "email phone")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const registeredList = registrations.map((reg, index) => ({
+      sNo: index + 1,
+      registrationId: reg._id,
+      userId: reg.userId?._id,
+      email: reg.userId?.email || reg.mailId,
+      phone: reg.userId?.phone || reg.phoneNumber,
+      fullName: reg.fullName,
+      department: reg.department,
+      collegeName: reg.collegeName,
+      year: reg.year,
+      phoneNumber: reg.phoneNumber,
+      mailId: reg.mailId,
+      food: reg.food,
+      foodType: reg.foodType,
+      accommodation: reg.accommodation,
+      accommodationType: reg.accommodationType,
+      registeredAt: reg.createdAt,
+    }));
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        conference,
+        registrations: {
+          count: registeredList.length,
+          list: registeredList,
+        },
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
 };
 
 export const toggleConferenceStatus = async (req, res, next) => {

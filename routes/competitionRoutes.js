@@ -18,7 +18,7 @@ const uploader = competitionUpload.fields([
 ]);
 
 router.post("/create", isAuthenticated, uploader, createCompetitionForm);
-router.get("/all", getAllCompetition);
+router.get("/all",isAuthenticated,getAllCompetition);
 router.get("/getById/:id", getCompetitionById);
 router.patch("/toggle-status/:id", isAuthenticated, toggleCompetitionStatus);
 router.post("/add-posts/:id", isAuthenticated, competitionUpload.array("posts", 10), addCompetitionPosts);

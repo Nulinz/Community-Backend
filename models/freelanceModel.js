@@ -13,6 +13,7 @@ const freelanceSchema = new mongoose.Schema(
     mode: { type: String, required: true },
     totalOpenings: { type: Number, default: 0 },
     duration: { type: String },
+    location: { type: String, required: true, trim: true },
     applicationDeadline: { type: Date },
     jobStartDate: { type: Date },
     salary: { type: Number, default: 0 },

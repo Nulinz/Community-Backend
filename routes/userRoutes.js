@@ -18,7 +18,7 @@ import {
 
 } from "../controller/userController.js";
 import { isAuthenticated, authorizeRoles } from "../middleware/authMiddleware.js";
-import { forgotOtpVerify, getCurrentUser, loginUser, forgotPassword, registerUser, resendOtp, resetPassword, verifyOtp, logout } from "../controller/user/authController.js";
+import { forgotOtpVerify, getCurrentUser, loginUser, forgotPassword, registerUser, resendOtp, resetPassword, verifyOtp, logout, changePassword } from "../controller/user/authController.js";
 import {
   userDashboard,
   getJobs,
@@ -70,7 +70,7 @@ router.post("/forgot-password", uploader.none(), forgotPassword);
 // 🔹 RESET PASSWORD (OTP + new password OR phone + new_password based on your flow)
 router.post("/reset-password", uploader.none(), resetPassword);
 router.post("/forgot-otp-verify", uploader.none(), forgotOtpVerify);
-
+router.post("/change-password", uploader.none(),isAuthenticated,changePassword);
 router.post("/apply-job",uploader.none(), isAuthenticated, applyJob);
 router.get("/my-applied-job", isAuthenticated, getAppliedJobs);
 

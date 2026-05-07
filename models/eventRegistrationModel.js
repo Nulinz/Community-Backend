@@ -13,7 +13,11 @@ const eventRegistrationSchema = new mongoose.Schema(
       enum: ["Conference", "Competition", "Seminar", "Event"],
       required: true,
     },
-
+    collegeId:{
+       type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
     // User Reference
     userId: {
       type: mongoose.Schema.Types.ObjectId,

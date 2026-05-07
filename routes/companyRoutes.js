@@ -1,6 +1,6 @@
 import express from "express";
 import { isAuthenticated } from "../middleware/authMiddleware.js";
-import { createCompanyForm, getAllCompany, getCompanyById, addPost, setPassword, getMyCompany, toggleCompanyStatus, getCompanyNames } from "../controller/companyController.js";
+import { createCompanyForm, getAllCompany, getCompanyById, addPost, setPassword, getMyCompany, toggleCompanyStatus, getCompanyNames, getCompanyDashboard } from "../controller/companyController.js";
 import { createUpload } from "../middleware/upload.js";
 
 const router = express.Router();
@@ -10,6 +10,8 @@ const uploader = companyUpload.fields([
   { name: "companyLogo", maxCount: 1 },
   { name: "coverImage", maxCount: 1 },
 ])
+
+router.get("/dashboard",isAuthenticated,getCompanyDashboard)
 
 router.post("/create", isAuthenticated, uploader, createCompanyForm);
 router.get("/get-mine", isAuthenticated, getMyCompany);

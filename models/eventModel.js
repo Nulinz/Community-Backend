@@ -76,7 +76,9 @@ const eventSchema = new mongoose.Schema(
     // Team & Eligibility
     incharges: [inchargeSchema],
     eligibilityDetails: { type: String, trim: true },
-    allowedDepartments: { type: String },
+    allowedDepartments: {
+  type: [String],
+},
     teamOrIndividualEvent: { type: String },
     teamSizeMinimum: { type: Number },
     teamSizeMaximum: { type: Number },

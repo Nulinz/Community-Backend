@@ -28,6 +28,11 @@ export const isAuthenticated = async (req, res, next) => {
       error.status = 401;
       throw error;
     }
+    if(!user.is_active){
+       const error = new Error("User Account is Deactive");
+      error.status = 401;
+      throw error;
+    }
 
     req.user = user;
     next();

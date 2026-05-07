@@ -31,6 +31,9 @@ const createAdmin = async () => {
             name: "ravi",
             password: "12345678",
             role: "admin",
+            register_status:"completed",
+            is_active:true
+
         });
 
 

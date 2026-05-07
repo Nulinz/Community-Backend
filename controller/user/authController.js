@@ -19,22 +19,19 @@ export const loginUser = async (req, res) => {
     if (!user) {
       return res.status(404).json({
         status: false,
-        message: "User not found",
+        message: "Invaild user",
       });
     }
 
-    // 🔹 3. Check user active
-    if (!user.register_status==="pending") {
-          // 🔹 Generate 4-digit OTP
- 
-
-      return res.status(400).json({
-        status: false,
-        message: "Your Account is deactive",
-        pending:(user.register_status==="completed" )? false : true, // 👈 key logic
-        register_status:user.register_status
-      });
-    }
+    // // 🔹 3. Check user active
+    // if (!user.register_status==="pending") {
+    //   return res.status(400).json({
+    //     status: false,
+    //     message: "Your Account is deactive",
+    //     pending:(user.register_status==="completed" )? false : true, // 👈 key logic
+    //     register_status:user.register_status
+    //   });
+    // }
 
     // 🔹 4. Compare password
     const isMatch = await user.comparePassword(password);
@@ -48,8 +45,6 @@ export const loginUser = async (req, res) => {
         const userDetails = await UserDetails.findOne({
       userId: user._id,
     });
-
-
 
       if (user.register_status==="pending") {
            const otp = Math.floor(1000 + Math.random() * 9000).toString();

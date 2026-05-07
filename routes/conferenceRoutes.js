@@ -17,7 +17,7 @@ const uploader = conferenceUpload.fields([
 ]);
 
 router.post("/create", isAuthenticated, uploader, createConferenceForm);
-router.get("/all", getAllConference);
+router.get("/all", isAuthenticated,getAllConference);
 router.get("/getById/:id", getConferenceById);
 router.patch("/toggle-status/:id", isAuthenticated, toggleConferenceStatus);
 router.post("/add-posts/:id", isAuthenticated, conferenceUpload.fields([{ name: "posts", maxCount: 10 }]), addConferencePosts);

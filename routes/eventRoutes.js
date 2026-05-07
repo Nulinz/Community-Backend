@@ -17,7 +17,7 @@ const uploader = eventUpload.fields([
 ]);
 
 router.post("/create", isAuthenticated, uploader, createEventForm);
-router.get("/all", getAllEvents);
+router.get("/all",isAuthenticated, getAllEvents);
 router.get("/getById/:id", getEventById);
 router.patch("/toggle-status/:id", isAuthenticated, toggleEventStatus);
 router.post("/add-posts/:id", isAuthenticated, eventUpload.fields([{ name: "posts", maxCount: 10 }]), addEventPosts);

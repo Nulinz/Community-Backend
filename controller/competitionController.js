@@ -1,7 +1,7 @@
 import Competition from "../models/competitionModel.js";
 import fs from "fs";
 import path from "path";
-
+import EventRegistration from "../models/eventRegistrationModel.js";
 const toCleanString = (value) =>
     typeof value === "string" ? value.trim() : "";
 
@@ -155,7 +155,7 @@ export const createCompetitionForm = async (req, res, next) => {
         competition.onlyForOutstationParticipants = toCleanString(onlyForOutstationParticipants);
 
         competition.eligibilityDetails = toCleanString(eligibilityDetails);
-        competition.allowedDepartments = toCleanString(allowedDepartments);
+        competition.allowedDepartments = parseDynamicArray(allowedDepartments);
         competition.teamOrIndividualEvent = toCleanString(teamOrIndividualEvent);
         competition.teamSizeMinimum = Number(teamSizeMinimum) || 0;
         competition.teamSizeMaximum = Number(teamSizeMaximum) || 0;
@@ -193,7 +193,15 @@ export const createCompetitionForm = async (req, res, next) => {
 
 export const getAllCompetition = async (req, res, next) => {
     try {
-        const competitions = await Competition.find({ }).sort({ createdAt: -1 });
+        const user=req.user
+
+        let query={
+           
+        }
+        if(req.user.role==="college"){
+        query.c_by=user._id
+        }
+        const competitions = await Competition.find(query).sort({ createdAt: -1 });
         res.status(200).json({
             success: true,
             data: competitions,
@@ -211,10 +219,42 @@ export const getCompetitionById = async (req, res, next) => {
         if (!competition) {
             throw Object.assign(new Error("Competition not found"), { status: 404 });
         }
+  const registrations = await EventRegistration.find({
+      eventId: id,
+      eventType: "Competition",
+    })
+      .populate("userId", "email phone")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const registeredList = registrations.map((reg, index) => ({
+      sNo: index + 1,
+      registrationId: reg._id,
+      userId: reg.userId?._id,
+      email: reg.userId?.email || reg.mailId,
+      phone: reg.userId?.phone || reg.phoneNumber,
+      fullName: reg.fullName,
+      department: reg.department,
+      collegeName: reg.collegeName,
+      year: reg.year,
+      phoneNumber: reg.phoneNumber,
+      mailId: reg.mailId,
+      food: reg.food,
+      foodType: reg.foodType,
+      accommodation: reg.accommodation,
+      accommodationType: reg.accommodationType,
+      registeredAt: reg.createdAt,
+    }));
 
         res.status(200).json({
             success: true,
-            data: competition,
+            data: {
+        competition,
+        registrations: {
+          count: registeredList.length,
+          list: registeredList,
+        },
+      },
         });
     } catch (error) {
         next(error);

@@ -686,7 +686,7 @@ const applyJob = async (req, res) => {
   try {
     const userId = req.user._id;
     const { jobId, jobType } = req.body;
-
+ 
     // Validate required fields
     if (!jobId || !jobType) {
       return res.status(400).json({
@@ -694,15 +694,30 @@ const applyJob = async (req, res) => {
         message: "jobId and jobType are required",
       });
     }
-
+ 
     // Validate jobType
     if (!["Internship", "Freelance"].includes(jobType)) {
       return res.status(400).json({
         status: false,
-        message: "jobType must be 'internship' or 'freelance'",
+        message: "jobType must be 'Internship' or 'Freelance'",
       });
     }
-
+ 
+    // Fetch job to get c_by
+    let job = null;
+    if (jobType === "Internship") {
+      job = await Internship.findById(jobId).select("c_by");
+    } else {
+      job = await Freelance.findById(jobId).select("c_by");
+    }
+ 
+    if (!job) {
+      return res.status(404).json({
+        status: false,
+        message: "Job not found",
+      });
+    }
+ 
     // Check if already applied
     const existing = await AppliedJob.findOne({ userId, jobId });
     if (existing) {
@@ -711,10 +726,15 @@ const applyJob = async (req, res) => {
         message: "You have already applied to this job",
       });
     }
-
-    // Apply
-    await AppliedJob.create({ userId, jobId, jobType });
-
+ 
+    // Apply with c_by from job
+    await AppliedJob.create({
+      userId,
+      jobId,
+      jobType,
+      c_by: job.c_by,
+    });
+ 
     return res.status(201).json({
       status: true,
       is_applied: true,
@@ -729,6 +749,7 @@ const applyJob = async (req, res) => {
     });
   }
 };
+ 
 const getAppliedJobs = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -1013,7 +1034,18 @@ const createEventRegistration = async (req, res) => {
         message: "accommodationType is required when accommodation is 'yes'",
       });
     }
-
+ let eventDoc = null;
+    if (eventType === "Conference")  eventDoc = await Conference.findById(eventId).select("c_by");
+    if (eventType === "Competition") eventDoc = await Competition.findById(eventId).select("c_by");
+    if (eventType === "Seminar")     eventDoc = await Seminar.findById(eventId).select("c_by");
+    if (eventType === "Event")       eventDoc = await Event.findById(eventId).select("c_by");
+ 
+    if (!eventDoc) {
+      return res.status(404).json({
+        status: false,
+        message: "Event not found",
+      });
+    }
     // Check if already registered
     const existing = await EventRegistration.findOne({ userId, eventId });
     if (existing) {
@@ -1030,6 +1062,7 @@ const createEventRegistration = async (req, res) => {
       eventType,
       fullName,
       department,
+      c_by: eventDoc.c_by,
       collegeName,
       year,
       phoneNumber,
