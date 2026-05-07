@@ -63,7 +63,10 @@ export const createEventForm = async (req, res, next) => {
             industryExposure,
             industryPartners,
             venueName,
-            venueAddress,
+            address,
+            city,
+            pincode,
+            state,
             geoLocation,
             foodProvide,
             vegNonVeg,
@@ -139,7 +142,10 @@ export const createEventForm = async (req, res, next) => {
         event.industryPartners = toCleanString(industryPartners);
 
         event.venueName = toCleanString(venueName);
-        event.venueAddress = toCleanString(venueAddress);
+        event.address = toCleanString(address);
+        event.state = toCleanString(state);
+        event.pincode = toCleanString(pincode);
+        event.city = toCleanString(city);
         event.geoLocation = toCleanString(geoLocation);
 
         event.foodProvide = toCleanString(foodProvide);
@@ -219,7 +225,7 @@ export const getEventById = async (req, res, next) => {
       eventId: id,
       eventType: "Event",
     })
-      .populate("userId", "email phone")
+      .populate("userId", "email phone name ")
       .sort({ createdAt: -1 })
       .lean();
 
@@ -227,11 +233,12 @@ export const getEventById = async (req, res, next) => {
       sNo: index + 1,
       registrationId: reg._id,
       userId: reg.userId?._id,
+      name: reg.userId?.name,
       email: reg.userId?.email || reg.mailId,
       phone: reg.userId?.phone || reg.phoneNumber,
       fullName: reg.fullName,
       department: reg.department,
-      collegeName: reg.collegeName,
+      college: reg.collegeName,
       year: reg.year,
       phoneNumber: reg.phoneNumber,
       mailId: reg.mailId,

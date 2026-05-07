@@ -164,7 +164,7 @@ export const getInternshipById = async (req, res, next) => {
       jobId: id,
       jobType: "Internship",
     })
-      .populate("userId", "email phone")
+      .populate("userId", "email phone name")
       .sort({ createdAt: -1 })
       .lean();
 
@@ -175,7 +175,7 @@ export const getInternshipById = async (req, res, next) => {
           userId: app.userId?._id,
         })
           .select(
-            "profile_pic gender dob currentStatus education ugDegree ugFieldOfStudy ugYear pgDegree pgFieldOfStudy pgYear companyName jobTitle yearOfExperience"
+            "profile_pic gender dob location currentStatus education ugDegree ugFieldOfStudy ugYear pgDegree pgFieldOfStudy pgYear companyName jobTitle yearOfExperience"
           )
           .lean();
 
@@ -183,20 +183,20 @@ export const getInternshipById = async (req, res, next) => {
           sNo: index + 1,
           applicationId: app._id,
           userId: app.userId?._id,
-          email: app.userId?.email || "",
-          phone: app.userId?.phone || "",
+          name:app.userId?.name,
+          mail: app.userId?.email || "",
+          contact: app.userId?.phone || "",
           appliedAt: app.createdAt,
+          location:app.location,
           // UserDetails
           profile_pic: userDetails?.profile_pic || null,
           gender: userDetails?.gender || "",
           currentStatus: userDetails?.currentStatus || "",
           education: userDetails?.education || "",
-          ugDegree: userDetails?.ugDegree || "",
           ugFieldOfStudy: userDetails?.ugFieldOfStudy || "",
-          ugYear: userDetails?.ugYear || null,
-          pgDegree: userDetails?.pgDegree || "",
+          year: userDetails?.ugYear || userDetails?.pgYear,
+          department: userDetails?.pgDegree || userDetails?.ugDegree,
           pgFieldOfStudy: userDetails?.pgFieldOfStudy || "",
-          pgYear: userDetails?.pgYear || null,
           companyName: userDetails?.companyName || "",
           jobTitle: userDetails?.jobTitle || "",
           yearOfExperience: userDetails?.yearOfExperience || null,

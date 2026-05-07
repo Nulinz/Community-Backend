@@ -39,7 +39,14 @@ import {
   getSeminarsPage,
   getMyRegistrations,
   getAllNonTechnicalEvents,
-  getAllTechnicalEvents
+  getAllTechnicalEvents,
+  getEventProfile,
+  getAllTechnicalSeminars,
+  getAllNonTechnicalSeminars,
+  getSeminarProfile,
+  getAllCompanies,
+  toggleFollow,
+  getCompanyProfile
 } from "../controller/user/userController.js";
 import fileUploader from "../middleware/fileUploader.js";
 import { getNotifications, markAsRead, updateProfilePic, uploadResume } from "../controller/user/profileController.js";
@@ -87,6 +94,7 @@ router.get("/competitions",uploader.none(), isAuthenticated, getAllCompetitions)
 
 // GET /api/competitions/:id    → single competition profile
 router.post("/Competition-profile",uploader.none(), isAuthenticated, getCompetitionProfile);
+router.post("/event-profile",uploader.none(), isAuthenticated, getEventProfile);
 
 // GET  /api/conferences          → all conferences list
 router.get("/conferences",uploader.none(), isAuthenticated, getAllConferences);
@@ -94,16 +102,42 @@ router.get("/conferences",uploader.none(), isAuthenticated, getAllConferences);
 // POST /api/conferences/profile  → single conference profile (id in body)
 router.post("/conference-profile", uploader.none(),isAuthenticated, getConferenceProfile);
 
+router.post("/seminar-profile", uploader.none(),isAuthenticated, getSeminarProfile);
+
 
 router.get("/events", isAuthenticated, getEventsPage);
 router.get("/my-booked", isAuthenticated, getMyRegistrations);
+
+router.get(
+  "/all-companies",
+  isAuthenticated,
+  getAllCompanies
+);
+
+// ✅ Follow / Unfollow Company
+router.post(
+  "/toggle-follow",
+  uploader.none(),
+  isAuthenticated,
+  toggleFollow
+);
+
+router.post(
+  "/company-profile",
+  uploader.none(),
+  isAuthenticated,
+  getCompanyProfile
+);
+
+
+
 // Seminars landing page
 router.get("/seminars", isAuthenticated, getSeminarsPage);
 router.get("/locations", getLocations);
 router.post("/event-register", uploader.none(),isAuthenticated, createEventRegistration);
 router.get(
   "/event-technical",
- isAuthenticated,
+   isAuthenticated,
   getAllTechnicalEvents
 );
 
@@ -114,6 +148,20 @@ router.get(
   getAllNonTechnicalEvents
 );
 
+
+
+router.get(
+  "/seminar-technical",
+   isAuthenticated,
+  getAllTechnicalSeminars
+);
+
+// ✅ Non-Technical Events
+router.get(
+  "/seminar-non-technical",
+  isAuthenticated,
+  getAllNonTechnicalSeminars
+);
 router.post(
   "/update-profile-pic",
   isAuthenticated,

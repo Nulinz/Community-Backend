@@ -61,7 +61,10 @@ export const createConferenceForm = async (req, res, next) => {
             industryExposure,
             industryPartners,
             venueName,
-            venueAddress,
+            address,
+            city,
+            pincode,
+            state,
             geoLocation,
             foodProvide,
             vegNonVeg,
@@ -136,7 +139,10 @@ export const createConferenceForm = async (req, res, next) => {
         conference.industryPartners = toCleanString(industryPartners);
         conference.certificateAvailability=toCleanString(certificateAvailability)
         conference.venueName = toCleanString(venueName);
-        conference.venueAddress = toCleanString(venueAddress);
+        conference.address = toCleanString(address);
+        conference.state = toCleanString(state);
+        conference.pincode = toCleanString(pincode);
+        conference.city = toCleanString(city);
         conference.geoLocation = toCleanString(geoLocation);
 
         conference.foodProvide = toCleanString(foodProvide);
@@ -236,7 +242,7 @@ export const getConferenceById = async (req, res, next) => {
       phone: reg.userId?.phone || reg.phoneNumber,
       fullName: reg.fullName,
       department: reg.department,
-      collegeName: reg.collegeName,
+      college: reg.collegeName,
       year: reg.year,
       phoneNumber: reg.phoneNumber,
       mailId: reg.mailId,

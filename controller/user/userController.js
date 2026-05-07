@@ -278,72 +278,62 @@ const userDashboard = async (req, res) => {
 
     // ── Step 1: Get applied job IDs ─────────────────────────────
     const appliedJobs = await AppliedJob.find({ userId }).select("jobId");
-
-    const appliedIds = appliedJobs.map(
-      (a) => new mongoose.Types.ObjectId(a.jobId)
-    );
+    const appliedIds = appliedJobs.map((a) => new mongoose.Types.ObjectId(a.jobId));
 
     // ── Step 2: Fetch data ──────────────────────────────────────
-    const [popularEvents, preferredInternships, topCompanies] =
-      await Promise.all([
-        // ── Popular Events ─────────────────────────────────────
-        Event.find({ isActive: true })
-          .sort({ createdAt: -1 })
-          .limit(3)
-          .select(
-            "eventName coverImage organizer c_by mode description individualFees teamFees lateFees totalSeats eventDate geoLocation image isActive createdAt"
-          ),
+    const [popularEventsRaw, preferredInternships, topCompanies] = await Promise.all([
+      Event.find({ isActive: true })
+        .sort({ createdAt: -1 })
+        .limit(3)
+        .select(
+          "eventName coverImage organizer c_by mode description individualFees teamFees lateFees totalSeats eventDate city image isActive createdAt"
+        ),
 
-        // ── Preferred Internships (EXCLUDE APPLIED) ─────────────
-        Internship.find({
-          isActive: true,
-          _id: { $nin: appliedIds }, // ✅ FILTER APPLIED ONLY
-        })
-          .sort({ createdAt: -1 })
-          .limit(3)
-          .select(
-            "jobTitle c_by location companyName duration salary eligibility createdAt"
-          )
-          .populate("c_by", "role"),
+      Internship.find({ isActive: true, _id: { $nin: appliedIds } })
+        .sort({ createdAt: -1 })
+        .limit(3)
+        .select(
+          "jobTitle c_by location companyName duration salary eligibility createdAt"
+        )
+        .populate("c_by", "role"),
 
-        // ── Top Companies ──────────────────────────────────────
-        Company.find()
-          .sort({ createdAt: -1 })
-          .limit(4)
-          .select(
-            "companyName technologies companyTagLine companyLogo address state address industry website location createdAt"
-          ),
-      ]);
+      Company.find()
+        .sort({ createdAt: -1 })
+        .limit(4)
+        .select(
+          "companyName technologies companyTagLine companyLogo address state address industry website location createdAt"
+        ),
+    ]);
 
     const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
 
-    // ── Step 3: Enrich internships ──────────────────────────────
-    const data = await Promise.all(
+    // ── Step 3: Enrich events with is_registered ────────────────
+    const popularEvents = await Promise.all(
+      popularEventsRaw.map(async (item) => ({
+        ...item.toObject(),
+        is_registered: await checkIsRegistered(userId, item._id),
+      }))
+    );
+
+    // ── Step 4: Enrich internships ──────────────────────────────
+    const preferredInternshipsData = await Promise.all(
       preferredInternships.map(async (item) => {
         const obj = item.toObject();
 
         let companyImage = null;
-
         if (item.c_by?.role === "admin") {
           companyImage = STATIC_ADMIN_IMAGE;
         } else if (item.c_by?.role === "company") {
-          const company = await Company.findOne({
-            c_by: item.c_by._id,
-          })
+          const company = await Company.findOne({ c_by: item.c_by._id })
             .select("companyLogo")
             .lean();
-
           companyImage = company?.companyLogo || null;
         }
 
         return {
           ...obj,
           companyImage,
-
-          // ✅ still needed
           is_saved: await checkIsSaved(userId, item._id, "Internship"),
-
-          // ✅ always false (because filtered)
           is_applied: false,
         };
       })
@@ -352,8 +342,8 @@ const userDashboard = async (req, res) => {
     return res.status(200).json({
       status: true,
       data: {
-        popularEvents,
-        preferredInternships: data,
+        popularEvents,                          // ✅ now includes is_registered
+        preferredInternships: preferredInternshipsData,
         topCompanies,
       },
     });
@@ -921,7 +911,7 @@ const getAllCompetitions = async (req, res) => {
 
     const competitions = await Competition.find()
       .sort({ createdAt: -1 })
-      .select("eventName coverImage organizer eventDate eligibilityDetails venueAddress geoLocation totalSeats individualFees teamFees lateFees mode registrationStartDate createdAt");
+      .select("eventName coverImage organizer eventDate eligibilityDetails city  totalSeats individualFees teamFees lateFees mode registrationStartDate createdAt");
 
     const data = await Promise.all(
       competitions.map(async (item) => ({
@@ -1001,13 +991,14 @@ const createEventRegistration = async (req, res) => {
       foodType,
       accommodation,
       accommodationType,
+      type
     } = req.body;
 
     // Validate required fields
-    if (!eventId || !eventType || !fullName || !department || !collegeName || !year || !phoneNumber || !mailId) {
+    if (!eventId || !eventType || !fullName || !department || !collegeName || !year || !phoneNumber || !mailId|| !type) {
       return res.status(400).json({
         status: false,
-        message: "eventId, eventType, fullName, department, collegeName, year, phoneNumber and mailId are required",
+        message: "eventId, eventType, fullName, department, collegeName, year, Type, phoneNumber and mailId are required",
       });
     }
 
@@ -1065,6 +1056,7 @@ const createEventRegistration = async (req, res) => {
       c_by: eventDoc.c_by,
       collegeName,
       year,
+      type,
       phoneNumber,
       mailId,
       food: food || "no",
@@ -1095,7 +1087,7 @@ const getAllConferences = async (req, res) => {
     const conferences = await Conference.find({ isActive: true })
       .sort({ createdAt: -1 })
       .select(
-        "eventName organizer mode eventDate registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees venueAddress geoLocation eligibilityDetails teamOrIndividualEvent createdAt"
+        "eventName organizer mode eventDate registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees city  eligibilityDetails teamOrIndividualEvent createdAt"
       );
 
     const data = await Promise.all(
@@ -1167,7 +1159,7 @@ const getAllTechnicalEvents = async (req, res) => {
     const events = await Event.find({ isActive: true, eventType: "Technical" })
       .sort({ createdAt: -1 })
       .select(
-        "eventName eventType organizer mode eventDate registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees venueAddress geoLocation eligibilityDetails teamOrIndividualEvent createdAt"
+        "eventName eventType organizer mode eventDate registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees city  eligibilityDetails teamOrIndividualEvent createdAt"
       );
 
     const data = await Promise.all(
@@ -1196,10 +1188,10 @@ const getAllNonTechnicalEvents = async (req, res) => {
   try {
     const userId = req.user._id;
 
-    const events = await Event.find({ isActive: true, eventType: "Non-Technical" })
+    const events = await Event.find({ isActive: true, eventType: "Non Technical" })
       .sort({ createdAt: -1 })
       .select(
-        "eventName eventType organizer mode eventDate registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees venueAddress geoLocation eligibilityDetails teamOrIndividualEvent createdAt"
+        "eventName eventType organizer mode eventDate registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees city  eligibilityDetails teamOrIndividualEvent createdAt"
       );
 
     const data = await Promise.all(
@@ -1245,7 +1237,6 @@ const getEventProfile = async (req, res) => {
       });
     }
     const [is_registered] = await Promise.all([
-      checkIsSaved(userId, id, "event"),
       checkIsRegistered(userId, id),
     ]);
 
@@ -1272,7 +1263,7 @@ const getAllTechnicalSeminars = async (req, res) => {
     const seminars = await Seminar.find({ isActive: true, eventType: "Technical" })
       .sort({ createdAt: -1 })
       .select(
-        "eventName eventType organizer mode eventDate registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees venueAddress geoLocation eligibilityDetails teamOrIndividualEvent createdAt"
+        "eventName eventType organizer mode eventDate registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees city  eligibilityDetails teamOrIndividualEvent createdAt"
       );
 
     const data = await Promise.all(
@@ -1300,10 +1291,10 @@ const getAllNonTechnicalSeminars = async (req, res) => {
   try {
     const userId = req.user._id;
 
-    const seminars = await Seminar.find({ isActive: true, eventType: "Non-Technical" })
+    const seminars = await Seminar.find({ isActive: true, eventType: "Non Technical" })
       .sort({ createdAt: -1 })
       .select(
-        "eventName eventType organizer mode eventDate registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees venueAddress geoLocation eligibilityDetails teamOrIndividualEvent createdAt"
+        "eventName eventType organizer mode eventDate registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees city  eligibilityDetails teamOrIndividualEvent createdAt"
       );
 
     const data = await Promise.all(
@@ -1350,7 +1341,6 @@ const getSeminarProfile = async (req, res) => {
     }
 
     const [is_registered] = await Promise.all([
-
       checkIsRegistered(userId, id),
     ]);
 
@@ -1358,7 +1348,7 @@ const getSeminarProfile = async (req, res) => {
       status: true,
       data: {
         ...seminar.toObject(),
-        is_saved,
+
         is_registered,
       },
     });
@@ -1382,7 +1372,7 @@ const getMyRegistrations = async (req, res) => {
       .populate({
         path: "eventId",
         select:
-          "eventName eventType totalSeats organizer mode eventDate coverImage venueAddress geoLocation individualFees teamFees isActive",
+          "eventName eventType totalSeats organizer mode eventDate coverImage city  individualFees teamFees isActive",
       })
 
     return res.status(200).json({
@@ -1499,6 +1489,51 @@ const getFollowingList = async (req, res) => {
 };
 
 
+// const getCompanyProfile = async (req, res) => {
+//   try {
+//     const userId = req.user._id;
+//     const { id } = req.body;
+
+//     if (!id) {
+//       return res.status(400).json({
+//         status: false,
+//         message: "id is required",
+//       });
+//     }
+
+//     const company = await Company.findById(id);
+
+//     if (!company) {
+//       return res.status(404).json({
+//         status: false,
+//         message: "Company not found",
+//       });
+//     }
+
+//     const [followCount, isFollowing] = await Promise.all([
+//       CompanyFollow.countDocuments({ companyId: id }),
+//       CompanyFollow.findOne({ userId, companyId: id }),
+//     ]);
+
+//     return res.status(200).json({
+//       status: true,
+//       data: {
+//         ...company.toObject(),
+//         followCount,
+//         is_following: !!isFollowing,
+//       },
+//     });
+//   } catch (error) {
+//     console.error("Company Profile Error:", error.message);
+//     return res.status(500).json({
+//       status: false,
+//       message: "Failed to load company profile",
+//       error: error.message,
+//     });
+//   }
+// };
+
+
 const getCompanyProfile = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -1511,8 +1546,8 @@ const getCompanyProfile = async (req, res) => {
       });
     }
 
-    const company = await Company.findById(id);
-
+    const company = await Company.findById(id).populate("c_by", "role");
+    console.log(company)
     if (!company) {
       return res.status(404).json({
         status: false,
@@ -1520,10 +1555,78 @@ const getCompanyProfile = async (req, res) => {
       });
     }
 
-    const [followCount, isFollowing] = await Promise.all([
+    const companyUserId = company.userId; // ✅ the user who owns this company
+
+    const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
+
+    // ── Fetch all in parallel ───────────────────────────────────
+    const [followCount, isFollowing, internshipsRaw, freelancesRaw] = await Promise.all([
       CompanyFollow.countDocuments({ companyId: id }),
       CompanyFollow.findOne({ userId, companyId: id }),
+
+      // ✅ Internships posted by this company
+      Internship.find({ isActive: true, c_by: companyUserId })
+        .sort({ createdAt: -1 })
+        .select("jobTitle c_by location companyName duration salary eligibility createdAt")
+        .populate("c_by", "role"),
+
+      // ✅ Freelance jobs posted by this company
+      Freelance.find({ isActive: true, c_by: companyUserId })
+        .sort({ createdAt: -1 })
+        .select("jobTitle c_by location companyName duration salary eligibility createdAt")
+        .populate("c_by", "role"),
     ]);
+
+
+    console.log( internshipsRaw)
+
+    // ── Enrich internships ──────────────────────────────────────
+    const internships = await Promise.all(
+      internshipsRaw.map(async (item) => {
+        const obj = item.toObject();
+
+        let companyImage = null;
+        if (item.c_by?.role === "admin") {
+          companyImage = STATIC_ADMIN_IMAGE;
+        } else if (item.c_by?.role === "company") {
+          const comp = await Company.findOne({ c_by: item.c_by._id })
+            .select("companyLogo")
+            .lean();
+          companyImage = comp?.companyLogo || null;
+        }
+
+        return {
+          ...obj,
+          companyImage,
+          is_saved: await checkIsSaved(userId, item._id, "Internship"),
+          is_applied: await checkIsApplied(userId, item._id),
+        };
+      })
+    );
+
+    // ── Enrich freelance jobs ───────────────────────────────────
+    const freelances = await Promise.all(
+      freelancesRaw.map(async (item) => {
+        const obj = item.toObject();
+
+        let companyImage = null;
+        if (item.c_by?.role === "admin") {
+          companyImage = STATIC_ADMIN_IMAGE;
+        } else if (item.c_by?.role === "company") {
+          const comp = await Company.findOne({ c_by: item.c_by._id })
+            .select("companyLogo")
+            .lean();
+          companyImage = comp?.companyLogo || null;
+        }
+
+        return {
+          ...obj,
+          companyImage,
+          is_saved: await checkIsSaved(userId, item._id, "Freelance"),
+          is_applied: await checkIsApplied(userId, item._id),
+        };
+      })
+    );
 
     return res.status(200).json({
       status: true,
@@ -1531,6 +1634,8 @@ const getCompanyProfile = async (req, res) => {
         ...company.toObject(),
         followCount,
         is_following: !!isFollowing,
+        internships,   // ✅ internships by this company
+        freelances,    // ✅ freelance jobs by this company
       },
     });
   } catch (error) {
@@ -1542,7 +1647,6 @@ const getCompanyProfile = async (req, res) => {
     });
   }
 };
-
 
 const attachFlags = async (items, type) =>
   Promise.all(
@@ -1556,27 +1660,45 @@ const getEventsPage = async (req, res) => {
     const userId = req.user._id;
     const now = new Date();
 
-    const [upcomingRaw, technicalRaw, nonTechnicalRaw] = await Promise.all([
-      Event.find({ isActive: true, eventDate: { $gte: now } })
-        .sort({ eventDate: 1 })
-        .limit(3)
-        .select("eventName eventType organizer mode eventDate coverImage venueAddress totalSeats individualFees teamFees registrationEndDate createdAt"),
+    const upcomingRaw = await Event.find({ isActive: true, eventDate: { $gte: now } })
+      .sort({ eventDate: 1 })
+      .limit(2)
+      .select("eventName eventType organizer mode eventDate coverImage city totalSeats individualFees teamFees registrationEndDate createdAt");
 
-      Event.find({ isActive: true, eventType: "Technical" })
+    const upcomingIds = upcomingRaw.map((e) => e._id);
+
+    const [technicalRaw, nonTechnicalRaw] = await Promise.all([
+      Event.find({ isActive: true, eventType: "Technical", _id: { $nin: upcomingIds } })
         .sort({ createdAt: -1 })
         .limit(3)
-        .select("eventName eventType organizer mode eventDate coverImage venueAddress totalSeats individualFees teamFees registrationEndDate createdAt"),
+        .select("eventName eventType organizer mode eventDate coverImage city totalSeats individualFees teamFees registrationEndDate createdAt"),
 
-      Event.find({ isActive: true, eventType: "Non-Technical" })
+      Event.find({ isActive: true, eventType: "Non Technical", _id: { $nin: upcomingIds } })
         .sort({ createdAt: -1 })
         .limit(3)
-        .select("eventName eventType organizer mode eventDate coverImage venueAddress totalSeats individualFees teamFees registrationEndDate createdAt"),
+        .select("eventName eventType organizer mode eventDate coverImage city totalSeats individualFees teamFees registrationEndDate createdAt"),
     ]);
 
+    // ✅ attachFlags + is_registered for all three
     const [upcomingEvents, technicalEvents, nonTechnicalEvents] = await Promise.all([
-      attachFlags(upcomingRaw, "event"),
-      attachFlags(technicalRaw, "event"),
-      attachFlags(nonTechnicalRaw, "event"),
+      Promise.all(
+        upcomingRaw.map(async (item) => ({
+          ...item.toObject(),
+          is_registered: await checkIsRegistered(userId, item._id),
+        }))
+      ),
+      Promise.all(
+        technicalRaw.map(async (item) => ({
+          ...item.toObject(),
+          is_registered: await checkIsRegistered(userId, item._id),
+        }))
+      ),
+      Promise.all(
+        nonTechnicalRaw.map(async (item) => ({
+          ...item.toObject(),
+          is_registered: await checkIsRegistered(userId, item._id),
+        }))
+      ),
     ]);
 
     return res.status(200).json({
@@ -1592,32 +1714,51 @@ const getEventsPage = async (req, res) => {
     });
   }
 };
+
 const getSeminarsPage = async (req, res) => {
   try {
     const userId = req.user._id;
     const now = new Date();
 
-    const [upcomingRaw, technicalRaw, nonTechnicalRaw] = await Promise.all([
-      Seminar.find({ isActive: true, eventDate: { $gte: now } })
-        .sort({ eventDate: 1 })
-        .limit(3)
-        .select("eventName eventType organizer mode eventDate coverImage venueAddress totalSeats individualFees teamFees registrationEndDate createdAt"),
+    const upcomingRaw = await Seminar.find({ isActive: true, eventDate: { $gte: now } })
+      .sort({ eventDate: 1 })
+      .limit(2)
+      .select("eventName eventType organizer mode eventDate coverImage city totalSeats individualFees teamFees registrationEndDate createdAt");
 
-      Seminar.find({ isActive: true, eventType: "Technical" })
+    const upcomingIds = upcomingRaw.map((s) => s._id);
+
+    const [technicalRaw, nonTechnicalRaw] = await Promise.all([
+      Seminar.find({ isActive: true, eventType: "Technical", _id: { $nin: upcomingIds } })
         .sort({ createdAt: -1 })
         .limit(3)
-        .select("eventName eventType organizer mode eventDate coverImage venueAddress totalSeats individualFees teamFees registrationEndDate createdAt"),
+        .select("eventName eventType city organizer mode eventDate coverImage venueAddress totalSeats individualFees teamFees registrationEndDate createdAt"),
 
-      Seminar.find({ isActive: true, eventType: "Non-Technical" })
+      Seminar.find({ isActive: true, eventType: "Non Technical", _id: { $nin: upcomingIds } })
         .sort({ createdAt: -1 })
         .limit(3)
-        .select("eventName eventType organizer mode eventDate coverImage venueAddress totalSeats individualFees teamFees registrationEndDate createdAt"),
+        .select("eventName eventType city organizer mode eventDate coverImage venueAddress totalSeats individualFees teamFees registrationEndDate createdAt"),
     ]);
 
+    // ✅ attachFlags + is_registered for all three
     const [upcomingSeminars, technicalSeminars, nonTechnicalSeminars] = await Promise.all([
-      attachFlags(upcomingRaw, "seminar"),
-      attachFlags(technicalRaw, "seminar"),
-      attachFlags(nonTechnicalRaw, "seminar"),
+      Promise.all(
+        upcomingRaw.map(async (item) => ({
+          ...item.toObject(),
+          is_registered: await checkIsRegistered(userId, item._id),
+        }))
+      ),
+      Promise.all(
+        technicalRaw.map(async (item) => ({
+          ...item.toObject(),
+          is_registered: await checkIsRegistered(userId, item._id),
+        }))
+      ),
+      Promise.all(
+        nonTechnicalRaw.map(async (item) => ({
+          ...item.toObject(),
+          is_registered: await checkIsRegistered(userId, item._id),
+        }))
+      ),
     ]);
 
     return res.status(200).json({
@@ -1633,7 +1774,6 @@ const getSeminarsPage = async (req, res) => {
     });
   }
 };
-
 
 
 

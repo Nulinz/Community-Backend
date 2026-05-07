@@ -22,6 +22,9 @@ const userDetailsSchema = new mongoose.Schema(
     profile_pic:{
         type: String,
     },
+    location:{
+      type: String,
+    },
     currentStatus: {
       type: String,
       required: [true, "Current status is required"],

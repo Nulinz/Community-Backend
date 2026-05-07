@@ -79,7 +79,7 @@ export const loginUser = async (req, res) => {
         phone: user.phone,
       },
       process.env.JWT_SECRET,
-      { expiresIn: "7d" }
+      { expiresIn: "30d" }
     );
 
     // 🔹 8. Response

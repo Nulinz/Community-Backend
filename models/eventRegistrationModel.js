@@ -13,7 +13,7 @@ const eventRegistrationSchema = new mongoose.Schema(
       enum: ["Conference", "Competition", "Seminar", "Event"],
       required: true,
     },
-    collegeId:{
+    c_by:{
        type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
@@ -68,7 +68,11 @@ const eventRegistrationSchema = new mongoose.Schema(
       enum: ["veg", "non-veg"],
       default: null,
     },
-
+    type:{
+      type: String,
+      required: true,
+      enum: ["Team", "Individual"],
+    },
     // Accommodation
     accommodation: {
       type: String,

@@ -61,7 +61,10 @@ export const createCompetitionForm = async (req, res, next) => {
             thirdPrize,
             participationPrize,
             venueName,
-            venueAddress,
+            address,
+            city,
+            pincode,
+            state,
             geoLocation,
             foodProvide,
             vegNonVeg,
@@ -144,7 +147,10 @@ export const createCompetitionForm = async (req, res, next) => {
         competition.participationPrize = toCleanString(participationPrize);
 
         competition.venueName = toCleanString(venueName);
-        competition.venueAddress = toCleanString(venueAddress);
+        competition.address = toCleanString(address);
+        competition.state = toCleanString(state);
+        competition.pincode = toCleanString(pincode);
+        competition.city = toCleanString(city);
         competition.geoLocation = toCleanString(geoLocation);
 
         competition.foodProvide = toCleanString(foodProvide);
@@ -223,7 +229,7 @@ export const getCompetitionById = async (req, res, next) => {
       eventId: id,
       eventType: "Competition",
     })
-      .populate("userId", "email phone")
+      .populate("userId", "email phone name")
       .sort({ createdAt: -1 })
       .lean();
 
@@ -231,11 +237,12 @@ export const getCompetitionById = async (req, res, next) => {
       sNo: index + 1,
       registrationId: reg._id,
       userId: reg.userId?._id,
+      name:reg.userId?.name,
       email: reg.userId?.email || reg.mailId,
       phone: reg.userId?.phone || reg.phoneNumber,
       fullName: reg.fullName,
       department: reg.department,
-      collegeName: reg.collegeName,
+      college: reg.collegeName,
       year: reg.year,
       phoneNumber: reg.phoneNumber,
       mailId: reg.mailId,

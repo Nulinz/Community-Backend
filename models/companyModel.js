@@ -25,7 +25,8 @@ const companySchema = new mongoose.Schema(
       trim: true,
     },
     companyTagLine: {
-      type: String,
+      type: [String],
+      default: [],
       required: true,
       trim: true,
     },

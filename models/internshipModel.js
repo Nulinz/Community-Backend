@@ -14,7 +14,7 @@ const internshipSchema = new mongoose.Schema(
     companyName: { type: String, required: true, trim: true },
     location: { type: String, required: true, trim: true },
     mode: { type: String, required: true },
-    totalOpenings: { type: Number, default: 0 },
+    totlOpenings: { type: Number, default: 0 },
     duration: { type: String },
     internStartDate: { type: Date },
     applicationDeadline: { type: Date },
@@ -24,7 +24,7 @@ const internshipSchema = new mongoose.Schema(
     benefits: [{ type: String, trim: true }],
     learning_outcomes: [{ type: String, trim: true }],
     development_benefits: [{ type: String, trim: true }],
-   development_resources: [{ type: String, trim: true }],
+    development_resources: [{ type: String, trim: true }],
     // skill_set
     eligibility: [{ type: String, trim: true }],
     description: { type: String, trim: true },

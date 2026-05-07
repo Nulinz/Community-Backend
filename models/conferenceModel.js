@@ -61,7 +61,10 @@ const conferenceSchema = new mongoose.Schema(
 
     // Venue
     venueName: { type: String, trim: true },
-    venueAddress: { type: String, trim: true },
+     address: { type: String, trim: true },
+    city: { type: String, trim: true },
+    state: { type: String, trim: true },
+    pincode: { type: String, trim: true },
     geoLocation: { type: String, trim: true },
 
     // Food & Accommodation
