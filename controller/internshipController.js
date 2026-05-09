@@ -1,6 +1,7 @@
 import Internship from "../models/internshipModel.js";
 import AppliedJob from "../models/appliedJobModel.js";
 import UserDetails from "../models/userDetails.js";
+import { notifyJobAudience } from "../helper/jobNotification.js";
 
 const toCleanString = (value) =>
     typeof value === "string" ? value.trim() : "";
@@ -13,7 +14,7 @@ export const createInternshipForm = async (req, res, next) => {
         const { id, _id, ...rest } = req.body;
         const targetId = id || _id;
         const isUpdate = !!targetId;
-        console.log(rest) 
+
         const {
             internshipType,
             jobTitle,
@@ -91,8 +92,15 @@ export const createInternshipForm = async (req, res, next) => {
         internship.learning_outcomes=parseArray(learning_outcomes)
         internship.development_benefits=parseArray(development_benefits)
         internship.development_resources=parseArray(development_resources)
-        await internship.save();
 
+
+        await internship.save();
+        if(!isUpdate){
+          notifyJobAudience(internship, req.user._id, isUpdate, "Internship").catch((e) =>
+    console.error("Freelance notification error:", e.message)
+  );
+        }
+        
         res.status(isUpdate ? 200 : 201).json({
             success: true,
             message: `Internship ${isUpdate ? "updated" : "created"} successfully`,
@@ -108,10 +116,13 @@ export const createInternshipForm = async (req, res, next) => {
 
 export const getAllInternships = async (req, res, next) => {
   try {
-    const query = {};
-    if (req.user?.role === "company") {
-      query.c_by = req.user._id;
-    }
+      const user=req.user
+    let query={
+          
+        }
+
+        query.c_by=user._id
+        
 
     const internships = await Internship.find(query)
       .sort({ createdAt: -1 })

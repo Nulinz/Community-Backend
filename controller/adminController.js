@@ -24,7 +24,6 @@ export const adminDashBoard = async (req, res) => {
       // is_deleted: false,
       // is_active: true,
       c_by:req?.user?._id,
-      
     };
 
     // 📊 Helper

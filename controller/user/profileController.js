@@ -1,7 +1,7 @@
 import Resume from "../../models/resumeModel.js";
 import Notification from "../../models/notificationModel.js";
-
-
+import UserDetails from "../../models/userDetails.js";
+import User from "../../models/userModel.js";
 const uploadResume = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -23,7 +23,7 @@ const uploadResume = async (req, res) => {
       mimeType: mimetype,
     });
 
-    return res.status(201).json({
+    return res.status(200).json({
       status: true,
       message: "Resume uploaded successfully",
       data: resume,
@@ -136,29 +136,29 @@ const markAsRead = async (req, res) => {
 const updateProfilePic = async (req, res) => {
   try {
     const userId = req.user._id;
- 
+
     if (!req.file) {
       return res.status(400).json({
         status: false,
         message: "Profile picture file is required",
       });
     }
- 
+
     const fileUrl = req.file.path; // replace with cloud URL if using S3/Cloudinary
- 
+
     const userDetails = await UserDetails.findOneAndUpdate(
       { userId },
       { profile_pic: fileUrl },
       { new: true }
     ).select("userId profile_pic updatedAt");
- 
+
     if (!userDetails) {
       return res.status(404).json({
         status: false,
         message: "User details not found",
       });
     }
- 
+
     return res.status(200).json({
       status: true,
       message: "Profile picture updated successfully",
@@ -173,6 +173,115 @@ const updateProfilePic = async (req, res) => {
     });
   }
 };
- 
 
-export { uploadResume, getUserResumes,getNotifications, markAsRead,updateProfilePic };
+const updateUserDetails = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const {
+      name,
+      dob,
+      gender,
+      city,
+      currentStatus,
+      education,
+      primary_skills,  // array: ["React", "Node.js"]
+      tools, 
+      website,         
+      languages,
+      highQualification,
+      ugDegree,
+      ugFieldOfStudy,
+      ugYear,
+      pgDegree,
+      pgFieldOfStudy,
+      pgYear,
+      ugCollegeName,
+      pgCollegeName,
+      ugModeOfstudy,
+      pgModeOfstudy,
+      ugPercentage,
+      pgPercentage,
+      academicAchievements,
+      companyName,
+      jobTitles,
+      yearOfExperience,
+      hearAboutUs,
+      address,
+      others,
+    } = req.body;
+
+    // ── 1. Update name in User collection ──────────────────────────────
+    if (name) {
+      await User.findByIdAndUpdate(
+        userId,
+        { name },
+        { new: true, runValidators: true }
+      );
+    }
+
+    // ── 2. Update or create UserDetails ────────────────────────────────
+    const updatedDetails = await UserDetails.findOneAndUpdate(
+      { userId },                          // filter
+      {
+        $set: {
+          ...(name && { name }),
+          ...(dob && { dob }),
+          ...(gender && { gender }),
+          ...(currentStatus && { currentStatus }),
+          ...(education && { education }),
+          ...(primary_skills && { "skills.primary_skills": primary_skills }),
+          ...(tools && { "skills.tools": tools }),
+          ...(languages && { "skills.languages": languages }),
+          ...(highQualification && { highQualification }),
+          ...(ugDegree && { ugDegree }),
+          ...(ugFieldOfStudy && { ugFieldOfStudy }),
+          ...(ugYear && { ugYear }),
+          ...(pgDegree && { pgDegree }),
+          ...(pgFieldOfStudy && { pgFieldOfStudy }),
+          ...(pgYear && { pgYear }),
+          ...(ugCollegeName && { ugCollegeName }),
+          ...(pgCollegeName && { pgCollegeName }),
+          ...(ugModeOfstudy && { ugModeOfstudy }),
+          ...(pgModeOfstudy && { pgModeOfstudy }),
+          ...(city && { city }),
+          ...(website && { website }),
+          ...(ugPercentage && { ugPercentage }),
+          ...(pgPercentage && { pgPercentage }),
+          ...(academicAchievements && { academicAchievements }),
+          ...(companyName && { companyName }),
+          ...(jobTitles && { jobTitles }),
+          ...(yearOfExperience && { yearOfExperience }),
+          ...(hearAboutUs && { hearAboutUs }),
+          ...(address && { address }),
+          ...(others && { others }),
+        },
+      },
+      {
+        new: true,           // return updated document
+        upsert: true,        // create if not found
+        runValidators: true, // enforce schema validation
+      }
+    );
+
+    return res.status(200).json({
+      status: true,
+      message: "User details updated successfully",
+      data: updatedDetails,
+    });
+
+  } catch (error) {
+    // Mongoose validation error
+    if (error.name === "ValidationError") {
+      const messages = Object.values(error.errors).map((e) => e.message);
+      return res.status(400).json({ status: false, message: messages });
+    }
+
+    console.error("updateUserDetails error:", error);
+    return res.status(500).json({
+      status: false,
+      message: "Internal server error",
+    });
+  }
+};
+
+export { uploadResume, updateUserDetails, getUserResumes, getNotifications, markAsRead, updateProfilePic };

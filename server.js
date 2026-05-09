@@ -19,6 +19,9 @@ import internshipRoutes from "./routes/internshipRoutes.js"
 import freelanceRoutes from "./routes/freelanceRoutes.js"
 import adminRoutes from "./routes/adminRoutes.js"
 import { seedTamilNaduLocations } from "./services/uploadLocation.js";
+import { startEventReminderCron } from "./jobs/eventRemainder.js";
+import { startJobSuggestionCron } from "./jobs/jobSuggested.js";
+import { seedConferences } from "./services/uploadConference.js";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -38,7 +41,10 @@ app.use(
   })
 );
 
+// Upload Data
 
+//  seedConferences()
+// 
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -53,6 +59,11 @@ app.get("/", (req, res) => {
 });
 
 
+/*-----------JOBS--------------- */
+
+startEventReminderCron();
+startJobSuggestionCron()
+/*------------------------------ */
 app.use("/api/users", userRoutes);
 app.use("/api/userDetails", userDetailsRoutes);
 app.use("/api/company", companyRoutes);

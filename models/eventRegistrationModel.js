@@ -18,13 +18,16 @@ const eventRegistrationSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
-    // User Reference
+    remainder:{
+      type:Boolean,
+      default:false
+    },
+
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
     },
-
     // Personal Details
     fullName: {
       type: String,

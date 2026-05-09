@@ -24,14 +24,14 @@ export const loginUser = async (req, res) => {
     }
 
     // // 🔹 3. Check user active
-    // if (!user.register_status==="pending") {
-    //   return res.status(400).json({
-    //     status: false,
-    //     message: "Your Account is deactive",
-    //     pending:(user.register_status==="completed" )? false : true, // 👈 key logic
-    //     register_status:user.register_status
-    //   });
-    // }
+    if (!user.is_active) {
+      return res.status(400).json({
+        status: false,
+        message: "Your Account is deactive",
+        pending:(user.register_status==="completed" )? false : true, // 👈 key logic
+        register_status:user.register_status
+      });
+    }
 
     // 🔹 4. Compare password
     const isMatch = await user.comparePassword(password);
@@ -42,7 +42,7 @@ export const loginUser = async (req, res) => {
         message: "Password incorrect",
       });
     }
-        const userDetails = await UserDetails.findOne({
+    const userDetails = await UserDetails.findOne({
       userId: user._id,
     });
 
@@ -94,6 +94,7 @@ export const loginUser = async (req, res) => {
           name: user.name,
           phone: user.phone,
           email: user.email,
+          profile_pic:userDetails?.profile_pic
         },
       },
       message:"Login successfully"

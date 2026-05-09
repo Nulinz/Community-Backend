@@ -46,10 +46,12 @@ import {
   getSeminarProfile,
   getAllCompanies,
   toggleFollow,
-  getCompanyProfile
+  getCompanyProfile,
+  getMySuggestions
 } from "../controller/user/userController.js";
 import fileUploader from "../middleware/fileUploader.js";
-import { getNotifications, markAsRead, updateProfilePic, uploadResume } from "../controller/user/profileController.js";
+import { getNotifications, getUserResumes, markAsRead, updateProfilePic, updateUserDetails, uploadResume } from "../controller/user/profileController.js";
+import { getUserDetails } from "../controller/userDetailController.js";
 
 const router = express.Router();
 const uploader = multer();
@@ -175,11 +177,22 @@ router.post(
   uploadResume
 );
 
+router.post(
+  "/update-user-details",
+  uploader.none(),
+  isAuthenticated,
+  updateUserDetails
+);
+router.get("/my-resume", isAuthenticated, getUserResumes);
 router.get("/notifications", isAuthenticated, getNotifications);
-
+router.get(
+  "/my-suggestions",
+  isAuthenticated,
+  getMySuggestions
+);
 // Mark notification(s) as read
-router.post("/notifications/read", isAuthenticated, markAsRead);
-
+router.post("/notifications/read",uploader.none(), isAuthenticated, markAsRead);
+router.get("/user-details",isAuthenticated,getUserDetails)
 // admin
 router.post("/create-admin",uploader.none(), isAuthenticated, authorizeRoles("admin"), uploader.none(), createAdmin);
 router.post("/adminlogin", uploader.none(), adminLogin);

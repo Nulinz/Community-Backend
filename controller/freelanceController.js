@@ -1,6 +1,7 @@
 import Freelance from "../models/freelanceModel.js";
 import AppliedJob from "../models/appliedJobModel.js";
 import UserDetails from "../models/userDetails.js";
+import { notifyJobAudience } from "../helper/jobNotification.js";
 
 const toCleanString = (value) =>
     typeof value === "string" ? value.trim() : "";
@@ -38,6 +39,7 @@ export const createFreelanceForm = async (req, res, next) => {
             supporting_files,
             payment_structure,
             rules,
+            skill_set,
             eligibility_criteria,
              location
         } = rest;
@@ -79,12 +81,17 @@ export const createFreelanceForm = async (req, res, next) => {
         freelance.eligibility = parseArray(eligibility);
         freelance.security = parseArray(security);
         freelance.referenceWebsite = parseArray(referenceWebsite);
-    freelance.rules = parseArray(rules);
-    freelance.payment_structure = parseArray(payment_structure);
-    freelance.supporting_files = parseArray(supporting_files);
-     freelance. eligibility_criteria = parseArray( eligibility_criteria);
+        freelance.rules = parseArray(rules);
+        freelance.skill_set = parseArray(skill_set);
+        freelance.payment_structure = parseArray(payment_structure);
+        freelance.supporting_files = parseArray(supporting_files);
+        freelance. eligibility_criteria = parseArray( eligibility_criteria);
         await freelance.save();
-
+if(!isUpdate){
+          notifyJobAudience(freelance, req.user._id, isUpdate, "Freelance").catch((e) =>
+    console.error("Freelance notification error:", e.message)
+  );
+        }
         res.status(isUpdate ? 200 : 201).json({
             success: true,
             message: `Freelance ${isUpdate ? "updated" : "created"} successfully`,
@@ -99,10 +106,13 @@ export const createFreelanceForm = async (req, res, next) => {
 
 export const getAllFreelances = async (req, res, next) => {
   try {
-    const query = { isActive: true };
-    if (req.user?.role === "company") {
-      query.c_by = req.user._id;
-    }
+      const user=req.user
+    let query={
+          
+        }
+
+        query.c_by=user._id
+        
 
     const freelances = await Freelance.find(query)
       .sort({ createdAt: -1 })

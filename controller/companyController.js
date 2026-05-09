@@ -2,7 +2,7 @@ import { register } from "module";
 import Company from "../models/companyModel.js";
 import User from "../models/userModel.js";
 import fs from "fs";
-
+import UserDetails from "../models/userDetails.js";
 import path from "path";
 import CompanyFollow from "../models/companyFollowModel.js";
 import Internship from "../models/internshipModel.js";
@@ -70,7 +70,7 @@ const PHONE_REGEX = /^\d{10}$/;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 
-const getCompanyDashboard = async (req, res) => {
+export const getCompanyDashboard = async (req, res) => {
   try {
     const userId = req.user._id;
 
@@ -140,7 +140,7 @@ const getCompanyDashboard = async (req, res) => {
   }
 };
 
-export { getCompanyDashboard };
+
 
 
 
@@ -158,10 +158,10 @@ export const createCompanyForm = async (req, res, next) => {
         const companyName = toCleanString(req.body?.companyName);
         const companyType = toCleanString(req.body?.companyType);
         const companyTagLine = toCleanString(req.body?.companyTagLine);
-        const companyCultureTags = toCleanString(req.body?.companyCultureTags);
+        const companyCultureTags =  toCleanStringArray(req.body?.companyCultureTags);
         const yearFounded = toCleanString(req.body?.yearFounded);
         const websiteLink = toCleanString(req.body?.websiteLink);
-
+        const employees=req?.body?.employees
         let companyLogo = getUploadedFilePath(companyLogoFile);
         let coverImage = getUploadedFilePath(coverImageFile);
 
@@ -285,7 +285,7 @@ export const createCompanyForm = async (req, res, next) => {
             company.learningOutcomes = learningOutcomes;
             company.aboutUs = aboutUs;
             company.certificateAvailability = certificateAvailability;
-
+            company.employees=employees
             await company.save();
         } else {
             company = await Company.create({
@@ -310,6 +310,7 @@ export const createCompanyForm = async (req, res, next) => {
                 learningOutcomes,
                 aboutUs,
                 certificateAvailability,
+                employees
             });
         }
 
@@ -525,9 +526,9 @@ export const getCompanyById = async (req, res, next) => {
 
     // ── 4. Get Followers ───────────────────────────────────────
     const followers = await CompanyFollow.find({ companyId: companyUserId })
-      .populate("userId", "email phone")
+      .populate("userId", "email phone name")
       .lean();
-
+   
     // ── 5. Enrich each follower with UserDetails ───────────────
     const followersData = await Promise.all(
       followers.map(async (follow) => {
@@ -539,10 +540,14 @@ export const getCompanyById = async (req, res, next) => {
 
         return {
           userId: follow.userId?._id,
+          name:follow.userId?.name || "",
           email: follow.userId?.email || "",
-          phone: follow.userId?.phone || "",
+          contact: follow.userId?.phone || "",
           followedAt: follow.createdAt,
-          ...userDetails,
+          degree:userDetails.ugDegree || userDetails.pgDegree,
+          education: userDetails?.education,
+          jobTitle: userDetails?.jobTitle,
+          status:userDetails?.currentStatus
         };
       })
     );

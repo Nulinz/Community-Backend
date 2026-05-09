@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import mongoose from "mongoose";
 import EventRegistration from "../models/eventRegistrationModel.js";
+import { getEventFinancials } from "../helper/getEventFinancials.js";
 const toCleanString = (value) =>
     typeof value === "string" ? value.trim() : "";
 
@@ -193,11 +194,11 @@ export const getAllSeminars = async (req, res, next) => {
         const user=req.user
 
         let query={
-           
+          
         }
-        if(req.user.role==="college"){
+
         query.c_by=user._id
-        }
+        
         const seminars = await Seminar.find(query).sort({ createdAt: -1 });
         res.status(200).json({
             success: true,
@@ -235,7 +236,7 @@ export const getSeminarById = async (req, res, next) => {
       .populate("userId", "email phone")
       .sort({ createdAt: -1 })
       .lean();
-
+ const revenue=await getEventFinancials(id)
     const registeredList = registrations.map((reg, index) => ({
       sNo: index + 1,
       registrationId: reg._id,
@@ -262,6 +263,7 @@ export const getSeminarById = async (req, res, next) => {
         registrations: {
           count: registeredList.length,
           list: registeredList,
+           revenue
         },
       },
     });

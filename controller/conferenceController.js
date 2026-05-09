@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import mongoose from "mongoose";
 import EventRegistration from "../models/eventRegistrationModel.js";
+import { getEventFinancials } from "../helper/getEventFinancials.js";
 const toCleanString = (value) =>
     typeof value === "string" ? value.trim() : "";
 
@@ -192,11 +193,11 @@ export const getAllConference = async (req, res, next) => {
         const user=req.user
 
         let query={
-           
+          
         }
-        if(req.user.role==="college"){
+
         query.c_by=user._id
-        }
+        
         const conferences = await Conference.find(query).sort({ createdAt: -1 });
 
         res.status(200).json({
@@ -224,13 +225,14 @@ export const getConferenceById = async (req, res, next) => {
     if (!conference) {
       throw Object.assign(new Error("Conference not found"), { status: 404 });
     }
+ const revenue=await getEventFinancials(id)
 
     // ── 2. Get Registered List ──────────────────────────────
     const registrations = await EventRegistration.find({
       eventId: id,
       eventType: "Conference",
     })
-      .populate("userId", "email phone")
+      .populate("userId", "email phone name")
       .sort({ createdAt: -1 })
       .lean();
 
@@ -240,7 +242,7 @@ export const getConferenceById = async (req, res, next) => {
       userId: reg.userId?._id,
       email: reg.userId?.email || reg.mailId,
       phone: reg.userId?.phone || reg.phoneNumber,
-      fullName: reg.fullName,
+      name: reg.fullName,
       department: reg.department,
       college: reg.collegeName,
       year: reg.year,
@@ -260,6 +262,7 @@ export const getConferenceById = async (req, res, next) => {
         registrations: {
           count: registeredList.length,
           list: registeredList,
+          revenue
         },
       },
     });

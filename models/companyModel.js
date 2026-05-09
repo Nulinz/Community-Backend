@@ -25,15 +25,13 @@ const companySchema = new mongoose.Schema(
       trim: true,
     },
     companyTagLine: {
-      type: [String],
-      default: [],
-      required: true,
-      trim: true,
-    },
-    companyCultureTags: {
       type: String,
       default: "",
       trim: true,
+    },
+    companyCultureTags: {
+     type: [String],
+    default: [],
     },
     yearFounded: {
       type: String,
@@ -45,12 +43,18 @@ const companySchema = new mongoose.Schema(
       default: "",
       trim: true,
     },
+    
     companyLogo: {
       type: String,
       required: true,
       trim: true,
     },
     coverImage: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    employees: {
       type: String,
       required: true,
       trim: true,

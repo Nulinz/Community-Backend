@@ -463,7 +463,7 @@ export const getCollegeById = async (req, res, next) => {
       email: userId?.email || "",
       phone: userId?.phone || "",
       role: userId?.role || "",
-      isActive: userId?.isActive ?? true,
+      is_active: userId?.is_active ?? true,
     };
 
     // ── Fetch all events by c_by = collegeUserId ────────────
@@ -566,7 +566,7 @@ export const getMyCollege= async (req, res, next) => {
       email: userId?.email || "",
       phone: userId?.phone || "",
       role: userId?.role || "",
-      isActive: userId?.is_active ?? true,
+      is_active: userId?.is_active ?? true,
     };
 
     // ── Fetch all events by c_by = collegeUserId ────────────

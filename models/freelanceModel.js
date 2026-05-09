@@ -21,6 +21,7 @@ const freelanceSchema = new mongoose.Schema(
     eligibility: [{ type: String, trim: true }],
     security: [{ type: String, trim: true }],
     referenceWebsite: [{ type: String, trim: true }],
+    skill_set: [{ type: String, trim: true }],
     rules: [{ type: String, trim: true }],
     payment_structure: [{ type: String, trim: true }],
     supporting_files: [{ type: String, trim: true }],

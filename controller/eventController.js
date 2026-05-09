@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import mongoose from "mongoose";
 import EventRegistration from "../models/eventRegistrationModel.js";
+import { getEventFinancials } from "../helper/getEventFinancials.js";
 
 const toCleanString = (value) =>
     typeof value === "string" ? value.trim() : "";
@@ -189,11 +190,11 @@ export const getAllEvents = async (req, res, next) => {
         const user=req.user
 
         let query={
-           
+          
         }
-        if(req.user.role==="college"){
+
         query.c_by=user._id
-        }
+        
         const events = await Event.find(query).sort({ createdAt: -1 });
         res.status(200).json({
             success: true,
@@ -219,7 +220,7 @@ export const getEventById = async (req, res, next) => {
     if (!event) {
       throw Object.assign(new Error("Event not found"), { status: 404 });
     }
-
+ const revenue=await getEventFinancials(id)
     // ── 2. Get Registered List ──────────────────────────────
     const registrations = await EventRegistration.find({
       eventId: id,
@@ -256,6 +257,7 @@ export const getEventById = async (req, res, next) => {
         registrations: {
           count: registeredList.length,
           list: registeredList,
+          revenue
         },
       },
     });

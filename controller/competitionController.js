@@ -2,6 +2,7 @@ import Competition from "../models/competitionModel.js";
 import fs from "fs";
 import path from "path";
 import EventRegistration from "../models/eventRegistrationModel.js";
+import { getEventFinancials } from "../helper/getEventFinancials.js";
 const toCleanString = (value) =>
     typeof value === "string" ? value.trim() : "";
 
@@ -192,6 +193,7 @@ export const createCompetitionForm = async (req, res, next) => {
         });
 
     } catch (error) {
+        console.log(error)
         cleanupUploadedFiles([...(req.files?.coverImage || []), ...(req.files?.ruleBook || [])]);
         next(error);
     }
@@ -202,11 +204,11 @@ export const getAllCompetition = async (req, res, next) => {
         const user=req.user
 
         let query={
-           
+          
         }
-        if(req.user.role==="college"){
+
         query.c_by=user._id
-        }
+        
         const competitions = await Competition.find(query).sort({ createdAt: -1 });
         res.status(200).json({
             success: true,
@@ -225,6 +227,10 @@ export const getCompetitionById = async (req, res, next) => {
         if (!competition) {
             throw Object.assign(new Error("Competition not found"), { status: 404 });
         }
+
+
+        const revenue=await getEventFinancials(id)
+
   const registrations = await EventRegistration.find({
       eventId: id,
       eventType: "Competition",
@@ -237,10 +243,10 @@ export const getCompetitionById = async (req, res, next) => {
       sNo: index + 1,
       registrationId: reg._id,
       userId: reg.userId?._id,
-      name:reg.userId?.name,
+    
       email: reg.userId?.email || reg.mailId,
       phone: reg.userId?.phone || reg.phoneNumber,
-      fullName: reg.fullName,
+      name: reg.fullName,
       department: reg.department,
       college: reg.collegeName,
       year: reg.year,
@@ -260,6 +266,7 @@ export const getCompetitionById = async (req, res, next) => {
         registrations: {
           count: registeredList.length,
           list: registeredList,
+          revenue
         },
       },
         });

@@ -8,6 +8,9 @@ const userDetailsSchema = new mongoose.Schema(
       required: [true, "User is required"],
       unique: true,
     },
+    name:{
+      type: String,
+    },
     dob: {
       type: Date,
       required: [true, "Date of birth is required"],
@@ -22,9 +25,11 @@ const userDetailsSchema = new mongoose.Schema(
     profile_pic:{
         type: String,
     },
-    location:{
-      type: String,
+     website:{
+        type: String,
+         default: null,
     },
+    
     currentStatus: {
       type: String,
       required: [true, "Current status is required"],
@@ -37,11 +42,21 @@ const userDetailsSchema = new mongoose.Schema(
       enum: ["UG", "PG"],
       trim: true,
     },
+    skills:{
+      primary_skills:[{ type: String, trim: true }],
+      tools:[{ type: String, trim: true }],
+      languages:[{ type: String, trim: true }]
+    },
+    highQualification:{
+      type: String,
+       default: null,
+    },
     ugDegree: {
       type: String,
       trim: true,
       default: null,
     },
+    
     ugFieldOfStudy: {
       type: String,
       trim: true,
@@ -50,6 +65,7 @@ const userDetailsSchema = new mongoose.Schema(
     ugYear: {
       type: Number,
       default: null,
+      
     },
     pgDegree: {
       type: String,
@@ -65,16 +81,37 @@ const userDetailsSchema = new mongoose.Schema(
       type: Number,
       default: null,
     },
+    ugCollegeName:{
+      type: String,
+       default: null,
+    },
+    pgCollegeName:{
+       type: String,
+        default: null,
+    },
+    ugModeOfstudy:{
+ type: String,
+  default: null,
+    },
+     pgModeOfstudy:{
+ type: String,
+  default: null,
+    },
+    ugPercentage:{
+     type: String,
+      default: null,
+    },
+    pgPercentage:{
+     type: String,
+      default: null,
+    },
+    academicAchievements:[{ type: String, trim: true }],
     companyName: {
       type: String,
       trim: true,
       default: null,
     },
-    jobTitle: {
-      type: String,
-      trim: true,
-      default: null,
-    },
+    jobTitles: [{ type: String, trim: true }],
     yearOfExperience: {
       type: Number,
       default: null,
@@ -82,6 +119,19 @@ const userDetailsSchema = new mongoose.Schema(
     hearAboutUs: {
       type: String,
       trim: true,
+      default: null,
+    },
+    website: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    city:{
+     type: String,
+      default: null,
+    },
+    address:{
+     type: String,
       default: null,
     },
     isActive: {

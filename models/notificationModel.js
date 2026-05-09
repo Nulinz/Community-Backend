@@ -33,6 +33,8 @@ const notificationSchema = new mongoose.Schema(
       enum: [
         "job_applied",
         "job_saved",
+        "job_suggestion",
+        "job_posted",
         "event_registered",
         "event_saved",
         "company_followed",

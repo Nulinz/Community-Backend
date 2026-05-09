@@ -4,9 +4,42 @@ const sanitizeInput = (value) =>
     typeof value === "string" ? value.trim() : value;
 
 
+const toCleanStringArray = (value) => {
+    if (Array.isArray(value)) {
+        return value
+            .map((item) => toCleanString(item))
+            .filter(Boolean);
+    }
+
+    if (typeof value === "string") {
+        const trimmed = value.trim();
+        if (!trimmed) return [];
+
+        if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+            try {
+                const parsed = JSON.parse(trimmed);
+                if (Array.isArray(parsed)) {
+                    return parsed
+                        .map((item) => toCleanString(item))
+                        .filter(Boolean);
+                }
+            } catch (_error) {
+                // Ignore JSON parse errors and fall back to comma-separated parsing.
+            }
+        }
+
+        return trimmed
+            .split(",")
+            .map((item) => item.trim())
+            .filter(Boolean);
+    }
+
+    return [];
+};
 
 export const createUserDetails = async (req, res, next) => {
     try {
+
         const dob = sanitizeInput(req.body.dob);
         const gender = sanitizeInput(req.body.gender);
         const currentStatus = sanitizeInput(req.body.currentStatus);
@@ -18,13 +51,19 @@ export const createUserDetails = async (req, res, next) => {
         const pgFieldOfStudy = sanitizeInput(req.body.pgFieldOfStudy);
         const pgYear = req.body.pgYear ?? null;
         const companyName = sanitizeInput(req.body.companyName);
-        const jobTitle = sanitizeInput(req.body.jobTitle);
+        const jobTitles = toCleanStringArray(req.body.jobTitles);
         const yearOfExperience = req.body.yearOfExperience ?? null;
         const hearAboutUs = sanitizeInput(req.body.hearAboutUs);
+        const city = sanitizeInput(req.body.city);
         const others = sanitizeInput(req.body.others) || null;
-
+      
         if (!dob) {
             const error = new Error("Date of birth is required");
+            error.status = 400;
+            throw error;
+        }
+         if (!city) {
+            const error = new Error("City is required");
             error.status = 400;
             throw error;
         }
@@ -118,7 +157,7 @@ export const createUserDetails = async (req, res, next) => {
                 throw error;
             }
 
-            if (!jobTitle) {
+            if (!jobTitles) {
                 const error = new Error("Job title is required");
                 error.status = 400;
                 throw error;
@@ -133,8 +172,10 @@ export const createUserDetails = async (req, res, next) => {
 
         const detailsData = {
             userId: req.user._id,
+            name:req.user.name,
             dob,
             gender,
+            city,
             currentStatus,
             education,
             ugDegree: ugDegree || null,
@@ -144,7 +185,7 @@ export const createUserDetails = async (req, res, next) => {
             pgFieldOfStudy: pgFieldOfStudy || null,
             pgYear,
             companyName: companyName || null,
-            jobTitle: jobTitle || null,
+            jobTitles: jobTitles || [],
             yearOfExperience,
             hearAboutUs,
             others,
@@ -156,7 +197,7 @@ export const createUserDetails = async (req, res, next) => {
             { upsert: true, new: true, runValidators: true }
         );
 
-        res.status(userDetails.createdAt === userDetails.updatedAt ? 201 : 200).json({
+        res.status(200).json({
             success: true,
             message: `User details ${userDetails.createdAt === userDetails.updatedAt ? "created" : "updated"} successfully`,
             userDetails,
@@ -171,8 +212,8 @@ export const createUserDetails = async (req, res, next) => {
 // get user detail by middlewat=re return user id
 export const getUserDetails = async (req, res, next) => {
     try {
-        const userDetails = await UserDetails.findOne({ userId: req.user._id });
-
+        const userDetails = await UserDetails.findOne({ userId: req?.user?._id });
+     
         if (!userDetails) {
             const error = new Error("User details not found");
             error.status = 404;
@@ -183,9 +224,9 @@ export const getUserDetails = async (req, res, next) => {
             success: true,
             userDetails: {
                 ...userDetails.toObject(),
-                name: req.user.name,
-                email: req.user.email,
-                phone: req.user.phone,
+                name: req?.user?.name,
+                email: req?.user?.email,
+                phone: req?.user?.phone,
             },
         });
     } catch (error) {
@@ -196,6 +237,7 @@ export const getUserDetails = async (req, res, next) => {
 
 
 export const updateUserDetails = async (req, res, next) => {
+    console.log(req.body)
     try {
         const dob = sanitizeInput(req.body.dob);
         const gender = sanitizeInput(req.body.gender);
@@ -212,7 +254,7 @@ export const updateUserDetails = async (req, res, next) => {
         const yearOfExperience = req.body.yearOfExperience ?? null;
         const hearAboutUs = sanitizeInput(req.body.hearAboutUs);
         const others = sanitizeInput(req.body.others) || null;
-
+        
         if (!dob) {
             const error = new Error("Date of birth is required");
             error.status = 400;

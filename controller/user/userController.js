@@ -21,7 +21,9 @@ import mongoose from "mongoose";
 import CompanyFollow from "../../models/companyFollowModel.js";
 
 import Location from "../../models/locationModel.js";
-
+import { saveNotification } from "../../helper/saveNotification.js";
+import { sendAndSaveNotification } from "../../helper/sendAndSaveNotification.js";
+import JobSuggested from "../../models/jobSuggestedModel.js"
 // const userDashboard = async (req, res) => {
 //   try {
 //     const userId = req.user._id
@@ -271,41 +273,42 @@ import Location from "../../models/locationModel.js";
 //     });
 //   }
 // };
-
 const userDashboard = async (req, res) => {
   try {
     const userId = req.user._id;
 
+    const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
+
     // ── Step 1: Get applied job IDs ─────────────────────────────
     const appliedJobs = await AppliedJob.find({ userId }).select("jobId");
-    const appliedIds = appliedJobs.map((a) => new mongoose.Types.ObjectId(a.jobId));
+    const appliedIds = new Set(appliedJobs.map((a) => a.jobId.toString()));
 
     // ── Step 2: Fetch data ──────────────────────────────────────
-    const [popularEventsRaw, preferredInternships, topCompanies] = await Promise.all([
+    const [popularEventsRaw, topCompanies, suggestedJobs] = await Promise.all([
       Event.find({ isActive: true })
         .sort({ createdAt: -1 })
         .limit(3)
         .select(
-          "eventName coverImage organizer c_by mode description individualFees teamFees lateFees totalSeats eventDate city image isActive createdAt"
+          "eventName coverImage registrationType organizer c_by mode description individualFees teamFees lateFees totalSeats eventDate city image isActive createdAt"
         ),
-
-      Internship.find({ isActive: true, _id: { $nin: appliedIds } })
-        .sort({ createdAt: -1 })
-        .limit(3)
-        .select(
-          "jobTitle c_by location companyName duration salary eligibility createdAt"
-        )
-        .populate("c_by", "role"),
 
       Company.find()
         .sort({ createdAt: -1 })
         .limit(4)
         .select(
-          "companyName technologies companyTagLine companyLogo address state address industry website location createdAt"
+          "companyName technologies companyTagLine companyLogo address state industry website location createdAt"
         ),
-    ]);
 
-    const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
+      // ── Suggestions: only Internship type, not yet applied ────
+      JobSuggested.find({ userId, jobType: "Internship" })
+        .populate({
+          path: "jobId",
+          select:
+            "jobTitle location c_by companyName duration salary eligibility createdAt isActive",
+          populate: { path: "c_by", select: "role" },
+        })
+        .sort({ createdAt: -1 }),
+    ]);
 
     // ── Step 3: Enrich events with is_registered ────────────────
     const popularEvents = await Promise.all(
@@ -315,34 +318,47 @@ const userDashboard = async (req, res) => {
       }))
     );
 
-    // ── Step 4: Enrich internships ──────────────────────────────
-    const preferredInternshipsData = await Promise.all(
-      preferredInternships.map(async (item) => {
-        const obj = item.toObject();
+    // ── Step 4: Build preferredInternships from suggestions ─────
+    //           • skip deleted jobs
+    //           • skip already-applied jobs
+    //           • limit to 3
+    const preferredInternshipsData = (
+      await Promise.all(
+        suggestedJobs.map(async (item) => {
+          const job = item.jobId;
 
-        let companyImage = null;
-        if (item.c_by?.role === "admin") {
-          companyImage = STATIC_ADMIN_IMAGE;
-        } else if (item.c_by?.role === "company") {
-          const company = await Company.findOne({ c_by: item.c_by._id })
-            .select("companyLogo")
-            .lean();
-          companyImage = company?.companyLogo || null;
-        }
+          // job deleted or inactive
+          if (!job || job.isActive === false) return null;
 
-        return {
-          ...obj,
-          companyImage,
-          is_saved: await checkIsSaved(userId, item._id, "Internship"),
-          is_applied: false,
-        };
-      })
-    );
+          // already applied → exclude
+          if (appliedIds.has(job._id.toString())) return null;
+
+          let companyImage = null;
+          if (job.c_by?.role === "admin") {
+            companyImage = STATIC_ADMIN_IMAGE;
+          } else if (job.c_by?.role === "company") {
+            const company = await Company.findOne({ c_by: job.c_by._id })
+              .select("companyLogo")
+              .lean();
+            companyImage = company?.companyLogo || null;
+          }
+
+          return {
+            ...job.toObject(),
+            companyImage,
+            is_applied: false,                                      // guaranteed not applied
+            is_saved: await checkIsSaved(userId, job._id, "Internship"),
+          };
+        })
+      )
+    )
+      .filter(Boolean)
+      .slice(0, 3);                                                  // cap at 3
 
     return res.status(200).json({
       status: true,
       data: {
-        popularEvents,                          // ✅ now includes is_registered
+        popularEvents,
         preferredInternships: preferredInternshipsData,
         topCompanies,
       },
@@ -356,6 +372,90 @@ const userDashboard = async (req, res) => {
     });
   }
 };
+// const userDashboard = async (req, res) => {
+//   try {
+//     const userId = req.user._id;
+
+//     // ── Step 1: Get applied job IDs ─────────────────────────────
+//     const appliedJobs = await AppliedJob.find({ userId }).select("jobId");
+//     const appliedIds = appliedJobs.map((a) => new mongoose.Types.ObjectId(a.jobId));
+
+//     // ── Step 2: Fetch data ──────────────────────────────────────
+//     const [popularEventsRaw, preferredInternships, topCompanies] = await Promise.all([
+//       Event.find({ isActive: true })
+//         .sort({ createdAt: -1 })
+//         .limit(3)
+//         .select(
+//           "eventName coverImage registrationType organizer c_by mode description individualFees teamFees lateFees totalSeats eventDate city image isActive createdAt"
+//         ),
+
+//       Internship.find({ isActive: true, _id: { $nin: appliedIds } })
+//         .sort({ createdAt: -1 })
+//         .limit(3)
+//         .select(
+//           "jobTitle c_by location companyName duration salary eligibility createdAt"
+//         )
+//         .populate("c_by", "role"),
+
+//       Company.find()
+//         .sort({ createdAt: -1 })
+//         .limit(4)
+//         .select(
+//           "companyName technologies companyTagLine companyLogo address state address industry website location createdAt"
+//         ),
+//     ]);
+
+//     const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
+
+//     // ── Step 3: Enrich events with is_registered ────────────────
+//     const popularEvents = await Promise.all(
+//       popularEventsRaw.map(async (item) => ({
+//         ...item.toObject(),
+//         is_registered: await checkIsRegistered(userId, item._id),
+//       }))
+//     );
+
+//     // ── Step 4: Enrich internships ──────────────────────────────
+//     const preferredInternshipsData = await Promise.all(
+//       preferredInternships.map(async (item) => {
+//         const obj = item.toObject();
+
+//         let companyImage = null;
+//         if (item.c_by?.role === "admin") {
+//           companyImage = STATIC_ADMIN_IMAGE;
+//         } else if (item.c_by?.role === "company") {
+//           const company = await Company.findOne({ c_by: item.c_by._id })
+//             .select("companyLogo")
+//             .lean();
+//           companyImage = company?.companyLogo || null;
+//         }
+
+//         return {
+//           ...obj,
+//           companyImage,
+//           is_saved: await checkIsSaved(userId, item._id, "Internship"),
+//           is_applied: false,
+//         };
+//       })
+//     );
+
+//     return res.status(200).json({
+//       status: true,
+//       data: {
+//         popularEvents,                          // ✅ now includes is_registered
+//         preferredInternships: preferredInternshipsData,
+//         topCompanies,
+//       },
+//     });
+//   } catch (error) {
+//     console.error("Dashboard API Error:", error.message);
+//     return res.status(500).json({
+//       status: false,
+//       message: "Failed to load dashboard data",
+//       error: error.message,
+//     });
+//   }
+// };
 const getJobs = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -376,7 +476,7 @@ const getJobs = async (req, res) => {
       })
         .sort({ createdAt: -1 })
         .limit(3)
-        .select("jobTitle location c_by companyName duration salary eligibility createdAt")
+        .select("jobTitle internshipType location c_by companyName duration salary eligibility createdAt")
         .populate("c_by", "role"),
 
       Freelance.find({
@@ -445,7 +545,7 @@ const getAllInternships = async (req, res) => {
   try {
     const userId = req.user._id;
    
-    const internships = await Internship.find()
+    const internships = await Internship.find({isActive:true})
       .sort({ createdAt: -1 })
       .select("jobTitle location companyName duration salary eligibility createdAt c_by")
       .populate("c_by", "role");
@@ -812,6 +912,95 @@ const getAppliedJobs = async (req, res) => {
     });
   }
 };
+
+
+const getMySuggestions = async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    const suggestions = await JobSuggested.find({ userId })
+      .populate({
+        path: "jobId",
+        select:
+          "jobTitle location c_by companyName duration salary eligibility createdAt description jobStartDate totalOpenings mode",
+        populate: {
+          path: "c_by",
+          select: "role",
+        },
+      })
+      .sort({ createdAt: -1 });
+
+    const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
+
+    const enrichedSuggestions = await Promise.all(
+      suggestions.map(async (item) => {
+        const job = item.jobId;
+
+        // job deleted
+        if (!job) return null;
+
+        let companyImage = null;
+
+        // ✅ Admin Job
+        if (job.c_by?.role === "admin") {
+          companyImage = STATIC_ADMIN_IMAGE;
+        }
+
+        // ✅ Company Job
+        else if (job.c_by?.role === "company") {
+          const company = await Company.findOne({
+            c_by: job.c_by._id,
+          })
+            .select("companyLogo")
+            .lean();
+
+          companyImage = company?.companyLogo || null;
+        }
+
+        // ✅ Check Applied
+        const isApplied = await AppliedJob.exists({
+          userId,
+          jobId: job._id,
+        });
+
+        return {
+          ...item.toObject(),
+
+          jobId: {
+            ...job.toObject(),
+
+            companyImage,
+
+            // ✅ Applied Status
+            is_applied: !!isApplied,
+
+            // ✅ Saved Status
+            is_saved: await checkIsSaved(
+              userId,
+              job._id,
+              item.jobType
+            ),
+          },
+        };
+      })
+    );
+
+    return res.status(200).json({
+      status: true,
+      count: enrichedSuggestions.filter(Boolean).length,
+      data: enrichedSuggestions.filter(Boolean),
+    });
+  } catch (error) {
+    console.error("Get Suggestions Error:", error.message);
+
+    return res.status(500).json({
+      status: false,
+      message: "Failed to fetch suggestions",
+      error: error.message,
+    });
+  }
+};
+
 const getJobProfile = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -911,7 +1100,7 @@ const getAllCompetitions = async (req, res) => {
 
     const competitions = await Competition.find()
       .sort({ createdAt: -1 })
-      .select("eventName coverImage organizer eventDate eligibilityDetails city  totalSeats individualFees teamFees lateFees mode registrationStartDate createdAt");
+      .select("eventName registrationType coverImage organizer eventDate eligibilityDetails city  totalSeats individualFees teamFees lateFees mode registrationStartDate createdAt");
 
     const data = await Promise.all(
       competitions.map(async (item) => ({
@@ -1065,6 +1254,21 @@ const createEventRegistration = async (req, res) => {
       accommodationType: accommodation === "yes" ? accommodationType : null,
     });
 
+  await sendAndSaveNotification({
+  senderId: userId,        // sender is the user themselves
+  receiverId: userId,      // receiver is also the same user (self notification)
+  title: "Event Registration Successful",
+  message: `You have successfully registered for the ${eventType}.`,
+  type: "event_registered",
+  reference_id: eventId,
+  metadata: {
+    eventType,
+    registrationId: registration._id,
+    food: food || "no",
+    accommodation: accommodation || "no",
+  },
+});
+
     return res.status(200).json({
       status: true,
       message: "Registered successfully",
@@ -1087,7 +1291,7 @@ const getAllConferences = async (req, res) => {
     const conferences = await Conference.find({ isActive: true })
       .sort({ createdAt: -1 })
       .select(
-        "eventName organizer mode eventDate registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees city  eligibilityDetails teamOrIndividualEvent createdAt"
+        "eventName organizer registrationType mode eventDate registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees city  eligibilityDetails teamOrIndividualEvent createdAt"
       );
 
     const data = await Promise.all(
@@ -1159,7 +1363,7 @@ const getAllTechnicalEvents = async (req, res) => {
     const events = await Event.find({ isActive: true, eventType: "Technical" })
       .sort({ createdAt: -1 })
       .select(
-        "eventName eventType organizer mode eventDate registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees city  eligibilityDetails teamOrIndividualEvent createdAt"
+        "eventName eventType  organizer mode eventDate registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees city  eligibilityDetails teamOrIndividualEvent createdAt"
       );
 
     const data = await Promise.all(
@@ -1372,7 +1576,7 @@ const getMyRegistrations = async (req, res) => {
       .populate({
         path: "eventId",
         select:
-          "eventName eventType totalSeats organizer mode eventDate coverImage city  individualFees teamFees isActive",
+          "eventName eventType registrationType totalSeats organizer mode eventDate coverImage city  individualFees teamFees isActive",
       })
 
     return res.status(200).json({
@@ -1443,7 +1647,7 @@ const toggleFollow = async (req, res) => {
       // Follow
       await CompanyFollow.create({ userId, companyId });
       const followCount = await CompanyFollow.countDocuments({ companyId });
-      return res.status(201).json({
+      return res.status(200).json({
         status: true,
         is_following: true,
         followCount,
@@ -1547,7 +1751,7 @@ const getCompanyProfile = async (req, res) => {
     }
 
     const company = await Company.findById(id).populate("c_by", "role");
-    console.log(company)
+
     if (!company) {
       return res.status(404).json({
         status: false,
@@ -1562,23 +1766,22 @@ const getCompanyProfile = async (req, res) => {
     // ── Fetch all in parallel ───────────────────────────────────
     const [followCount, isFollowing, internshipsRaw, freelancesRaw] = await Promise.all([
       CompanyFollow.countDocuments({ companyId: id }),
-      CompanyFollow.findOne({ userId, companyId: id }),
+      CompanyFollow.findOne({ userId, companyId:company.userId }),
 
       // ✅ Internships posted by this company
       Internship.find({ isActive: true, c_by: companyUserId })
         .sort({ createdAt: -1 })
-        .select("jobTitle c_by location companyName duration salary eligibility createdAt")
+        .select("jobTitle totalOpenings mode description c_by location  companyName duration salary eligibility createdAt")
         .populate("c_by", "role"),
 
       // ✅ Freelance jobs posted by this company
       Freelance.find({ isActive: true, c_by: companyUserId })
         .sort({ createdAt: -1 })
-        .select("jobTitle c_by location companyName duration salary eligibility createdAt")
+        .select("jobTitle totalOpenings mode description c_by location companyName duration salary eligibility createdAt")
         .populate("c_by", "role"),
     ]);
 
 
-    console.log( internshipsRaw)
 
     // ── Enrich internships ──────────────────────────────────────
     const internships = await Promise.all(
@@ -1663,7 +1866,7 @@ const getEventsPage = async (req, res) => {
     const upcomingRaw = await Event.find({ isActive: true, eventDate: { $gte: now } })
       .sort({ eventDate: 1 })
       .limit(2)
-      .select("eventName eventType organizer mode eventDate coverImage city totalSeats individualFees teamFees registrationEndDate createdAt");
+      .select("eventName registrationType eventType organizer mode eventDate coverImage city totalSeats individualFees teamFees registrationEndDate createdAt");
 
     const upcomingIds = upcomingRaw.map((e) => e._id);
 
@@ -1671,12 +1874,12 @@ const getEventsPage = async (req, res) => {
       Event.find({ isActive: true, eventType: "Technical", _id: { $nin: upcomingIds } })
         .sort({ createdAt: -1 })
         .limit(3)
-        .select("eventName eventType organizer mode eventDate coverImage city totalSeats individualFees teamFees registrationEndDate createdAt"),
+        .select("eventName registrationType eventType organizer mode eventDate coverImage city totalSeats individualFees teamFees registrationEndDate createdAt"),
 
       Event.find({ isActive: true, eventType: "Non Technical", _id: { $nin: upcomingIds } })
         .sort({ createdAt: -1 })
         .limit(3)
-        .select("eventName eventType organizer mode eventDate coverImage city totalSeats individualFees teamFees registrationEndDate createdAt"),
+        .select("eventName registrationType eventType organizer mode eventDate coverImage city totalSeats individualFees teamFees registrationEndDate createdAt"),
     ]);
 
     // ✅ attachFlags + is_registered for all three
@@ -1723,7 +1926,7 @@ const getSeminarsPage = async (req, res) => {
     const upcomingRaw = await Seminar.find({ isActive: true, eventDate: { $gte: now } })
       .sort({ eventDate: 1 })
       .limit(2)
-      .select("eventName eventType organizer mode eventDate coverImage city totalSeats individualFees teamFees registrationEndDate createdAt");
+      .select("eventName eventType registrationType organizer mode eventDate coverImage city totalSeats individualFees teamFees registrationEndDate createdAt");
 
     const upcomingIds = upcomingRaw.map((s) => s._id);
 
@@ -1731,12 +1934,12 @@ const getSeminarsPage = async (req, res) => {
       Seminar.find({ isActive: true, eventType: "Technical", _id: { $nin: upcomingIds } })
         .sort({ createdAt: -1 })
         .limit(3)
-        .select("eventName eventType city organizer mode eventDate coverImage venueAddress totalSeats individualFees teamFees registrationEndDate createdAt"),
+        .select("eventName eventType registrationType city organizer mode eventDate coverImage venueAddress totalSeats individualFees teamFees registrationEndDate createdAt"),
 
       Seminar.find({ isActive: true, eventType: "Non Technical", _id: { $nin: upcomingIds } })
         .sort({ createdAt: -1 })
         .limit(3)
-        .select("eventName eventType city organizer mode eventDate coverImage venueAddress totalSeats individualFees teamFees registrationEndDate createdAt"),
+        .select("eventName eventType registrationType city organizer mode eventDate coverImage venueAddress totalSeats individualFees teamFees registrationEndDate createdAt"),
     ]);
 
     // ✅ attachFlags + is_registered for all three
@@ -1810,7 +2013,263 @@ const getLocations = async (req, res) => {
   }
 };
 
+const getJobMetaPage = async (req, res) => {
+  try {
+    const { job_id, web } = req.query;
+    const isWeb = web === "true";
 
+    if (!job_id) {
+      return res.status(400).send("<h1>Invalid Job ID</h1>");
+    }
+
+    const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
+
+    let job        = null;
+    let jobType    = null;
+    let emoji      = "💼";
+
+    // ── Step 1: Detect job type ─────────────────────────────────
+    job = await Internship.findById(job_id).populate("c_by", "role").lean();
+    if (job) {
+      jobType = "Internship";
+      emoji   = "🎓";
+    }
+
+    if (!job) {
+      job = await Freelance.findById(job_id).populate("c_by", "role").lean();
+      if (job) {
+        jobType = "Freelance";
+        emoji   = "🧑‍💻";
+      }
+    }
+
+    if (!job) {
+      return res.status(404).send("<h1>Job not found</h1>");
+    }
+
+    // ── Step 2: Resolve company image ───────────────────────────
+    let companyImage = `${process.env.BASE_URL}/default-company.png`;
+
+    if (job.c_by?.role === "admin") {
+      companyImage = `${process.env.BASE_URL}/${STATIC_ADMIN_IMAGE}`;
+    } else if (job.c_by?.role === "company") {
+      const company = await Company.findOne({ c_by: job.c_by._id })
+        .select("companyLogo")
+        .lean();
+      if (company?.companyLogo) {
+        companyImage = `${process.env.BASE_URL}/${company.companyLogo}`;
+      }
+    }
+
+    // ── Step 3: Build meta fields ───────────────────────────────
+    const title    = job.jobTitle     || "Job Opportunity";
+    const company  = job.companyName  || job.organizer || "Company";
+    const location = job.location     || "";
+    const mode     = job.mode         || "";
+    const duration = job.duration     || "";
+    const salary   = job.salary
+      ? `₹${job.salary}${jobType === "Internship" ? "/month" : ""}`
+      : "Negotiable";
+
+    const description =
+      job.description ||
+      `${title} at ${company} | ${location} | ${mode}${duration ? ` | ${duration}` : ""} | ${salary}`;
+
+    const ogUrl = `${process.env.BASE_URL}/api/share/job?job_id=${job_id}&web=${isWeb}`;
+
+    const redirectUrl = isWeb
+      ? `${process.env.FRONTEND_URL}/job/detail?job_id=${encodeURIComponent(job_id)}&web=true`
+      : `${process.env.FRONTEND_URL}/job/detail?job_id=${encodeURIComponent(job_id)}`;
+
+    // ── Step 4: Render OG HTML ──────────────────────────────────
+    const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>${title} at ${company} | ${jobType}</title>
+
+  <!-- Open Graph -->
+  <meta property="og:title"            content="${emoji} ${title} – ${company}" />
+  <meta property="og:description"      content="${description}" />
+  <meta property="og:image"            content="${companyImage}" />
+  <meta property="og:image:secure_url" content="${companyImage}" />
+  <meta property="og:image:type"       content="image/jpeg" />
+  <meta property="og:image:width"      content="1200" />
+  <meta property="og:image:height"     content="630" />
+  <meta property="og:image:alt"        content="${company}" />
+  <meta property="og:url"              content="${ogUrl}" />
+  <meta property="og:type"             content="website" />
+  <meta property="og:site_name"        content="Nulinz" />
+  <meta property="og:locale"           content="en_US" />
+  <meta property="fb:app_id"           content="768954169170808" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card"        content="summary_large_image" />
+  <meta name="twitter:title"       content="${emoji} ${title} – ${company}" />
+  <meta name="twitter:description" content="${description}" />
+  <meta name="twitter:image"       content="${companyImage}" />
+
+  <!-- Fallback SEO -->
+  <meta name="description" content="${description}" />
+
+  <!-- Auto-redirect after 5s -->
+  <meta http-equiv="refresh" content="5; url=${redirectUrl}" />
+</head>
+<body style="font-family:sans-serif;text-align:center;padding:40px;">
+  <h2>${emoji} ${title}</h2>
+  <p><strong>${company}</strong> · ${location} · ${mode}</p>
+  <p>
+    ${duration ? `Duration: ${duration}` : ""}
+    ${duration && salary ? " | " : ""}
+    ${salary ? `Salary: ${salary}` : ""}
+  </p>
+  <p style="color:#888;margin-top:24px;">Redirecting to ${jobType} page...</p>
+  <a href="${redirectUrl}">Click here if not redirected</a>
+</body>
+</html>
+`;
+
+    res.setHeader("Content-Type", "text/html");
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+    return res.status(200).send(html);
+
+  } catch (error) {
+    console.error("Job Meta Page Error:", error.message);
+    return res.status(500).send("<h1>Something went wrong</h1>");
+  }
+};
+const getEventMetaPage = async (req, res) => {
+  try {
+    const { event_id, web } = req.query;
+    const isWeb = web === "true";
+
+    if (!event_id) {
+      return res.status(400).send("<h1>Invalid Event ID</h1>");
+    }
+
+    let event     = null;
+    let eventType = null;
+    let emoji     = "📅";
+
+    // ── Step 1: Detect which event model ────────────────────────
+    event = await Event.findById(event_id).lean();
+    if (event) { eventType = "Event"; emoji = "🎯"; }
+
+    if (!event) {
+      event = await Seminar.findById(event_id).lean();
+      if (event) { eventType = "Seminar"; emoji = "🎤"; }
+    }
+
+    if (!event) {
+      event = await Competition.findById(event_id).lean();
+      if (event) { eventType = "Competition"; emoji = "🏆"; }
+    }
+
+    if (!event) {
+      event = await Conference.findById(event_id).lean();
+      if (event) { eventType = "Conference"; emoji = "🏛️"; }
+    }
+
+    if (!event) {
+      return res.status(404).send("<h1>Event not found</h1>");
+    }
+
+    // ── Step 2: Resolve cover image ─────────────────────────────
+    const coverImage = event.coverImage
+      ? `${process.env.BASE_URL}/${event.coverImage}`
+      : `${process.env.BASE_URL}/default-event.png`;
+
+    // ── Step 3: Build meta fields ───────────────────────────────
+    const name        = event.eventName   || "Event";
+    const organizer   = event.organizer   || "";
+    const city        = event.city        || "";
+    const state       = event.state       || "";
+    const mode        = event.mode        || "";
+    const eventDate   = event.eventDate
+      ? new Date(event.eventDate).toDateString()
+      : "";
+
+    const fees = (() => {
+      if (event.individualFees && event.individualFees > 0)
+        return `₹${event.individualFees} (Individual)`;
+      if (event.teamFees && event.teamFees > 0)
+        return `₹${event.teamFees} (Team)`;
+      return "Free";
+    })();
+
+    const description =
+      event.description ||
+      `${name} by ${organizer} | ${mode} | ${city}${state ? `, ${state}` : ""} | ${eventDate} | ${fees}`;
+
+    const ogUrl = `${process.env.BASE_URL}/api/users/share/event?event_id=${event_id}&web=${isWeb}`;
+
+    const redirectUrl = isWeb
+      ? `${process.env.FRONTEND_URL}/event/detail?event_id=${encodeURIComponent(event_id)}&web=true`
+      : `${process.env.FRONTEND_URL}/event/detail?event_id=${encodeURIComponent(event_id)}`;
+
+    // ── Step 4: Render OG HTML ──────────────────────────────────
+    const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>${name} | ${eventType}</title>
+
+  <!-- Open Graph -->
+  <meta property="og:title"            content="${emoji} ${name} – ${organizer}" />
+  <meta property="og:description"      content="${description}" />
+  <meta property="og:image"            content="${coverImage}" />
+  <meta property="og:image:secure_url" content="${coverImage}" />
+  <meta property="og:image:type"       content="image/jpeg" />
+  <meta property="og:image:width"      content="1200" />
+  <meta property="og:image:height"     content="630" />
+  <meta property="og:image:alt"        content="${name}" />
+  <meta property="og:url"              content="${ogUrl}" />
+  <meta property="og:type"             content="website" />
+  <meta property="og:site_name"        content="Nulinz" />
+  <meta property="og:locale"           content="en_US" />
+  <meta property="fb:app_id"           content="768954169170808" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card"        content="summary_large_image" />
+  <meta name="twitter:title"       content="${emoji} ${name} – ${organizer}" />
+  <meta name="twitter:description" content="${description}" />
+  <meta name="twitter:image"       content="${coverImage}" />
+
+  <!-- Fallback SEO -->
+  <meta name="description" content="${description}" />
+
+  <!-- Auto-redirect after 5s -->
+  <meta http-equiv="refresh" content="5; url=${redirectUrl}" />
+</head>
+<body style="font-family:sans-serif;text-align:center;padding:40px;">
+  <h2>${emoji} ${name}</h2>
+  <p><strong>${organizer}</strong> · ${city}${state ? `, ${state}` : ""} · ${mode}</p>
+  <p>
+    ${eventDate ? `📅 ${eventDate}` : ""}
+    ${eventDate && fees ? " | " : ""}
+    ${fees ? `🎟️ ${fees}` : ""}
+  </p>
+  <p style="color:#888;margin-top:24px;">Redirecting to ${eventType} page...</p>
+  <a href="${redirectUrl}">Click here if not redirected</a>
+</body>
+</html>
+`;
+
+    res.setHeader("Content-Type", "text/html");
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+    return res.status(200).send(html);
+
+  } catch (error) {
+    console.error("Event Meta Page Error:", error.message);
+    return res.status(500).send("<h1>Something went wrong</h1>");
+  }
+};
 export {
   userDashboard,
   getJobs,
@@ -1839,5 +2298,8 @@ export {
   getCompanyProfile,
   getEventsPage,
   getSeminarsPage,
-  getLocations
+  getLocations,
+  getMySuggestions,
+  getJobMetaPage,
+  getEventMetaPage
 };

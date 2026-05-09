@@ -26,13 +26,17 @@ export const createUpload = (subDirectory) => {
       cb(null, `${file.fieldname}-${uniqueSuffix}${safeExt}`);
     },
   });
+const allowedMimeTypes = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/jpg",
+  "application/pdf",
 
-  const allowedMimeTypes = new Set([
-    "image/jpeg",
-    "image/png",
-    "image/webp",
-    "image/jpg",
-  ]);
+  // Word documents
+  "application/msword", // .doc
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document", // .docx
+]);
 
   const fileFilter = (_req, file, cb) => {
     if (!allowedMimeTypes.has(file.mimetype)) {
