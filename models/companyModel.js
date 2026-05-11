@@ -8,6 +8,10 @@ const companySchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    is_admin_company:{
+     type:Boolean,
+     default:false 
+    },
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -46,17 +50,17 @@ const companySchema = new mongoose.Schema(
     
     companyLogo: {
       type: String,
-      required: true,
+      // required: true,
       trim: true,
     },
     coverImage: {
       type: String,
-      required: true,
+      // required: true,
       trim: true,
     },
     employees: {
       type: String,
-      required: true,
+      // required: true,
       trim: true,
     },
     contactPersonName: {
@@ -66,7 +70,7 @@ const companySchema = new mongoose.Schema(
     },
     address: {
       type: String,
-      required: true,
+      // required: true,
       trim: true,
     },
     city: {

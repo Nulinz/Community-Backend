@@ -38,6 +38,8 @@ if (!eventData || !eventData.c_by) {
   };
 }
 
+console.log(eventData)
+
 let collegeData = null;
 
 // If creator is admin
@@ -46,8 +48,8 @@ if (eventData.c_by.role === "admin") {
   collegeData = {
     name: "Community",
     role: "admin",
-    email:eventData.email,
-    phone:eventData.phone,
+    email:eventData?.c_by?.email,
+    phone:eventData?.c_by?.phone,
     userId: eventData.c_by._id,
   };
 

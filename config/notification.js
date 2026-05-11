@@ -11,7 +11,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const serviceAccountPath = path.join(
   __dirname,
-  "nulinz-community-8e6d36671038.json"
+  "grad-envy-4a740eca4576.json"
 );
 
 const getFirebaseApp = () => {

@@ -27,7 +27,7 @@ import JobSuggested from "../../models/jobSuggestedModel.js"
 import { getCollegeByEventId } from "../../helper/collegeDetails.js";
 import { getSeatAvailability } from "../../helper/getSeatAvailability.js";
 import Payment from "../../models/paymentModel.js"
-
+import User from "../../models/userModel.js"
 
 // const userDashboard = async (req, res) => {
 //   try {
@@ -342,7 +342,7 @@ const userDashboard = async (req, res) => {
           if (job.c_by?.role === "admin") {
             companyImage = STATIC_ADMIN_IMAGE;
           } else if (job.c_by?.role === "company") {
-            const company = await Company.findOne({ c_by: job.c_by._id })
+            const company = await Company.findOne({ userId: job.c_by._id })
               .select("companyLogo")
               .lean();
             companyImage = company?.companyLogo || null;
@@ -505,7 +505,7 @@ const getJobs = async (req, res) => {
         companyImage = STATIC_ADMIN_IMAGE;
       } else if (item.c_by?.role === "company") {
         const company = await Company.findOne({
-          c_by: item.c_by._id,
+          userId: item.c_by._id,
         })
           .select("companyLogo")
           .lean();
@@ -565,7 +565,7 @@ const getAllInternships = async (req, res) => {
           companyImage = STATIC_ADMIN_IMAGE;
         } else if (item.c_by?.role === "company") {
           const company = await Company.findOne({
-            c_by: item.c_by._id,
+            userId: item.c_by._id,
 
           }).select("companyLogo").lean();
 
@@ -628,7 +628,7 @@ const getAllFreelances = async (req, res) => {
           companyImage = STATIC_ADMIN_IMAGE;
         } else if (item.c_by?.role === "company") {
           const company = await Company.findOne({
-            c_by: item.c_by._id,
+            userId: item.c_by._id,
           })
             .select("companyLogo")
             .lean();
@@ -743,7 +743,7 @@ const getSavedJobs = async (req, res) => {
           companyImage = STATIC_ADMIN_IMAGE;
         } else if (job.c_by?.role === "company") {
           const company = await Company.findOne({
-            c_by: job.c_by._id,
+            userId: job.c_by._id,
           })
             .select("companyLogo")
             .lean();
@@ -954,7 +954,7 @@ const getMySuggestions = async (req, res) => {
         // ✅ Company Job
         else if (job.c_by?.role === "company") {
           const company = await Company.findOne({
-            c_by: job.c_by._id,
+            userId: job.c_by._id,
           })
             .select("companyLogo")
             .lean();
@@ -1153,13 +1153,13 @@ const getCompetitionProfile = async (req, res) => {
       getCollegeByEventId({eventType:"competition",eventId:id}),
       getSeatAvailability({eventType:"competition",eventId:id})
     ]);
-
+   console.log(college)
     return res.status(200).json({
       status: true,
       data: {
         ...competition.toObject(),
         is_registered,
-        college,
+        college:college,
         availableSeats:availability?.availableSeats
       },
     });
@@ -3539,6 +3539,155 @@ const getEventMetaPage = async (req, res) => {
     return res.status(500).send("<h1>Something went wrong</h1>");
   }
 };
+
+const getCompanyMetaPage = async (req, res) => {
+  try {
+    const { company_id, web } = req.query;
+    const isWeb = web === "true";
+
+    if (!company_id) {
+      return res.status(400).send("<h1>Invalid User ID</h1>");
+    }
+
+    const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
+
+    let companyName  = "Nulinz";
+    let tagLine      = "Connecting Talent with Opportunity";
+    let aboutUs      = "Explore opportunities and grow your career with us.";
+    let city         = "";
+    let state        = "";
+    let companyType  = "";
+    let employees    = "";
+    let technologies = [];
+    let companyLogo  = `${process.env.BASE_URL}/${STATIC_ADMIN_IMAGE}`;
+    let coverImage   = `${process.env.BASE_URL}/default-cover.png`;
+    let isAdmin      = false;
+
+    // ── Step 1: Check if user is Admin ──────────────────────────
+    const user = await User.findById(company_id).select("role").lean();
+
+    if (!user) {
+      return res.status(404).send("<h1>User not found</h1>");
+    }
+
+    if (user.role === "admin") {
+      // Admin has no company profile → use static branding
+      isAdmin     = true;
+      companyLogo = `${process.env.BASE_URL}/${STATIC_ADMIN_IMAGE}`;
+      coverImage  = `${process.env.BASE_URL}/default-cover.png`;
+    } else {
+      // ── Step 2: Find company by userId ────────────────────────
+      const company = await Company.findOne({ userId:company_id, isActive: true }).lean();
+
+      if (!company) {
+        return res.status(404).send("<h1>Company not found</h1>");
+      }
+
+      companyName  = company.companyName   || "Company";
+      tagLine      = company.companyTagLine || "";
+      aboutUs      = company.aboutUs        || `${companyName} — ${tagLine}`;
+      city         = company.city           || "";
+      state        = company.state          || "";
+      companyType  = company.companyType    || "";
+      employees    = company.employees      || "";
+      technologies = company.technologies   || [];
+
+      companyLogo = company.companyLogo
+        ? `${process.env.BASE_URL}/${company.companyLogo}`
+        : `${process.env.BASE_URL}/${STATIC_ADMIN_IMAGE}`;
+
+      coverImage = company.coverImage
+        ? `${process.env.BASE_URL}/${company.coverImage}`
+        : companyLogo;
+    }
+
+    // ── Step 3: Build meta fields ───────────────────────────────
+    const locationStr = [city, state].filter(Boolean).join(", ");
+
+    const descriptionParts = [
+      tagLine,
+      companyType,
+      locationStr,
+      employees ? `${employees} employees` : "",
+      technologies.length ? technologies.slice(0, 4).join(" · ") : "",
+    ].filter(Boolean);
+
+    const description = aboutUs || descriptionParts.join(" | ");
+
+    const ogUrl = `${process.env.BASE_URL}/api/users/share/company?user_id=${ company_id}&web=${isWeb}`;
+
+    const redirectUrl = isWeb
+      ? `${process.env.FRONTEND_URL}/company?company_id_id=${encodeURIComponent(company_id)}&web=true`
+      : `${process.env.FRONTEND_URL}/company?company_id_id=${encodeURIComponent(company_id)}`;
+
+    // ── Step 4: Render OG HTML ──────────────────────────────────
+    const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>${companyName} | Company Profile</title>
+
+  <!-- Open Graph -->
+  <meta property="og:title"            content="🏢 ${companyName}${tagLine ? ` – ${tagLine}` : ""}" />
+  <meta property="og:description"      content="${description}" />
+  <meta property="og:image"            content="${coverImage}" />
+  <meta property="og:image:secure_url" content="${coverImage}" />
+  <meta property="og:image:type"       content="image/jpeg" />
+  <meta property="og:image:width"      content="1200" />
+  <meta property="og:image:height"     content="630" />
+  <meta property="og:image:alt"        content="${companyName}" />
+  <meta property="og:url"              content="${ogUrl}" />
+  <meta property="og:type"             content="website" />
+  <meta property="og:site_name"        content="Nulinz" />
+  <meta property="og:locale"           content="en_US" />
+  <meta property="fb:app_id"           content="1492199609067011" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card"        content="summary_large_image" />
+  <meta name="twitter:title"       content="🏢 ${companyName}" />
+  <meta name="twitter:description" content="${description}" />
+  <meta name="twitter:image"       content="${coverImage}" />
+
+  <!-- Fallback SEO -->
+  <meta name="description" content="${description}" />
+
+  <!-- Auto-redirect after 5s -->
+  <meta http-equiv="refresh" content="5; url=${redirectUrl}" />
+</head>
+<body style="font-family:sans-serif;text-align:center;padding:40px;">
+  <img
+    src="${companyLogo}"
+    alt="${companyName}"
+    style="width:80px;height:80px;border-radius:50%;object-fit:cover;margin-bottom:12px;"
+    onerror="this.style.display='none'"
+  />
+  <h2>🏢 ${companyName}</h2>
+  ${tagLine ? `<p style="color:#555;">${tagLine}</p>` : ""}
+  <p>
+    ${locationStr ? `📍 ${locationStr}` : ""}
+    ${locationStr && companyType ? " · " : ""}
+    ${companyType ? companyType : ""}
+    ${employees ? ` · 👥 ${employees}` : ""}
+  </p>
+  ${technologies.length ? `<p style="color:#888;font-size:13px;">${technologies.slice(0, 5).join(" · ")}</p>` : ""}
+  <p style="color:#aaa;margin-top:24px;">Redirecting to company profile...</p>
+  <a href="${redirectUrl}">Click here if not redirected</a>
+</body>
+</html>
+`;
+
+    res.setHeader("Content-Type", "text/html");
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+    return res.status(200).send(html);
+
+  } catch (error) {
+    console.error("Company Meta Page Error:", error.message);
+    return res.status(500).send("<h1>Something went wrong</h1>");
+  }
+};
 export {
   userDashboard,
   getJobs,
@@ -3570,5 +3719,6 @@ export {
   getLocations,
   getMySuggestions,
   getJobMetaPage,
-  getEventMetaPage
+  getEventMetaPage,
+  getCompanyMetaPage
 };

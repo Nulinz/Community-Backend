@@ -49,7 +49,8 @@ import {
   getCompanyProfile,
   getMySuggestions,
   getJobMetaPage,
-  getEventMetaPage
+  getEventMetaPage,
+  getCompanyMetaPage
 } from "../controller/user/userController.js";
 import fileUploader from "../middleware/fileUploader.js";
 import { getNotifications, getUserResumes, markAsRead, updateProfilePic, updateUserDetails, uploadResume } from "../controller/user/profileController.js";
@@ -202,7 +203,7 @@ router.get("/share/job", getJobMetaPage);
 // /api/users/share/event?event_id=123&web=true
 // ─────────────────────────────────────────────
 router.get("/share/event", getEventMetaPage);
-
+router.get("/share/company", getCompanyMetaPage);
 // Mark notification(s) as read
 router.post("/notifications/read",uploader.none(), isAuthenticated, markAsRead);
 router.get("/user-details",isAuthenticated,getUserDetails)

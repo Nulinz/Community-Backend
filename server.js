@@ -23,6 +23,8 @@ import { startEventReminderCron } from "./jobs/eventRemainder.js";
 import { startJobSuggestionCron } from "./jobs/jobSuggested.js";
 import { seedConferences } from "./services/uploadConference.js";
 import { seedSeminars } from "./services/uploadSeminar.js";
+import { seedCompanyByUserId } from "./services/companyCreate.js";
+
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -79,21 +81,7 @@ app.use("/api/admin", adminRoutes)
 
 
 
-app.get("/robots.txt", (req, res) => {
-  res.type("text/plain");
-  res.send(`
-User-agent: *
-Allow: /
 
-User-agent: facebookexternalhit
-Allow: /
-  `);
-});
-app.use((req, res, next) => {
-  console.log(req.method, req.originalUrl);
-  console.log("User-Agent:", req.headers["user-agent"]);
-  next();
-});
 // error
 app.use((req, res, next) => {
   const error = new Error(`Route not found: ${req.originalUrl}`);
@@ -109,6 +97,22 @@ app.use(errorMiddleware);
 const startServer = async () => {
   if (process.env.MONGO_URI) {
     await connectDB();
+//     const result = await  seedCompanyByUserId({
+//   userId: "69feac1bc9dc4dd0ca5d5f10",
+//   companyData: {
+//     companyName: "Nulinz",
+//     companyType: "IT Services",
+//     contactPersonName: "admin",
+//     address: "Salem",
+//     city: "Salem",
+//     state: "Tamil Nadu",
+//     pincode: "636001",
+//     companyLogo: "uploads/Nulinz LOGO 3.png",
+//   },
+// });
+
+
+// console.log(result);
   } else {
     console.warn("MONGO_URI not found. Starting server without database connection.");
   }

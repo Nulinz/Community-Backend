@@ -281,9 +281,7 @@ if (!ifscCode) {
         if (targetUser) {
             // Update existing user to be associated with this company
             targetUser.name = companyName;
-            targetUser.phone = phoneNumber;
-            targetUser.role = "company";
-            
+            targetUser.phone = phoneNumber;            
             await targetUser.save();
         } else {
             // Create new user account for the company
@@ -450,7 +448,7 @@ export const getCompanyNames = async (req, res, next) => {
 
 export const getMyCompany = async (req, res, next) => {
     try {
-        const company = await Company.findOne({ userId: req.user._id }).populate("userId", "name email phone role isActive");
+        const company = await Company.findOne({ userId: req.user._id }).populate("userId", "name email phone role is_active");
         const companyUserId=req.user._id
         if (!company) {
             const error = new Error("Company profile not found for this user");
@@ -464,7 +462,7 @@ export const getMyCompany = async (req, res, next) => {
             email: userId?.email || "",
             phone: userId?.phone || "",
             role: userId?.role || "",
-            isActive: userId?.isActive ?? true
+            is_active: userId?.is_active?? true
         };
 
     // ── 2. Get Internships (c_by = companyUserId) ──────────────
