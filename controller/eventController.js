@@ -84,7 +84,8 @@ export const createEventForm = async (req, res, next) => {
             schedule,
             incharges,
             description,
-            certificateAvailability
+            certificateAvailability,
+            eventStartTime
         } = rest;
 
         if (!eventType) throw Object.assign(new Error("Event Type is required"), { status: 400 });
@@ -121,6 +122,7 @@ export const createEventForm = async (req, res, next) => {
         event.organizer = toCleanString(organizer);
         event.mode = toCleanString(mode);
         event.eventDate = eventDate;
+        event.eventStartTime = toCleanString(eventStartTime);
         event.registrationType = toCleanString(registrationType);
         event.registrationStartDate = registrationStartDate || undefined;
         event.registrationEndDate = registrationEndDate || undefined;

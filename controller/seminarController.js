@@ -87,7 +87,8 @@ export const createSeminarForm = async (req, res, next) => {
             rounds,
             schedule,
             incharges,
-            certificateAvailability
+            certificateAvailability,
+            eventStartTime
         } = rest;
 
         // Validation
@@ -125,6 +126,7 @@ export const createSeminarForm = async (req, res, next) => {
         seminar.mode = toCleanString(mode);
         seminar.eventDate = eventDate;
         seminar.registrationType = toCleanString(registrationType);
+        seminar.eventStartTime = toCleanString(eventStartTime);
         seminar.registrationStartDate = registrationStartDate || undefined;
         seminar.registrationEndDate = registrationEndDate || undefined;
         seminar.totalSeats = Number(totalSeats) || 0;

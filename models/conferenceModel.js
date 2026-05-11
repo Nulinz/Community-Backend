@@ -32,7 +32,12 @@ const conferenceSchema = new mongoose.Schema(
     organizer: { type: String, required: true, trim: true },
     mode: { type: String, required: true },
     eventDate: { type: Date, required: true },
-    registrationType: { type: String, required: true },
+    registrationType: {
+  type: String,
+  enum: ["Free", "Paid"],
+  required: true,
+  default: "Free",
+},
     registrationStartDate: { type: Date },
     registrationEndDate: { type: Date },
     totalSeats: { type: Number },
@@ -52,7 +57,7 @@ const conferenceSchema = new mongoose.Schema(
     secondPrize: { type: String, trim: true },
     thirdPrize: { type: String, trim: true },
     participationPrize: { type: String, trim: true },
-
+    eventStartTime: { type: String, trim: true },
     // Opportunity
     internshipOpportunity: { type: String },
     placementOpportunity: { type: String },
@@ -81,7 +86,12 @@ const conferenceSchema = new mongoose.Schema(
     allowedDepartments: {
   type: [String],
 },
-    teamOrIndividualEvent: { type: String },
+   teamOrIndividualEvent: {
+  type: String,
+  enum: ["Team", "Individual", "Both"],
+  required: true,
+  default: "Individual",
+},
     teamSizeMinimum: { type: Number },
     teamSizeMaximum: { type: Number },
  certificateAvailability: { type: String, trim: true },

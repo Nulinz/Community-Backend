@@ -82,7 +82,8 @@ export const createConferenceForm = async (req, res, next) => {
             schedule,
             incharges,
             description,
-            certificateAvailability
+            certificateAvailability,
+            eventStartTime
         } = rest;
 
         // Validation
@@ -122,7 +123,7 @@ export const createConferenceForm = async (req, res, next) => {
         conference.registrationStartDate = registrationStartDate || undefined;
         conference.registrationEndDate = registrationEndDate || undefined;
         conference.totalSeats = Number(totalSeats) || 0;
-        
+        conference.eventStartTime = toCleanString(eventStartTime);
         if (coverImagePath) conference.coverImage = coverImagePath;
 
         conference.individualFees = Number(individualFees) || 0;

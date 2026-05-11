@@ -28,6 +28,10 @@ const eventRegistrationSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
+    member_count:{
+     type:Number,
+     required: true,
+    },
     // Personal Details
     fullName: {
       type: String,

@@ -32,12 +32,17 @@ const competitionSchema = new mongoose.Schema(
     organizer: { type: String, required: true, trim: true },
     mode: { type: String, required: true },
     eventDate: { type: Date, required: true },
-    registrationType: { type: String, required: true },
+    registrationType: {
+  type: String,
+  enum: ["Free", "Paid"],
+  required: true,
+  default: "Free",
+},
     registrationStartDate: { type: Date },
     registrationEndDate: { type: Date },
     totalSeats: { type: Number },
     coverImage: { type: String, required: true },
-
+    eventStartTime: { type: String, trim: true },
     // Advanced Details
     rounds: [roundSchema],
     schedule: [scheduleSchema],
@@ -81,7 +86,12 @@ const competitionSchema = new mongoose.Schema(
     allowedDepartments: {
   type: [String],
 },
-    teamOrIndividualEvent: { type: String },
+    teamOrIndividualEvent: {
+  type: String,
+  enum: ["Team", "Individual", "Both"],
+  required: true,
+  default: "Individual",
+},
     teamSizeMinimum: { type: Number },
     teamSizeMaximum: { type: Number },
 

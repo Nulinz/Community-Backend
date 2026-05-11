@@ -1,2 +1,3 @@
 node_modules
-.envconfig/*.json
+.env
+config/*.json

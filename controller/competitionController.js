@@ -83,7 +83,8 @@ export const createCompetitionForm = async (req, res, next) => {
             rounds,
             schedule,
             incharges,
-            certificateAvailability
+            certificateAvailability,
+            eventStartTime
         } = rest;
 
         // Validation
@@ -136,7 +137,7 @@ export const createCompetitionForm = async (req, res, next) => {
         competition.individualFees = Number(individualFees) || 0;
         competition.teamFees = Number(teamFees) || 0;
         competition.lateFees = Number(lateFees) || 0;
-
+        competition.eventStartTime = toCleanString(eventStartTime);
         competition.internshipOpportunity = toCleanString(internshipOpportunity);
         competition.placementOpportunity = toCleanString(placementOpportunity);
         competition.industryExposure = toCleanString(industryExposure);

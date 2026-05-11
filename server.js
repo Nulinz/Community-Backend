@@ -22,6 +22,7 @@ import { seedTamilNaduLocations } from "./services/uploadLocation.js";
 import { startEventReminderCron } from "./jobs/eventRemainder.js";
 import { startJobSuggestionCron } from "./jobs/jobSuggested.js";
 import { seedConferences } from "./services/uploadConference.js";
+import { seedSeminars } from "./services/uploadSeminar.js";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -33,7 +34,7 @@ const allowedOrigins = [
   "http://192.168.1.2:5173"
 ].filter(Boolean);
 
-
+app.set("trust proxy", true);
 app.use(
   cors({
     origin: allowedOrigins,
@@ -44,7 +45,7 @@ app.use(
 // Upload Data
 
 //  seedConferences()
-// 
+//  seedSeminars()
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -78,7 +79,21 @@ app.use("/api/admin", adminRoutes)
 
 
 
+app.get("/robots.txt", (req, res) => {
+  res.type("text/plain");
+  res.send(`
+User-agent: *
+Allow: /
 
+User-agent: facebookexternalhit
+Allow: /
+  `);
+});
+app.use((req, res, next) => {
+  console.log(req.method, req.originalUrl);
+  console.log("User-Agent:", req.headers["user-agent"]);
+  next();
+});
 // error
 app.use((req, res, next) => {
   const error = new Error(`Route not found: ${req.originalUrl}`);

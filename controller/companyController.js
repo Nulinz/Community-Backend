@@ -173,6 +173,17 @@ export const createCompanyForm = async (req, res, next) => {
         const state = toCleanString(req.body?.state);
         const pincode = toCleanString(req.body?.pincode);
 
+        // ==============================
+// ACCOUNT DETAILS
+// ==============================
+
+const accountHolderName = toCleanString(req.body?.accountHolderName);
+const bankName = toCleanString(req.body?.bankName);
+const branchName = toCleanString(req.body?.branchName);
+const accountNumber = toCleanString(req.body?.accountNumber);
+const ifscCode = toCleanString(req.body?.ifscCode);
+
+
         const technologies = toCleanStringArray(req.body?.technologies);
         const whatWeDo = toCleanStringArray(req.body?.whatWeDo);
         const learningBenefits = toCleanStringArray(req.body?.learningBenefits);
@@ -199,6 +210,45 @@ export const createCompanyForm = async (req, res, next) => {
         if (!city) throw Object.assign(new Error("City is required"), { status: 400 });
         if (!state) throw Object.assign(new Error("State is required"), { status: 400 });
         if (!pincode) throw Object.assign(new Error("Pincode is required"), { status: 400 });
+        // ==============================
+// ACCOUNT VALIDATION
+// ==============================
+
+if (!accountHolderName) {
+  throw Object.assign(
+    new Error("Account Holder Name is required"),
+    { status: 400 }
+  );
+}
+
+if (!bankName) {
+  throw Object.assign(
+    new Error("Bank Name is required"),
+    { status: 400 }
+  );
+}
+
+if (!branchName) {
+  throw Object.assign(
+    new Error("Branch Name is required"),
+    { status: 400 }
+  );
+}
+
+if (!accountNumber) {
+  throw Object.assign(
+    new Error("Account Number is required"),
+    { status: 400 }
+  );
+}
+
+if (!ifscCode) {
+  throw Object.assign(
+    new Error("IFSC Code is required"),
+    { status: 400 }
+  );
+}
+
 
         if (technologies.length < 3) throw Object.assign(new Error("At least 3 Technologies We Use values are required"), { status: 400 });
         if (whatWeDo.length < 3) throw Object.assign(new Error("At least 3 What We Do values are required"), { status: 400 });
@@ -286,6 +336,19 @@ export const createCompanyForm = async (req, res, next) => {
             company.aboutUs = aboutUs;
             company.certificateAvailability = certificateAvailability;
             company.employees=employees
+            company.accountHolderName =
+  accountHolderName;
+
+company.bankName = bankName;
+
+company.branchName = branchName;
+
+company.accountNumber =
+  accountNumber;
+
+company.ifscCode = ifscCode;
+
+
             await company.save();
         } else {
             company = await Company.create({
@@ -310,7 +373,12 @@ export const createCompanyForm = async (req, res, next) => {
                 learningOutcomes,
                 aboutUs,
                 certificateAvailability,
-                employees
+                employees,
+                accountHolderName,
+                bankName,
+                branchName,
+                accountNumber,
+                ifscCode,
             });
         }
 

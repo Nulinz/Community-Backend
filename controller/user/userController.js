@@ -24,6 +24,11 @@ import Location from "../../models/locationModel.js";
 import { saveNotification } from "../../helper/saveNotification.js";
 import { sendAndSaveNotification } from "../../helper/sendAndSaveNotification.js";
 import JobSuggested from "../../models/jobSuggestedModel.js"
+import { getCollegeByEventId } from "../../helper/collegeDetails.js";
+import { getSeatAvailability } from "../../helper/getSeatAvailability.js";
+import Payment from "../../models/paymentModel.js"
+
+
 // const userDashboard = async (req, res) => {
 //   try {
 //     const userId = req.user._id
@@ -1044,11 +1049,10 @@ const getJobProfile = async (req, res) => {
       companyDetails.companyLogo = STATIC_ADMIN_IMAGE;
     } else if (job.c_by?.role === "company") {
       const company = await Company.findOne({
-        c_by: job.c_by._id,
+        userId: job.c_by._id,
       })
         .select("companyLogo aboutUs websiteLink")
         .lean();
-       console.log(company)
         companyDetails = {
           companyLogo: company?.companyLogo || null,
           aboutUs:company?.aboutUs|| null,
@@ -1144,8 +1148,10 @@ const getCompetitionProfile = async (req, res) => {
       });
     }
 
-    const [is_registered] = await Promise.all([
+    const [is_registered,college,availability] = await Promise.all([
       checkIsRegistered(userId, id),
+      getCollegeByEventId({eventType:"competition",eventId:id}),
+      getSeatAvailability({eventType:"competition",eventId:id})
     ]);
 
     return res.status(200).json({
@@ -1153,6 +1159,8 @@ const getCompetitionProfile = async (req, res) => {
       data: {
         ...competition.toObject(),
         is_registered,
+        college,
+        availableSeats:availability?.availableSeats
       },
     });
   } catch (error) {
@@ -1164,9 +1172,908 @@ const getCompetitionProfile = async (req, res) => {
     });
   }
 };
+// const createEventRegistration = async (req, res) => {
+//   try {
+
+//     const userId = req.user._id;
+
+//     const {
+//       eventId,
+//       eventType,
+//       fullName,
+//       department,
+//       collegeName,
+//       year,
+//       phoneNumber,
+//       mailId,
+//       food,
+//       foodType,
+//       accommodation,
+//       accommodationType,
+//       type,
+//       teamMembersCount,
+//       transaction_id,
+//       amount,
+//     } = req.body;
+
+//     // ==============================
+//     // REQUIRED VALIDATION
+//     // ==============================
+
+//     if (
+//       !eventId ||
+//       !eventType ||
+//       !fullName ||
+//       !department ||
+//       !collegeName ||
+//       !year ||
+//       !phoneNumber ||
+//       !mailId ||
+//       !type
+//     ) {
+//       return res.status(400).json({
+//         status: false,
+//         message:
+//           "eventId, eventType, fullName, department, collegeName, year, type, phoneNumber and mailId are required",
+//       });
+//     }
+
+//     // ==============================
+//     // EVENT TYPE VALIDATION
+//     // ==============================
+
+//     if (
+//       !["Conference", "Competition", "Seminar", "Event"].includes(eventType)
+//     ) {
+//       return res.status(400).json({
+//         status: false,
+//         message:
+//           "eventType must be Conference, Competition, Seminar or Event",
+//       });
+//     }
+
+//     // ==============================
+//     // REGISTRATION TYPE VALIDATION
+//     // ==============================
+
+//     if (!["Team", "Individual"].includes(type)) {
+//       return res.status(400).json({
+//         status: false,
+//         message: "type must be Team or Individual",
+//       });
+//     }
+
+//     // ==============================
+//     // FOOD VALIDATION
+//     // ==============================
+
+//     if (food === "yes" && !foodType) {
+//       return res.status(400).json({
+//         status: false,
+//         message: "foodType is required when food is yes",
+//       });
+//     }
+
+//     // ==============================
+//     // ACCOMMODATION VALIDATION
+//     // ==============================
+
+//     if (accommodation === "yes" && !accommodationType) {
+//       return res.status(400).json({
+//         status: false,
+//         message:
+//           "accommodationType is required when accommodation is yes",
+//       });
+//     }
+
+//     // ==============================
+//     // GET EVENT DOCUMENT
+//     // ==============================
+
+//     let eventDoc = null;
+
+//     const selectFields = `
+//       c_by
+//       totalSeats
+//       teamOrIndividualEvent
+//       teamSizeMinimum
+//       teamSizeMaximum
+//       individualFees
+//       teamFees
+//       lateFees
+//     `;
+
+//     if (eventType === "Conference") {
+//       eventDoc = await Conference.findById(eventId)
+//         .select(selectFields);
+//     }
+
+//     if (eventType === "Competition") {
+//       eventDoc = await Competition.findById(eventId)
+//         .select(selectFields);
+//     }
+
+//     if (eventType === "Seminar") {
+//       eventDoc = await Seminar.findById(eventId)
+//         .select(selectFields);
+//     }
+
+//     if (eventType === "Event") {
+//       eventDoc = await Event.findById(eventId)
+//         .select(selectFields);
+//     }
+
+//     // ==============================
+//     // EVENT NOT FOUND
+//     // ==============================
+
+//     if (!eventDoc) {
+//       return res.status(404).json({
+//         status: false,
+//         message: "Event not found",
+//       });
+//     }
+
+//     // ==============================
+//     // ALREADY REGISTERED
+//     // ==============================
+
+//     const existing = await EventRegistration.findOne({
+//       userId,
+//       eventId,
+//     });
+
+//     if (existing) {
+//       return res.status(400).json({
+//         status: false,
+//         message:
+//           "You have already registered for this event",
+//       });
+//     }
+
+//     // ==============================
+//     // MEMBER COUNT
+//     // ==============================
+
+//     let member_count = 1;
+
+//     if (type === "Team") {
+
+//       member_count = Number(teamMembersCount);
+
+//       if (!member_count || member_count <= 0) {
+//         return res.status(400).json({
+//           status: false,
+//           message:
+//             "Valid teamMembersCount is required",
+//         });
+//       }
+//     }
+
+//     // ==============================
+//     // TEAM / INDIVIDUAL VALIDATION
+//     // ==============================
+
+//     if (eventDoc.teamOrIndividualEvent === "Team") {
+
+//       // Only Team allowed
+//       if (type !== "Team") {
+//         return res.status(400).json({
+//           status: false,
+//           message:
+//             "This event allows only team registration",
+//         });
+//       }
+
+//     } else if (
+//       eventDoc.teamOrIndividualEvent === "Individual"
+//     ) {
+
+//       // Only Individual allowed
+//       if (type !== "Individual") {
+//         return res.status(400).json({
+//           status: false,
+//           message:
+//             "This event allows only individual registration",
+//         });
+//       }
+
+//     } else if (
+//       eventDoc.teamOrIndividualEvent === "Both"
+//     ) {
+
+//       // Both allowed
+//       if (!["Team", "Individual"].includes(type)) {
+//         return res.status(400).json({
+//           status: false,
+//           message:
+//             "type must be Team or Individual",
+//         });
+//       }
+//     }
+
+//     // ==============================
+//     // TEAM SIZE VALIDATION
+//     // ==============================
+
+//     if (type === "Team") {
+
+//       // Minimum Team Size
+//       if (
+//         eventDoc.teamSizeMinimum &&
+//         member_count < eventDoc.teamSizeMinimum
+//       ) {
+//         return res.status(400).json({
+//           status: false,
+//           message:
+//             `Minimum ${eventDoc.teamSizeMinimum} team members required`,
+//         });
+//       }
+
+//       // Maximum Team Size
+//       if (
+//         eventDoc.teamSizeMaximum &&
+//         member_count > eventDoc.teamSizeMaximum
+//       ) {
+//         return res.status(400).json({
+//           status: false,
+//           message:
+//             `Maximum ${eventDoc.teamSizeMaximum} team members allowed`,
+//         });
+//       }
+//     }
+
+//     // ==============================
+//     // TOTAL SEATS VALIDATION
+//     // ==============================
+
+//     const registrations =
+//       await EventRegistration.find({
+//         eventId,
+//       }).select("member_count");
+
+//     const usedSeats = registrations.reduce(
+//       (sum, item) =>
+//         sum + (item.member_count || 1),
+//       0
+//     );
+
+//     const remainingSeats =
+//       (eventDoc.totalSeats || 0) - usedSeats;
+
+//     if (
+//       eventDoc.totalSeats &&
+//       member_count > remainingSeats
+//     ) {
+//       return res.status(400).json({
+//         status: false,
+//         message:
+//           `Only ${remainingSeats} seats remaining`,
+//       });
+//     }
+
+//     // ==============================
+//     // CALCULATE FEES
+//     // ==============================
+
+//     let finalAmount = 0;
+
+//     // Team Fees
+//     if (type === "Team") {
+
+//       finalAmount =
+//         Number(eventDoc.teamFees || 0);
+
+//     } else {
+
+//       // Individual Fees
+//       finalAmount =
+//         Number(eventDoc.individualFees || 0) *
+//         member_count;
+//     }
+
+//     // Add Late Fees
+//     finalAmount +=
+//       Number(eventDoc.lateFees || 0);
+
+//     // ==============================
+//     // PAYMENT VALIDATION
+//     // ==============================
+
+//     if (finalAmount > 0) {
+
+//       if (!transaction_id) {
+//         return res.status(400).json({
+//           status: false,
+//           message:
+//             "transaction_id is required",
+//         });
+//       }
+
+//       if (!amount) {
+//         return res.status(400).json({
+//           status: false,
+//           message: "amount is required",
+//         });
+//       }
+
+//       if (Number(amount) !== finalAmount) {
+//         return res.status(400).json({
+//           status: false,
+//           message:
+//             `Invalid amount. Payable amount is ${finalAmount}`,
+//         });
+//       }
+//     }
+
+//     // ==============================
+//     // CREATE REGISTRATION
+//     // ==============================
+
+//     const registration =
+//       await EventRegistration.create({
+//         userId,
+//         eventId,
+//         eventType,
+//         fullName,
+//         department,
+//         c_by: eventDoc.c_by,
+//         collegeName,
+//         year,
+//         type,
+//         member_count,
+//         phoneNumber,
+//         mailId,
+//         food: food || "no",
+//         foodType:
+//           food === "yes"
+//             ? foodType
+//             : null,
+//         accommodation:
+//           accommodation || "no",
+//         accommodationType:
+//           accommodation === "yes"
+//             ? accommodationType
+//             : null,
+//       });
+
+//     // ==============================
+//     // CREATE PAYMENT
+//     // ==============================
+
+//     let paymentData = null;
+
+//     if (finalAmount > 0) {
+
+//       paymentData = await Payment.create({
+//         userId,
+//         referenceId: registration._id,
+//         referenceType:
+//           "EventRegistration",
+//         eventId,
+//         eventType,
+//         c_by: eventDoc.c_by,
+//         amount: finalAmount,
+//         paymentMethod: "UPI",
+//         paymentStatus: "Success",
+//         paymentGateway: "Offline",
+//         transactionId: transaction_id,
+//         remarks:
+//           `${eventType} registration payment`,
+//       });
+//     }
+
+//     // ==============================
+//     // SEND NOTIFICATION
+//     // ==============================
+
+//     await sendAndSaveNotification({
+//       senderId: userId,
+//       receiverId: userId,
+//       title:
+//         "Event Registration Successful",
+//       message:
+//         `You have successfully registered for the ${eventType}.`,
+//       type: "event_registered",
+//       reference_id: eventId,
+//       metadata: {
+//         eventType,
+//         registrationId:
+//           registration._id,
+//         paymentId:
+//           paymentData?._id || null,
+//         amount: finalAmount,
+//         food: food || "no",
+//         accommodation:
+//           accommodation || "no",
+//       },
+//     });
+
+//     // ==============================
+//     // RESPONSE
+//     // ==============================
+
+//     return res.status(200).json({
+//       status: true,
+//       message:
+//         "Registered successfully",
+//       data: {
+//         registration,
+//         payment: paymentData,
+//         payableAmount: finalAmount,
+//       },
+//     });
+
+//   } catch (error) {
+
+//     console.error(
+//       "Event Registration Error:",
+//       error.message
+//     );
+
+//     return res.status(500).json({
+//       status: false,
+//       message:
+//         "Failed to register for event",
+//       error: error.message,
+//     });
+//   }
+// };
+// ============================================
+
+// const createEventRegistration = async (req, res) => {
+//   try {
+
+//     const userId = req.user._id;
+
+//     const {
+//       eventId,
+//       eventType,
+//       fullName,
+//       department,
+//       collegeName,
+//       year,
+//       phoneNumber,
+//       mailId,
+//       food,
+//       foodType,
+//       accommodation,
+//       accommodationType,
+//       type,
+//       teamMembersCount,
+//       transaction_id,
+//       amount,
+//     } = req.body;
+
+//     // ==============================
+//     // REQUIRED VALIDATION
+//     // ==============================
+
+//     if (
+//       !eventId ||
+//       !eventType ||
+//       !fullName ||
+//       !department ||
+//       !collegeName ||
+//       !year ||
+//       !phoneNumber ||
+//       !mailId ||
+//       !type
+//     ) {
+//       return res.status(400).json({
+//         status: false,
+//         message:
+//           "eventId, eventType, fullName, department, collegeName, year, type, phoneNumber and mailId are required",
+//       });
+//     }
+
+//     // ==============================
+//     // EVENT TYPE VALIDATION
+//     // ==============================
+
+//     if (
+//       !["Conference", "Competition", "Seminar", "Event"].includes(eventType)
+//     ) {
+//       return res.status(400).json({
+//         status: false,
+//         message:
+//           "eventType must be Conference, Competition, Seminar or Event",
+//       });
+//     }
+
+//     // ==============================
+//     // REGISTRATION TYPE VALIDATION
+//     // ==============================
+
+//     if (!["Team", "Individual"].includes(type)) {
+//       return res.status(400).json({
+//         status: false,
+//         message: "type must be Team or Individual",
+//       });
+//     }
+
+//     // ==============================
+//     // FOOD VALIDATION
+//     // ==============================
+
+//     if (food === "yes" && !foodType) {
+//       return res.status(400).json({
+//         status: false,
+//         message: "foodType is required when food is yes",
+//       });
+//     }
+
+//     // ==============================
+//     // ACCOMMODATION VALIDATION
+//     // ==============================
+
+//     if (accommodation === "yes" && !accommodationType) {
+//       return res.status(400).json({
+//         status: false,
+//         message:
+//           "accommodationType is required when accommodation is yes",
+//       });
+//     }
+
+//     // ==============================
+//     // GET EVENT DOCUMENT
+//     // ==============================
+
+//     let eventDoc = null;
+
+//     const selectFields = `
+//       c_by
+//       totalSeats
+//       teamOrIndividualEvent
+//       teamSizeMinimum
+//       teamSizeMaximum
+//       individualFees
+//       teamFees
+//       lateFees
+//     `;
+
+//     if (eventType === "Conference") {
+//       eventDoc = await Conference.findById(eventId)
+//         .select(selectFields);
+//     }
+
+//     if (eventType === "Competition") {
+//       eventDoc = await Competition.findById(eventId)
+//         .select(selectFields);
+//     }
+
+//     if (eventType === "Seminar") {
+//       eventDoc = await Seminar.findById(eventId)
+//         .select(selectFields);
+//     }
+
+//     if (eventType === "Event") {
+//       eventDoc = await Event.findById(eventId)
+//         .select(selectFields);
+//     }
+
+//     // ==============================
+//     // EVENT NOT FOUND
+//     // ==============================
+
+//     if (!eventDoc) {
+//       return res.status(404).json({
+//         status: false,
+//         message: "Event not found",
+//       });
+//     }
+
+//     // ==============================
+//     // ALREADY REGISTERED
+//     // ==============================
+
+//     const existing = await EventRegistration.findOne({
+//       userId,
+//       eventId,
+//     });
+
+//     if (existing) {
+//       return res.status(400).json({
+//         status: false,
+//         message:
+//           "You have already registered for this event",
+//       });
+//     }
+
+//     // ==============================
+//     // MEMBER COUNT
+//     // ==============================
+
+//     let member_count = 1;
+
+//     if (type === "Team") {
+
+//       member_count = Number(teamMembersCount);
+
+//       if (!member_count || member_count <= 0) {
+//         return res.status(400).json({
+//           status: false,
+//           message:
+//             "Valid teamMembersCount is required",
+//         });
+//       }
+//     }
+
+//     // ==============================
+//     // TEAM / INDIVIDUAL VALIDATION
+//     // ==============================
+
+//     if (eventDoc.teamOrIndividualEvent === "Team") {
+
+//       // Only Team allowed
+//       if (type !== "Team") {
+//         return res.status(400).json({
+//           status: false,
+//           message:
+//             "This event allows only team registration",
+//         });
+//       }
+
+//     } else if (
+//       eventDoc.teamOrIndividualEvent === "Individual"
+//     ) {
+
+//       // Only Individual allowed
+//       if (type !== "Individual") {
+//         return res.status(400).json({
+//           status: false,
+//           message:
+//             "This event allows only individual registration",
+//         });
+//       }
+
+//     } else if (
+//       eventDoc.teamOrIndividualEvent === "Both"
+//     ) {
+
+//       // Both allowed
+//       if (!["Team", "Individual"].includes(type)) {
+//         return res.status(400).json({
+//           status: false,
+//           message:
+//             "type must be Team or Individual",
+//         });
+//       }
+//     }
+
+//     // ==============================
+//     // TEAM SIZE VALIDATION
+//     // ==============================
+
+//     if (type === "Team") {
+
+//       // Minimum Team Size
+//       if (
+//         eventDoc.teamSizeMinimum &&
+//         member_count < eventDoc.teamSizeMinimum
+//       ) {
+//         return res.status(400).json({
+//           status: false,
+//           message:
+//             `Minimum ${eventDoc.teamSizeMinimum} team members required`,
+//         });
+//       }
+
+//       // Maximum Team Size
+//       if (
+//         eventDoc.teamSizeMaximum &&
+//         member_count > eventDoc.teamSizeMaximum
+//       ) {
+//         return res.status(400).json({
+//           status: false,
+//           message:
+//             `Maximum ${eventDoc.teamSizeMaximum} team members allowed`,
+//         });
+//       }
+//     }
+
+//     // ==============================
+//     // TOTAL SEATS VALIDATION
+//     // ==============================
+
+//     const registrations =
+//       await EventRegistration.find({
+//         eventId,
+//       }).select("member_count");
+
+//     const usedSeats = registrations.reduce(
+//       (sum, item) =>
+//         sum + (item.member_count || 1),
+//       0
+//     );
+
+//     const remainingSeats =
+//       (eventDoc.totalSeats || 0) - usedSeats;
+
+//     if (
+//       eventDoc.totalSeats &&
+//       member_count > remainingSeats
+//     ) {
+//       return res.status(400).json({
+//         status: false,
+//         message:
+//           `Only ${remainingSeats} seats remaining`,
+//       });
+//     }
+
+//     // ==============================
+//     // CALCULATE FEES
+//     // ==============================
+
+//     let finalAmount = 0;
+
+//     // Team Fees
+//     if (type === "Team") {
+
+//       finalAmount =
+//         Number(eventDoc.teamFees || 0);
+
+//     } else {
+
+//       // Individual Fees
+//       finalAmount =
+//         Number(eventDoc.individualFees || 0) *
+//         member_count;
+//     }
+
+//     // Add Late Fees
+//     finalAmount +=
+//       Number(eventDoc.lateFees || 0);
+
+//     // ==============================
+//     // PAYMENT VALIDATION
+//     // ==============================
+
+//     if (finalAmount > 0) {
+
+//       if (!transaction_id) {
+//         return res.status(400).json({
+//           status: false,
+//           message:
+//             "transaction_id is required",
+//         });
+//       }
+
+//       if (!amount) {
+//         return res.status(400).json({
+//           status: false,
+//           message: "amount is required",
+//         });
+//       }
+
+//       if (Number(amount) !== finalAmount) {
+//         return res.status(400).json({
+//           status: false,
+//           message:
+//             `Invalid amount. Payable amount is ${finalAmount}`,
+//         });
+//       }
+//     }
+
+//     // ==============================
+//     // CREATE REGISTRATION
+//     // ==============================
+
+//     const registration =
+//       await EventRegistration.create({
+//         userId,
+//         eventId,
+//         eventType,
+//         fullName,
+//         department,
+//         c_by: eventDoc.c_by,
+//         collegeName,
+//         year,
+//         type,
+//         member_count,
+//         phoneNumber,
+//         mailId,
+//         food: food || "no",
+//         foodType:
+//           food === "yes"
+//             ? foodType
+//             : null,
+//         accommodation:
+//           accommodation || "no",
+//         accommodationType:
+//           accommodation === "yes"
+//             ? accommodationType
+//             : null,
+//       });
+
+//     // ==============================
+//     // CREATE PAYMENT
+//     // ==============================
+
+//     let paymentData = null;
+
+//     if (finalAmount > 0) {
+
+//       paymentData = await Payment.create({
+//         userId,
+//         referenceId: registration._id,
+//         referenceType:
+//           "EventRegistration",
+//         eventId,
+//         eventType,
+//         c_by: eventDoc.c_by,
+//         amount: finalAmount,
+//         paymentMethod: "UPI",
+//         paymentStatus: "Success",
+//         paymentGateway: "Offline",
+//         transactionId: transaction_id,
+//         remarks:
+//           `${eventType} registration payment`,
+//       });
+//     }
+
+//     // ==============================
+//     // SEND NOTIFICATION
+//     // ==============================
+
+//     await sendAndSaveNotification({
+//       senderId: userId,
+//       receiverId: userId,
+//       title:
+//         "Event Registration Successful",
+//       message:
+//         `You have successfully registered for the ${eventType}.`,
+//       type: "event_registered",
+//       reference_id: eventId,
+//       metadata: {
+//         eventType,
+//         registrationId:
+//           registration._id,
+//         paymentId:
+//           paymentData?._id || null,
+//         amount: finalAmount,
+//         food: food || "no",
+//         accommodation:
+//           accommodation || "no",
+//       },
+//     });
+
+//     // ==============================
+//     // RESPONSE
+//     // ==============================
+
+//     return res.status(200).json({
+//       status: true,
+//       message:
+//         "Registered successfully",
+//       data: {
+//         registration,
+//         payment: paymentData,
+//         payableAmount: finalAmount,
+//       },
+//     });
+
+//   } catch (error) {
+
+//     console.error(
+//       "Event Registration Error:",
+//       error.message
+//     );
+
+//     return res.status(500).json({
+//       status: false,
+//       message:
+//         "Failed to register for event",
+//       error: error.message,
+//     });
+//   }
+// };
+
 const createEventRegistration = async (req, res) => {
   try {
+
     const userId = req.user._id;
+
     const {
       eventId,
       eventType,
@@ -1180,110 +2087,460 @@ const createEventRegistration = async (req, res) => {
       foodType,
       accommodation,
       accommodationType,
-      type
+      type,
+      teamMembersCount,
+      transaction_id="3478rfbrbub487",
+      amount,
     } = req.body;
 
-    // Validate required fields
-    if (!eventId || !eventType || !fullName || !department || !collegeName || !year || !phoneNumber || !mailId|| !type) {
+    // ==============================
+    // REQUIRED VALIDATION
+    // ==============================
+
+    if (
+      !eventId ||
+      !eventType ||
+      !fullName ||
+      !department ||
+      !collegeName ||
+      !year ||
+      !phoneNumber ||
+      !mailId ||
+      !type
+    ) {
       return res.status(400).json({
         status: false,
-        message: "eventId, eventType, fullName, department, collegeName, year, Type, phoneNumber and mailId are required",
+        message:
+          "eventId, eventType, fullName, department, collegeName, year, type, phoneNumber and mailId are required",
       });
     }
 
-    // Validate eventType
-    if (!["Conference", "Competition", "Seminar", "Event"].includes(eventType)) {
+    // ==============================
+    // EVENT TYPE VALIDATION
+    // ==============================
+
+    if (
+      !["Conference", "Competition", "Seminar", "Event"].includes(eventType)
+    ) {
       return res.status(400).json({
         status: false,
-        message: "eventType must be 'conference', 'competition', 'seminar' or 'event'",
+        message:
+          "eventType must be Conference, Competition, Seminar or Event",
       });
     }
 
-    // Validate foodType if food is yes
+    // ==============================
+    // REGISTRATION TYPE VALIDATION
+    // ==============================
+
+    if (!["Team", "Individual"].includes(type)) {
+      return res.status(400).json({
+        status: false,
+        message: "type must be Team or Individual",
+      });
+    }
+
+    // ==============================
+    // FOOD VALIDATION
+    // ==============================
+
     if (food === "yes" && !foodType) {
       return res.status(400).json({
         status: false,
-        message: "foodType is required when food is 'yes'",
+        message: "foodType is required when food is yes",
       });
     }
 
-    // Validate accommodationType if accommodation is yes
+    // ==============================
+    // ACCOMMODATION VALIDATION
+    // ==============================
+
     if (accommodation === "yes" && !accommodationType) {
       return res.status(400).json({
         status: false,
-        message: "accommodationType is required when accommodation is 'yes'",
+        message:
+          "accommodationType is required when accommodation is yes",
       });
     }
- let eventDoc = null;
-    if (eventType === "Conference")  eventDoc = await Conference.findById(eventId).select("c_by");
-    if (eventType === "Competition") eventDoc = await Competition.findById(eventId).select("c_by");
-    if (eventType === "Seminar")     eventDoc = await Seminar.findById(eventId).select("c_by");
-    if (eventType === "Event")       eventDoc = await Event.findById(eventId).select("c_by");
- 
+
+    // ==============================
+    // GET EVENT DOCUMENT
+    // ==============================
+
+    let eventDoc = null;
+
+    const selectFields = `
+      c_by
+      totalSeats
+      teamOrIndividualEvent
+      teamSizeMinimum
+      teamSizeMaximum
+      individualFees
+      teamFees
+      lateFees
+      registrationType
+    `;
+
+    if (eventType === "Conference") {
+      eventDoc = await Conference.findById(eventId)
+        .select(selectFields);
+    }
+
+    if (eventType === "Competition") {
+      eventDoc = await Competition.findById(eventId)
+        .select(selectFields);
+    }
+
+    if (eventType === "Seminar") {
+      eventDoc = await Seminar.findById(eventId)
+        .select(selectFields);
+    }
+
+    if (eventType === "Event") {
+      eventDoc = await Event.findById(eventId)
+        .select(selectFields);
+    }
+
+    // ==============================
+    // EVENT NOT FOUND
+    // ==============================
+
     if (!eventDoc) {
       return res.status(404).json({
         status: false,
         message: "Event not found",
       });
     }
-    // Check if already registered
-    const existing = await EventRegistration.findOne({ userId, eventId });
+
+    // ==============================
+    // ALREADY REGISTERED
+    // ==============================
+
+    const existing = await EventRegistration.findOne({
+      userId,
+      eventId,
+    });
+
     if (existing) {
       return res.status(400).json({
         status: false,
-        message: "You have already registered for this event",
+        message:
+          "You have already registered for this event",
       });
     }
 
-    // Create registration
-    const registration = await EventRegistration.create({
-      userId,
-      eventId,
-      eventType,
-      fullName,
-      department,
-      c_by: eventDoc.c_by,
-      collegeName,
-      year,
-      type,
-      phoneNumber,
-      mailId,
-      food: food || "no",
-      foodType: food === "yes" ? foodType : null,
-      accommodation: accommodation || "no",
-      accommodationType: accommodation === "yes" ? accommodationType : null,
+    // ==============================
+    // MEMBER COUNT
+    // ==============================
+
+    let member_count = 1;
+
+    if (type === "Team") {
+
+      member_count = Number(teamMembersCount);
+
+      if (!member_count || member_count <= 0) {
+        return res.status(400).json({
+          status: false,
+          message:
+            "Valid teamMembersCount is required",
+        });
+      }
+    }
+
+    // ==============================
+    // TEAM / INDIVIDUAL VALIDATION
+    // ==============================
+
+    if (eventDoc.teamOrIndividualEvent === "Team") {
+
+      // Only Team allowed
+      if (type !== "Team") {
+        return res.status(400).json({
+          status: false,
+          message:
+            "This event allows only team registration",
+        });
+      }
+
+    } else if (
+      eventDoc.teamOrIndividualEvent === "Individual"
+    ) {
+
+      // Only Individual allowed
+      if (type !== "Individual") {
+        return res.status(400).json({
+          status: false,
+          message:
+            "This event allows only individual registration",
+        });
+      }
+
+    } else if (
+      eventDoc.teamOrIndividualEvent === "Both"
+    ) {
+
+      // Both allowed
+      if (!["Team", "Individual"].includes(type)) {
+        return res.status(400).json({
+          status: false,
+          message:
+            "type must be Team or Individual",
+        });
+      }
+    }
+
+    // ==============================
+    // TEAM SIZE VALIDATION
+    // ==============================
+
+    if (type === "Team") {
+
+      // Minimum Team Size
+      if (
+        eventDoc.teamSizeMinimum &&
+        member_count < eventDoc.teamSizeMinimum
+      ) {
+        return res.status(400).json({
+          status: false,
+          message:
+            `Minimum ${eventDoc.teamSizeMinimum} team members required`,
+        });
+      }
+
+      // Maximum Team Size
+      if (
+        eventDoc.teamSizeMaximum &&
+        member_count > eventDoc.teamSizeMaximum
+      ) {
+        return res.status(400).json({
+          status: false,
+          message:
+            `Maximum ${eventDoc.teamSizeMaximum} team members allowed`,
+        });
+      }
+    }
+
+    // ==============================
+    // TOTAL SEATS VALIDATION
+    // ==============================
+
+    const registrations =
+      await EventRegistration.find({
+        eventId,
+      }).select("member_count");
+
+    const usedSeats = registrations.reduce(
+      (sum, item) =>
+        sum + (item.member_count || 1),
+      0
+    );
+
+    const remainingSeats =
+      (eventDoc.totalSeats || 0) - usedSeats;
+
+    if (
+      eventDoc.totalSeats &&
+      member_count > remainingSeats
+    ) {
+      return res.status(400).json({
+        status: false,
+        message:
+          `Only ${remainingSeats} seats remaining`,
+      });
+    }
+
+    // ==============================
+    // CALCULATE FEES
+    // ==============================
+
+    let finalAmount = 0;
+
+    // Free Event
+    if (
+      eventDoc.registrationType === "Free"
+    ) {
+
+      finalAmount = 0;
+
+    } else {
+
+      // Paid Event
+
+      // Team Fees
+      if (type === "Team") {
+
+        finalAmount =
+          Number(eventDoc.teamFees || 0);
+
+      } else {
+
+        // Individual Fees
+        finalAmount =
+          Number(eventDoc.individualFees || 0) *
+          member_count;
+      }
+
+      // Add Late Fees
+      finalAmount +=
+        Number(eventDoc.lateFees || 0);
+    }
+
+    // ==============================
+    // PAYMENT VALIDATION
+    // ==============================
+
+    if (
+      eventDoc.registrationType === "Paid"
+    ) {
+
+      if (finalAmount > 0) {
+
+        if (!transaction_id) {
+          return res.status(400).json({
+            status: false,
+            message:
+              "transaction_id is required",
+          });
+        }
+
+        if (!amount) {
+          return res.status(400).json({
+            status: false,
+            message: "amount is required",
+          });
+        }
+
+        if (Number(amount) !== finalAmount) {
+          return res.status(400).json({
+            status: false,
+            message:
+              `Invalid amount. Payable amount is ${finalAmount}`,
+          });
+        }
+      }
+    }
+
+    // ==============================
+    // CREATE REGISTRATION
+    // ==============================
+
+    const registration =
+      await EventRegistration.create({
+        userId,
+        eventId,
+        eventType,
+        fullName,
+        department,
+        c_by: eventDoc.c_by,
+        collegeName,
+        year,
+        type,
+        member_count,
+        phoneNumber,
+        mailId,
+        food: food || "no",
+        foodType:
+          food === "yes"
+            ? foodType
+            : null,
+        accommodation:
+          accommodation || "no",
+        accommodationType:
+          accommodation === "yes"
+            ? accommodationType
+            : null,
+      });
+
+    // ==============================
+    // CREATE PAYMENT
+    // ==============================
+
+    let paymentData = null;
+
+    if (
+      eventDoc.registrationType === "Paid" &&
+      finalAmount > 0
+    ) {
+
+      paymentData = await Payment.create({
+        userId,
+        referenceId: registration._id,
+        referenceType:
+          "EventRegistration",
+        eventId,
+        eventType,
+        c_by: eventDoc.c_by,
+        amount: finalAmount,
+        paymentMethod: "UPI",
+        paymentStatus: "Success",
+        paymentGateway: "Offline",
+        transactionId: transaction_id,
+        remarks:
+          `${eventType} registration payment`,
+      });
+    }
+
+    // ==============================
+    // SEND NOTIFICATION
+    // ==============================
+
+    await sendAndSaveNotification({
+      senderId: userId,
+      receiverId: userId,
+      title:
+        "Event Registration Successful",
+      message:
+        `You have successfully registered for the ${eventType}.`,
+      type: "event_registered",
+      reference_id: eventId,
+      metadata: {
+        eventType,
+        registrationId:
+          registration._id,
+        paymentId:
+          paymentData?._id || null,
+        amount: finalAmount,
+        registrationType:
+          eventDoc.registrationType,
+        food: food || "no",
+        accommodation:
+          accommodation || "no",
+      },
     });
 
-  await sendAndSaveNotification({
-  senderId: userId,        // sender is the user themselves
-  receiverId: userId,      // receiver is also the same user (self notification)
-  title: "Event Registration Successful",
-  message: `You have successfully registered for the ${eventType}.`,
-  type: "event_registered",
-  reference_id: eventId,
-  metadata: {
-    eventType,
-    registrationId: registration._id,
-    food: food || "no",
-    accommodation: accommodation || "no",
-  },
-});
+    // ==============================
+    // RESPONSE
+    // ==============================
 
     return res.status(200).json({
       status: true,
-      message: "Registered successfully",
-      data: registration,
+      message:
+        "Registered successfully",
+      data: {
+        registration,
+        payment: paymentData,
+        payableAmount: finalAmount,
+        registrationType:
+          eventDoc.registrationType,
+      },
     });
+
   } catch (error) {
-    console.error("Event Registration Error:", error.message);
+
+    console.error(
+      "Event Registration Error:",
+      error.message
+    );
+
     return res.status(500).json({
       status: false,
-      message: "Failed to register for event",
+      message:
+        "Failed to register for event",
       error: error.message,
     });
   }
 };
-// ============================================
 const getAllConferences = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -1336,15 +2593,20 @@ const getConferenceProfile = async (req, res) => {
       });
     }
 
-    const [is_registered] = await Promise.all([
+    const [is_registered,college,availability] = await Promise.all([
       checkIsRegistered(userId, id),
+      getCollegeByEventId({eventType:"conference",eventId:id}),
+      getSeatAvailability({eventType:"conference",eventId:id})
     ]);
 
     return res.status(200).json({
       status: true,
       data: {
+        college,
         ...conference.toObject(),
         is_registered,
+        college,
+        availableSeats:availability?.availableSeats
       },
     });
   } catch (error) {
@@ -1440,8 +2702,10 @@ const getEventProfile = async (req, res) => {
         message: "Event not found",
       });
     }
-    const [is_registered] = await Promise.all([
+    const [is_registered,college,availability] = await Promise.all([
       checkIsRegistered(userId, id),
+      getCollegeByEventId({eventType:"event",eventId:id}),
+      getSeatAvailability({eventType:"event",eventId:id})
     ]);
 
     return res.status(200).json({
@@ -1449,6 +2713,8 @@ const getEventProfile = async (req, res) => {
       data: {
         ...event.toObject(),
         is_registered,
+        college,
+        availableSeats:availability?.availableSeats
       },
     });
   } catch (error) {
@@ -1544,15 +2810,18 @@ const getSeminarProfile = async (req, res) => {
       });
     }
 
-    const [is_registered] = await Promise.all([
+    const [is_registered,college,availability] = await Promise.all([
       checkIsRegistered(userId, id),
+      getCollegeByEventId({eventType:"seminar",eventId:id}),
+      getSeatAvailability({eventType:"seminar",eventId:id})
     ]);
 
     return res.status(200).json({
       status: true,
       data: {
         ...seminar.toObject(),
-
+          college,
+        availableSeats:availability?.availableSeats,
         is_registered,
       },
     });
@@ -2078,8 +3347,8 @@ const getJobMetaPage = async (req, res) => {
     const ogUrl = `${process.env.BASE_URL}/api/share/job?job_id=${job_id}&web=${isWeb}`;
 
     const redirectUrl = isWeb
-      ? `${process.env.FRONTEND_URL}/job/detail?job_id=${encodeURIComponent(job_id)}&web=true`
-      : `${process.env.FRONTEND_URL}/job/detail?job_id=${encodeURIComponent(job_id)}`;
+      ? `${process.env.FRONTEND_URL}/job?job_id=${encodeURIComponent(job_id)}&web=true`
+      : `${process.env.FRONTEND_URL}/job?job_id=${encodeURIComponent(job_id)}`;
 
     // ── Step 4: Render OG HTML ──────────────────────────────────
     const html = `
@@ -2102,7 +3371,7 @@ const getJobMetaPage = async (req, res) => {
   <meta property="og:type"             content="website" />
   <meta property="og:site_name"        content="Nulinz" />
   <meta property="og:locale"           content="en_US" />
-  <meta property="fb:app_id"           content="768954169170808" />
+  <meta property="fb:app_id"           content="1492199609067011" />
 
   <!-- Twitter Card -->
   <meta name="twitter:card"        content="summary_large_image" />
@@ -2207,8 +3476,8 @@ const getEventMetaPage = async (req, res) => {
     const ogUrl = `${process.env.BASE_URL}/api/users/share/event?event_id=${event_id}&web=${isWeb}`;
 
     const redirectUrl = isWeb
-      ? `${process.env.FRONTEND_URL}/event/detail?event_id=${encodeURIComponent(event_id)}&web=true`
-      : `${process.env.FRONTEND_URL}/event/detail?event_id=${encodeURIComponent(event_id)}`;
+      ? `${process.env.FRONTEND_URL}/event?event_id=${encodeURIComponent(event_id)}&web=true`
+      : `${process.env.FRONTEND_URL}/event?event_id=${encodeURIComponent(event_id)}`;
 
     // ── Step 4: Render OG HTML ──────────────────────────────────
     const html = `
@@ -2231,7 +3500,7 @@ const getEventMetaPage = async (req, res) => {
   <meta property="og:type"             content="website" />
   <meta property="og:site_name"        content="Nulinz" />
   <meta property="og:locale"           content="en_US" />
-  <meta property="fb:app_id"           content="768954169170808" />
+  <meta property="fb:app_id"           content="1492199609067011" />
 
   <!-- Twitter Card -->
   <meta name="twitter:card"        content="summary_large_image" />

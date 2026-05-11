@@ -173,6 +173,12 @@ export const createCollegeForm = async (req, res, next) => {
         const pincode = toCleanString(req.body?.pincode);
         const mailId = toCleanString(req.body?.mailId).toLowerCase();
         const phoneNumber = toCleanString(req.body?.phoneNumber);
+const accountHolderName = toCleanString(req.body?.accountHolderName);
+const bankName = toCleanString(req.body?.bankName);
+const branchName = toCleanString(req.body?.branchName);
+const accountNumber = toCleanString(req.body?.accountNumber);
+const ifscCode = toCleanString(req.body?.ifscCode);
+
 
         const departments = toCleanStringArray(req.body?.departments);
         const coursesAvailable = toCleanStringArray(req.body?.coursesAvailable);
@@ -196,7 +202,44 @@ export const createCollegeForm = async (req, res, next) => {
         if (coursesAvailable.length < 1) throw Object.assign(new Error("At least 1 Course values are required"), { status: 400 });
         if (!totalStudents) throw Object.assign(new Error("Total Students is required"), { status: 400 });
         if (!aboutUs) throw Object.assign(new Error("About Us is required"), { status: 400 });
+      // ==============================
+// ACCOUNT VALIDATION
+// ==============================
 
+if (!accountHolderName) {
+  throw Object.assign(
+    new Error("Account Holder Name is required"),
+    { status: 400 }
+  );
+}
+
+if (!bankName) {
+  throw Object.assign(
+    new Error("Bank Name is required"),
+    { status: 400 }
+  );
+}
+
+if (!branchName) {
+  throw Object.assign(
+    new Error("Branch Name is required"),
+    { status: 400 }
+  );
+}
+
+if (!accountNumber) {
+  throw Object.assign(
+    new Error("Account Number is required"),
+    { status: 400 }
+  );
+}
+
+if (!ifscCode) {
+  throw Object.assign(
+    new Error("IFSC Code is required"),
+    { status: 400 }
+  );
+}
 
         // Uniqueness check for email and phone
         let currentUserId = null;
@@ -268,7 +311,17 @@ export const createCollegeForm = async (req, res, next) => {
             college.pincode = pincode;
             college.departments = departments;
             college.coursesAvailable = coursesAvailable;
+college.accountHolderName =
+  accountHolderName;
 
+college.bankName = bankName;
+
+college.branchName = branchName;
+
+college.accountNumber =
+  accountNumber;
+
+college.ifscCode = ifscCode;
             await college.save();
         } else {
             college = await College.create({
@@ -290,6 +343,11 @@ export const createCollegeForm = async (req, res, next) => {
                 pincode,
                 departments,
                 coursesAvailable,
+                accountHolderName,
+                bankName,
+                branchName,
+                accountNumber,
+                ifscCode,
             });
         }
 

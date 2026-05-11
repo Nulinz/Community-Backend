@@ -33,7 +33,12 @@ const eventSchema = new mongoose.Schema(
     organizer: { type: String, required: true, trim: true },
     mode: { type: String, required: true },
     eventDate: { type: Date, required: true },
-    registrationType: { type: String, required: true },
+    registrationType: {
+  type: String,
+  enum: ["Free", "Paid"],
+  required: true,
+  default: "Free",
+},
     registrationStartDate: { type: Date },
     registrationEndDate: { type: Date },
     totalSeats: { type: Number },
@@ -75,14 +80,19 @@ const eventSchema = new mongoose.Schema(
     accommodationProvide: { type: String },
     separatedForBoysGirls: { type: String },
     onlyForOutstationParticipants: { type: String },
-
+ eventStartTime: { type: String, trim: true },
     // Team & Eligibility
     incharges: [inchargeSchema],
     eligibilityDetails: { type: String, trim: true },
     allowedDepartments: {
   type: [String],
 },
-    teamOrIndividualEvent: { type: String },
+    teamOrIndividualEvent: {
+  type: String,
+  enum: ["Team", "Individual", "Both"],
+  required: true,
+  default: "Individual",
+},
     teamSizeMinimum: { type: Number },
     teamSizeMaximum: { type: Number },
 
