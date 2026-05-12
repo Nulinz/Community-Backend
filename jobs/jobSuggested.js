@@ -478,10 +478,10 @@ const runJobSuggestionCron = async () => {
   try {
     // ── Fetch all active jobs once (reused for all users) ─────────────
     const [internships, freelances] = await Promise.all([
-      Internship.find({ isActive: true })
+      Internship.find({ isActive:true,status:"approved" })
         .select("_id jobTitle organizer skill_set c_by applicationDeadline mode location")
         .lean(),
-      Freelance.find({ isActive: true })
+      Freelance.find({ isActive:true,status:"approved" })
         .select("_id jobTitle organizer skill_set c_by applicationDeadline mode location")
         .lean(),
     ]);

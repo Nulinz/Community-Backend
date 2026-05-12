@@ -40,7 +40,7 @@ export const createConferenceForm = async (req, res, next) => {
         const { id, _id, ...rest } = req.body;
         const targetId = id || _id;
         const isUpdate = !!targetId;
-
+        const status=req?.user?.role==="admin"?"approved":"pending"
         const {
             eventName,
             organizer,
@@ -112,8 +112,9 @@ export const createConferenceForm = async (req, res, next) => {
             oldCoverImagePath = conference.coverImage;
         } else {
             conference = new Conference({ c_by: req.user._id });
+            conference.status=status
         }
-
+conference.status=status
         // Update fields
         conference.eventName = toCleanString(eventName);
         conference.organizer = toCleanString(organizer);
@@ -191,14 +192,24 @@ export const createConferenceForm = async (req, res, next) => {
 
 export const getAllConference = async (req, res, next) => {
     try {
-        const user=req.user
+        const user = req.user;
+        const { status } = req.query;
 
-        let query={
-          
+        let query = {};
+
+        switch (status) {
+            case "community":
+                query.c_by = user._id;
+                break;
+            case "pending":
+            case "approved":
+            case "rejected":
+                query.status = status;
+                break;
+            default:
+                query.status = "pending";
         }
 
-        query.c_by=user._id
-        
         const conferences = await Conference.find(query).sort({ createdAt: -1 });
 
         res.status(200).json({
@@ -209,7 +220,6 @@ export const getAllConference = async (req, res, next) => {
         next(error);
     }
 };
-
 
 
 export const getConferenceById = async (req, res, next) => {

@@ -27,6 +27,13 @@ const eventSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+     rejected_reason: { type: String },
+    status: {
+  type: String,
+  required: true,
+  enum: ["pending", "approved", "rejected"],
+  default: "pending"
+},
     // Basic Details
     eventType: { type: String, required: true },
     eventName: { type: String, required: true, trim: true },

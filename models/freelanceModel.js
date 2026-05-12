@@ -8,6 +8,13 @@ const freelanceSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    rejected_reason: { type: String },
+    status: {
+  type: String,
+  required: true,
+  enum: ["pending", "approved", "rejected"],
+  default: "pending"
+},
     jobTitle: { type: String, required: true, trim: true },
     companyName: { type: String, required: true, trim: true },
     mode: { type: String, required: true },

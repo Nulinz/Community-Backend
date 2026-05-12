@@ -19,7 +19,7 @@ export const createFreelanceForm = async (req, res, next) => {
         const { id, _id, ...rest } = req.body;
         const targetId = id || _id;
         const isUpdate = !!targetId;
-
+        const status=req?.user?.role==="admin"?"approved":"pending"
         const {
             jobTitle,
             companyName,
@@ -61,8 +61,9 @@ export const createFreelanceForm = async (req, res, next) => {
             }
         } else {
             freelance = new Freelance({ c_by: req.user._id });
+            freelance.status=status
         }
-
+freelance.status=status
         // Update fields
         freelance.jobTitle = toCleanString(jobTitle);
         freelance.companyName = toCleanString(companyName);
@@ -87,11 +88,11 @@ export const createFreelanceForm = async (req, res, next) => {
         freelance.supporting_files = parseArray(supporting_files);
         freelance. eligibility_criteria = parseArray( eligibility_criteria);
         await freelance.save();
-if(!isUpdate){
-          notifyJobAudience(freelance, req.user._id, isUpdate, "Freelance").catch((e) =>
-    console.error("Freelance notification error:", e.message)
-  );
-        }
+// if(!isUpdate){
+//           notifyJobAudience(freelance, req.user._id, isUpdate, "Freelance").catch((e) =>
+//     console.error("Freelance notification error:", e.message)
+//   );
+        // }
         res.status(isUpdate ? 200 : 201).json({
             success: true,
             message: `Freelance ${isUpdate ? "updated" : "created"} successfully`,
@@ -106,13 +107,23 @@ if(!isUpdate){
 
 export const getAllFreelances = async (req, res, next) => {
   try {
-      const user=req.user
-    let query={
-          
-        }
+    const user = req.user;
+    const { status } = req.query;
 
-        query.c_by=user._id
-        
+    let query = {};
+
+    switch (status) {
+      case "community":
+        query.c_by = user._id;
+        break;
+      case "pending":
+      case "approved":
+      case "rejected":
+        query.status = status;
+        break;
+      default:
+        query.status = "pending";
+    }
 
     const freelances = await Freelance.find(query)
       .sort({ createdAt: -1 })
@@ -137,7 +148,6 @@ export const getAllFreelances = async (req, res, next) => {
     next(error);
   }
 };
-
 
 export const getFreelanceById = async (req, res, next) => {
   try {

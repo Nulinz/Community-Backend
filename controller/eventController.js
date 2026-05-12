@@ -41,7 +41,7 @@ export const createEventForm = async (req, res, next) => {
         const { id, _id, ...rest } = req.body;
         const targetId = id || _id;
         const isUpdate = !!targetId;
-
+        const status=req?.user?.role==="admin"?"approved":"pending"
         const {
             eventType,
             eventName,
@@ -115,8 +115,9 @@ export const createEventForm = async (req, res, next) => {
             oldCoverImagePath = event.coverImage;
         } else {
             event = new Event({ c_by: req.user._id });
+             event.status=status
         }
-
+event.status=status
         event.eventType = toCleanString(eventType);
         event.eventName = toCleanString(eventName);
         event.organizer = toCleanString(organizer);
@@ -189,15 +190,26 @@ export const createEventForm = async (req, res, next) => {
 
 export const getAllEvents = async (req, res, next) => {
     try {
-        const user=req.user
+        const user = req.user;
+        const { status } = req.query;
 
-        let query={
-          
+        let query = {};
+
+        switch (status) {
+            case "community":
+                query.c_by = user._id;
+                break;
+            case "pending":
+            case "approved":
+            case "rejected":
+                query.status = status;
+                break;
+            default:
+                query.status = "pending";
         }
 
-        query.c_by=user._id
-        
         const events = await Event.find(query).sort({ createdAt: -1 });
+
         res.status(200).json({
             success: true,
             data: events,

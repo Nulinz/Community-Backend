@@ -136,3 +136,102 @@ export const adminDashBoard = async (req, res) => {
   }
 };
 
+export const updateEventStatus = async (req, res, next) => {
+  try {
+    const { event_id, eventType, status, rejected_reason } = req.body;
+
+    if (!["approved", "rejected", "pending"].includes(status)) {
+      return res.status(400).json({ success: false, message: "Invalid status" });
+    }
+
+    if (status === "rejected" && !rejected_reason) {
+      return res.status(400).json({ success: false, message: "Rejected reason is required" });
+    }
+
+    const modelMap = {
+      competition: Competition,
+      conference:  Conference,
+      event:       Event,
+      seminar:     Seminar,
+    };
+
+    const Model = modelMap[eventType?.toLowerCase()];
+    if (!Model) {
+      return res.status(400).json({ success: false, message: "Invalid eventType" });
+    }
+
+    const updateData = { status };
+    if (status === "rejected") {
+      updateData.rejected_reason = rejected_reason;
+    } else {
+      updateData.rejected_reason = null; // clear reason if approved/pending
+    }
+
+    const updated = await Model.findByIdAndUpdate(
+      event_id,
+      updateData,
+      { new: true }
+    );
+
+    if (!updated) {
+      return res.status(404).json({ success: false, message: "Event not found" });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Status updated to ${status}`,
+      data: updated,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+export const updateJobStatus = async (req, res, next) => {
+  try {
+    const { job_id, jobType, status, rejected_reason } = req.body;
+
+    if (!["approved", "rejected", "pending"].includes(status)) {
+      return res.status(400).json({ success: false, message: "Invalid status" });
+    }
+
+    if (status === "rejected" && !rejected_reason) {
+      return res.status(400).json({ success: false, message: "Rejected reason is required" });
+    }
+
+    const modelMap = {
+      internship: Internship,
+      freelance:  Freelance,
+    };
+
+    const Model = modelMap[jobType?.toLowerCase()];
+    if (!Model) {
+      return res.status(400).json({ success: false, message: "Invalid jobType" });
+    }
+
+    const updateData = { status };
+    if (status === "rejected") {
+      updateData.rejected_reason = rejected_reason;
+    } else {
+      updateData.rejected_reason = null; // clear reason if approved/pending
+    }
+
+    const updated = await Model.findByIdAndUpdate(
+      job_id,
+      updateData,
+      { new: true }
+    );
+
+    if (!updated) {
+      return res.status(404).json({ success: false, message: "Job not found" });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Status updated to ${status}`,
+      data: updated,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+

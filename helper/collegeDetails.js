@@ -29,7 +29,7 @@ export const getCollegeByEventId = async ({
 
 const eventData = await Model.findById(eventId)
   .populate("c_by", "name role email phone")
-  .select("c_by");
+  .select("c_by name role email phone");
 
 if (!eventData || !eventData.c_by) {
   return {
@@ -38,10 +38,10 @@ if (!eventData || !eventData.c_by) {
   };
 }
 
-console.log(eventData)
+
 
 let collegeData = null;
-
+console.log("iushtgu")
 // If creator is admin
 if (eventData.c_by.role === "admin") {
 
@@ -51,6 +51,8 @@ if (eventData.c_by.role === "admin") {
     email:eventData?.c_by?.email,
     phone:eventData?.c_by?.phone,
     userId: eventData.c_by._id,
+    companyLogo:"uploads/Nulinz LOGO 3.png",
+    aboutUs: "We connect talented professionals, companies, and communities through a modern platform designed for networking, collaboration, internships, freelance opportunities, events, and career growth. Our mission is to help users build meaningful professional relationships, discover opportunities, and grow together in a trusted digital community."
   };
 
 } else {
@@ -58,7 +60,7 @@ if (eventData.c_by.role === "admin") {
   // Find college using userId
   collegeData = await College.findOne({
     userId: eventData.c_by._id,
-  });
+  }).populate("userId","name role phone email");
 
   if (!collegeData) {
     return {

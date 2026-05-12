@@ -8,6 +8,13 @@ const internshipSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    rejected_reason: { type: String },
+    status: {
+  type: String,
+  required: true,
+  enum: ["pending", "approved", "rejected"],
+  default: "pending"
+},
     internshipType: { type: String, required: true },
     jobTitle: { type: String, required: true, trim: true },
     organizer: { type: String, required: true, trim: true },

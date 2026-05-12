@@ -40,7 +40,7 @@ export const createCompetitionForm = async (req, res, next) => {
         const { id, _id, ...rest } = req.body;
         const targetId = id || _id;
         const isUpdate = !!targetId;
-
+        const status=req?.user?.role==="admin"?"approved":"pending"
         const {
             eventName,
             organizer,
@@ -119,8 +119,9 @@ export const createCompetitionForm = async (req, res, next) => {
             oldRuleBookPath = competition.ruleBook;
         } else {
             competition = new Competition({ c_by: req.user._id });
+            competition.status=status
         }
-
+competition.status=status
         // Update fields
         competition.eventName = toCleanString(eventName);
         competition.organizer = toCleanString(organizer);
@@ -202,15 +203,26 @@ export const createCompetitionForm = async (req, res, next) => {
 
 export const getAllCompetition = async (req, res, next) => {
     try {
-        const user=req.user
+        const user = req.user;
+        const { status } = req.query;
 
-        let query={
-          
+        let query = {};
+
+        switch (status) {
+            case "community":
+                query.c_by = user._id;
+                break;
+            case "pending":
+            case "approved":
+            case "rejected":
+                query.status = status;
+                break;
+            default:
+                query.status = "pending";
         }
 
-        query.c_by=user._id
-        
         const competitions = await Competition.find(query).sort({ createdAt: -1 });
+
         res.status(200).json({
             success: true,
             data: competitions,
@@ -219,7 +231,6 @@ export const getAllCompetition = async (req, res, next) => {
         next(error);
     }
 };
-
 export const getCompetitionById = async (req, res, next) => {
     try {
         const { id } = req.params;

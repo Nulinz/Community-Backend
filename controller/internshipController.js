@@ -14,7 +14,7 @@ export const createInternshipForm = async (req, res, next) => {
         const { id, _id, ...rest } = req.body;
         const targetId = id || _id;
         const isUpdate = !!targetId;
-
+        const status=req?.user?.role==="admin"?"approved":"pending"
         const {
             internshipType,
             jobTitle,
@@ -59,8 +59,9 @@ export const createInternshipForm = async (req, res, next) => {
             }
         } else {
             internship = new Internship({ c_by: req.user._id });
+            internship.status=status
         }
-
+internship.status=status
         // Update fields
         internship.internshipType = toCleanString(internshipType);
         internship.jobTitle = toCleanString(jobTitle);
@@ -95,11 +96,11 @@ export const createInternshipForm = async (req, res, next) => {
 
 
         await internship.save();
-        if(!isUpdate){
-          notifyJobAudience(internship, req.user._id, isUpdate, "Internship").catch((e) =>
-    console.error("Freelance notification error:", e.message)
-  );
-        }
+  //       if(!isUpdate){
+  //         notifyJobAudience(internship, req.user._id, isUpdate, "Internship").catch((e) =>
+  //   console.error("Freelance notification error:", e.message)
+  // );
+        // }
         
         res.status(isUpdate ? 200 : 201).json({
             success: true,
@@ -112,17 +113,25 @@ export const createInternshipForm = async (req, res, next) => {
     }
 };
 
-
-
 export const getAllInternships = async (req, res, next) => {
   try {
-      const user=req.user
-    let query={
-          
-        }
+    const user = req.user;
+    const { status } = req.query;
 
-        query.c_by=user._id
-        
+    let query = {};
+
+    switch (status) {
+      case "community":
+        query.c_by = user._id;
+        break;
+      case "pending":
+      case "approved":
+      case "rejected":
+        query.status = status;
+        break;
+      default:
+        query.status = "pending";
+    }
 
     const internships = await Internship.find(query)
       .sort({ createdAt: -1 })
@@ -148,8 +157,6 @@ export const getAllInternships = async (req, res, next) => {
     next(error);
   }
 };
-
-
 
 
 

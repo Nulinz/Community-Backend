@@ -40,7 +40,7 @@ export const createSeminarForm = async (req, res, next) => {
         const { id, _id, ...rest } = req.body;
         const targetId = id || _id;
         const isUpdate = !!targetId;
-
+        const status=req?.user?.role==="admin"?"approved":"pending"
         if (isUpdate && !mongoose.Types.ObjectId.isValid(targetId)) {
             throw Object.assign(new Error("Invalid Seminar ID format"), { status: 400 });
         }
@@ -117,8 +117,9 @@ export const createSeminarForm = async (req, res, next) => {
             oldCoverImagePath = seminar.coverImage;
         } else {
             seminar = new Seminar({ c_by: req.user._id });
+            seminar.status=status
         }
-
+  seminar.status=status
         // Update fields
         seminar.eventType = toCleanString(eventType);
         seminar.eventName = toCleanString(eventName);
@@ -190,18 +191,28 @@ export const createSeminarForm = async (req, res, next) => {
         next(error);
     }
 };
-
 export const getAllSeminars = async (req, res, next) => {
     try {
-        const user=req.user
+        const user = req.user;
+        const { status } = req.query;
 
-        let query={
-          
+        let query = {};
+
+        switch (status) {
+            case "community":
+                query.c_by = user._id;
+                break;
+            case "pending":
+            case "approved":
+            case "rejected":
+                query.status = status;
+                break;
+            default:
+                query.status = "pending";
         }
 
-        query.c_by=user._id
-        
         const seminars = await Seminar.find(query).sort({ createdAt: -1 });
+
         res.status(200).json({
             success: true,
             data: seminars,
@@ -210,7 +221,6 @@ export const getAllSeminars = async (req, res, next) => {
         next(error);
     }
 };
-
 
 
 

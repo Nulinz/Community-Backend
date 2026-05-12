@@ -28,6 +28,13 @@ const conferenceSchema = new mongoose.Schema(
       index: true,
     },
     // Basic Details
+    rejected_reason: { type: String },
+    status: {
+  type: String,
+  required: true,
+  enum: ["pending", "approved", "rejected"],
+  default: "pending"
+},
     eventName: { type: String, required: true, trim: true },
     organizer: { type: String, required: true, trim: true },
     mode: { type: String, required: true },

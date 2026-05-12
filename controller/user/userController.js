@@ -290,7 +290,7 @@ const userDashboard = async (req, res) => {
 
     // ── Step 2: Fetch data ──────────────────────────────────────
     const [popularEventsRaw, topCompanies, suggestedJobs] = await Promise.all([
-      Event.find({ isActive: true })
+      Event.find({ isActive: true ,status:"approved"})
         .sort({ createdAt: -1 })
         .limit(3)
         .select(
@@ -477,7 +477,7 @@ const getJobs = async (req, res) => {
     // ── Step 2: Fetch jobs (excluding saved + applied) ────────────
     const [internships, freelances] = await Promise.all([
       Internship.find({
-        _id: { $nin: excludedIds }, // ✅ FILTER
+        _id: { $nin: excludedIds },isActive:true,status:"approved"
       })
         .sort({ createdAt: -1 })
         .limit(3)
@@ -485,7 +485,7 @@ const getJobs = async (req, res) => {
         .populate("c_by", "role"),
 
       Freelance.find({
-        _id: { $nin: excludedIds }, // ✅ FILTER
+        _id: { $nin: excludedIds }, isActive:true,status:"approved"
       })
         .sort({ createdAt: -1 })
         .limit(3)
@@ -550,7 +550,7 @@ const getAllInternships = async (req, res) => {
   try {
     const userId = req.user._id;
    
-    const internships = await Internship.find({isActive:true})
+    const internships = await Internship.find({isActive:true,status:"approved"})
       .sort({ createdAt: -1 })
       .select("jobTitle location companyName duration salary eligibility createdAt c_by")
       .populate("c_by", "role");
@@ -609,7 +609,9 @@ const getAllFreelances = async (req, res) => {
 
     // ── Step 2: Fetch freelances (exclude applied) ─────────────
     const freelances = await Freelance.find({
-      _id: { $nin: appliedIds }, // ✅ ONLY applied filtered
+      _id: { $nin: appliedIds },
+      isActive:true,
+      status:"approved"
     })
       .sort({ createdAt: -1 })
       .select("eligibility description companyName jobTitle jobStartDate totalOpenings mode salary createdAt c_by")
@@ -1102,7 +1104,7 @@ const getAllCompetitions = async (req, res) => {
   try {
     const userId = req.user._id;
 
-    const competitions = await Competition.find()
+    const competitions = await Competition.find({isActive:true,status:"approved"})
       .sort({ createdAt: -1 })
       .select("eventName registrationType coverImage organizer eventDate eligibilityDetails city  totalSeats individualFees teamFees lateFees mode registrationStartDate createdAt");
 
@@ -2545,7 +2547,7 @@ const getAllConferences = async (req, res) => {
   try {
     const userId = req.user._id;
 
-    const conferences = await Conference.find({ isActive: true })
+    const conferences = await Conference.find({isActive:true,status:"approved"})
       .sort({ createdAt: -1 })
       .select(
         "eventName organizer registrationType mode eventDate registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees city  eligibilityDetails teamOrIndividualEvent createdAt"
@@ -2605,7 +2607,6 @@ const getConferenceProfile = async (req, res) => {
         college,
         ...conference.toObject(),
         is_registered,
-        college,
         availableSeats:availability?.availableSeats
       },
     });
@@ -2622,7 +2623,7 @@ const getAllTechnicalEvents = async (req, res) => {
   try {
     const userId = req.user._id;
 
-    const events = await Event.find({ isActive: true, eventType: "Technical" })
+    const events = await Event.find({ isActive:true,status:"approved", eventType: "Technical" })
       .sort({ createdAt: -1 })
       .select(
         "eventName eventType  organizer mode eventDate registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees city  eligibilityDetails teamOrIndividualEvent createdAt"
@@ -2654,7 +2655,7 @@ const getAllNonTechnicalEvents = async (req, res) => {
   try {
     const userId = req.user._id;
 
-    const events = await Event.find({ isActive: true, eventType: "Non Technical" })
+    const events = await Event.find({ isActive:true,status:"approved", eventType: "Non Technical" })
       .sort({ createdAt: -1 })
       .select(
         "eventName eventType organizer mode eventDate registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees city  eligibilityDetails teamOrIndividualEvent createdAt"
@@ -2730,7 +2731,7 @@ const getAllTechnicalSeminars = async (req, res) => {
   try {
     const userId = req.user._id;
 
-    const seminars = await Seminar.find({ isActive: true, eventType: "Technical" })
+    const seminars = await Seminar.find({ isActive:true,status:"approved", eventType: "Technical" })
       .sort({ createdAt: -1 })
       .select(
         "eventName eventType organizer mode eventDate registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees city  eligibilityDetails teamOrIndividualEvent createdAt"
@@ -2761,7 +2762,7 @@ const getAllNonTechnicalSeminars = async (req, res) => {
   try {
     const userId = req.user._id;
 
-    const seminars = await Seminar.find({ isActive: true, eventType: "Non Technical" })
+    const seminars = await Seminar.find({isActive:true,status:"approved", eventType: "Non Technical" })
       .sort({ createdAt: -1 })
       .select(
         "eventName eventType organizer mode eventDate registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees city  eligibilityDetails teamOrIndividualEvent createdAt"
@@ -3034,7 +3035,7 @@ const getCompanyProfile = async (req, res) => {
 
     // ── Fetch all in parallel ───────────────────────────────────
     const [followCount, isFollowing, internshipsRaw, freelancesRaw] = await Promise.all([
-      CompanyFollow.countDocuments({ companyId: id }),
+      CompanyFollow.countDocuments({ companyId: companyUserId }),
       CompanyFollow.findOne({ userId, companyId:company.userId }),
 
       // ✅ Internships posted by this company
@@ -3132,7 +3133,7 @@ const getEventsPage = async (req, res) => {
     const userId = req.user._id;
     const now = new Date();
 
-    const upcomingRaw = await Event.find({ isActive: true, eventDate: { $gte: now } })
+    const upcomingRaw = await Event.find({ isActive: true,status:"approved", eventDate: { $gte: now } })
       .sort({ eventDate: 1 })
       .limit(2)
       .select("eventName registrationType eventType organizer mode eventDate coverImage city totalSeats individualFees teamFees registrationEndDate createdAt");
@@ -3140,12 +3141,12 @@ const getEventsPage = async (req, res) => {
     const upcomingIds = upcomingRaw.map((e) => e._id);
 
     const [technicalRaw, nonTechnicalRaw] = await Promise.all([
-      Event.find({ isActive: true, eventType: "Technical", _id: { $nin: upcomingIds } })
+      Event.find({isActive: true,status:"approved", eventType: "Technical", _id: { $nin: upcomingIds } })
         .sort({ createdAt: -1 })
         .limit(3)
         .select("eventName registrationType eventType organizer mode eventDate coverImage city totalSeats individualFees teamFees registrationEndDate createdAt"),
 
-      Event.find({ isActive: true, eventType: "Non Technical", _id: { $nin: upcomingIds } })
+      Event.find({ isActive: true,status:"approved", eventType: "Non Technical", _id: { $nin: upcomingIds } })
         .sort({ createdAt: -1 })
         .limit(3)
         .select("eventName registrationType eventType organizer mode eventDate coverImage city totalSeats individualFees teamFees registrationEndDate createdAt"),
@@ -3192,7 +3193,7 @@ const getSeminarsPage = async (req, res) => {
     const userId = req.user._id;
     const now = new Date();
 
-    const upcomingRaw = await Seminar.find({ isActive: true, eventDate: { $gte: now } })
+    const upcomingRaw = await Seminar.find({isActive: true,status:"approved", eventDate: { $gte: now } })
       .sort({ eventDate: 1 })
       .limit(2)
       .select("eventName eventType registrationType organizer mode eventDate coverImage city totalSeats individualFees teamFees registrationEndDate createdAt");
@@ -3200,12 +3201,12 @@ const getSeminarsPage = async (req, res) => {
     const upcomingIds = upcomingRaw.map((s) => s._id);
 
     const [technicalRaw, nonTechnicalRaw] = await Promise.all([
-      Seminar.find({ isActive: true, eventType: "Technical", _id: { $nin: upcomingIds } })
+      Seminar.find({isActive: true, status:"approved", eventType: "Technical", _id: { $nin: upcomingIds } })
         .sort({ createdAt: -1 })
         .limit(3)
         .select("eventName eventType registrationType city organizer mode eventDate coverImage venueAddress totalSeats individualFees teamFees registrationEndDate createdAt"),
 
-      Seminar.find({ isActive: true, eventType: "Non Technical", _id: { $nin: upcomingIds } })
+      Seminar.find({ isActive: true, status:"approved",  eventType: "Non Technical", _id: { $nin: upcomingIds } })
         .sort({ createdAt: -1 })
         .limit(3)
         .select("eventName eventType registrationType city organizer mode eventDate coverImage venueAddress totalSeats individualFees teamFees registrationEndDate createdAt"),
