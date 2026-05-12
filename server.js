@@ -24,6 +24,7 @@ import { startJobSuggestionCron } from "./jobs/jobSuggested.js";
 import { seedConferences } from "./services/uploadConference.js";
 import { seedSeminars } from "./services/uploadSeminar.js";
 import { seedCompanyByUserId } from "./services/companyCreate.js";
+import { migrateStatusField } from "./services/statusSet.js";
 
 
 const app = express();
@@ -80,7 +81,7 @@ app.use("/api/freelance", freelanceRoutes)
 app.use("/api/admin", adminRoutes)
 
 
-
+//  migrateStatusField()
 
 // error
 app.use((req, res, next) => {

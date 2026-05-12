@@ -13,6 +13,11 @@ const appliedJobSchema = new mongoose.Schema(
       required: true,
       refPath: "jobType",
     },
+    resumeId: {
+      type: mongoose.Schema.Types.ObjectId,
+      required: true,
+       ref: "Resume",
+    },
     c_by:{
    type: mongoose.Schema.Types.ObjectId,
       required: true,

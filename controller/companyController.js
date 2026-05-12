@@ -147,7 +147,7 @@ export const getCompanyDashboard = async (req, res) => {
 export const createCompanyForm = async (req, res, next) => {
     let oldLogoPath = null;
     let oldCoverPath = null;
-
+   console.log(req.body)
     try {
         const id = req.body?.id || req.body?._id;
         const isUpdate = !!id;
@@ -284,16 +284,39 @@ if (!ifscCode) {
             targetUser.phone = phoneNumber;            
             await targetUser.save();
         } else {
-            // Create new user account for the company
-            targetUser = await User.create({
-                name: companyName,
-                email: mailId,
-                phone: phoneNumber,
-                role: "company",
-                is_active:false,
-                password: null
+    // Check existing user by email or phone
+    const existingUser = await User.findOne({
+        $or: [
+            { email: mailId },
+            { phone: phoneNumber }
+        ]
+    });
+
+    if (existingUser) {
+        if (existingUser.email === mailId) {
+            return res.status(400).json({
+                success: false,
+                message: "Email Id already exists"
             });
         }
+        if (existingUser.phone === phoneNumber) {
+            return res.status(400).json({
+                success: false,
+                message: "Mobile Number already exists"
+            });
+        }
+    }
+
+    // Create new user account for the company
+    targetUser = await User.create({
+        name: companyName,
+        email: mailId,
+        phone: phoneNumber,
+        role: "company",
+        is_active: false,
+        password: null
+    });
+}
 
         const targetUserId = targetUser._id;
         const creatorId = req.user._id;
@@ -403,7 +426,7 @@ company.ifscCode = ifscCode;
 
 export const getAllCompany = async (req, res, next) => {
     try {
-        const companies = await Company.find({}).populate("userId", "email phone role isActive").lean();
+        const companies = await Company.find({}).populate("userId", "email phone role is_active").lean();
 
         const flattenedCompanies = companies.map(company => {
             const { userId, ...rest } = company;
@@ -412,7 +435,7 @@ export const getAllCompany = async (req, res, next) => {
                 email: userId?.email || "",
                 phone: userId?.phone || "",
                 role: userId?.role || "",
-                isActive: userId?.isActive ?? true
+                is_active: userId?.is_active ?? true
             };
         });
 
@@ -558,7 +581,7 @@ export const getCompanyById = async (req, res, next) => {
 
     // ── 1. Get Company ─────────────────────────────────────────
     const company = await Company.findById(id)
-      .populate("userId", "email phone role isActive")
+      .populate("userId", "email phone role is_active")
       .lean();
 
     if (!company) {
@@ -745,7 +768,7 @@ export const toggleCompanyStatus = async (req, res, next) => {
 
         user.is_active = !user.is_active;
         await user.save();
-
+        console.log(user)
         res.status(200).json({
             success: true,
             message: `Account ${user.is_active ? "activated" : "deactivated"} successfully`,

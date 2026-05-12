@@ -18,6 +18,37 @@ const companySchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+accountHolderName: {
+  type: String,
+  required: true,
+  trim: true,
+},
+
+bankName: {
+  type: String,
+  required: true,
+  trim: true,
+},
+
+branchName: {
+  type: String,
+  required: true,
+  trim: true,
+},
+
+accountNumber: {
+  type: String,
+  required: true,
+  trim: true,
+},
+
+ifscCode: {
+  type: String,
+  required: true,
+  trim: true,
+},
+
+
     companyName: {
       type: String,
       required: true,

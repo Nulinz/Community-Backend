@@ -480,7 +480,7 @@ const getJobs = async (req, res) => {
         _id: { $nin: excludedIds },isActive:true,status:"approved"
       })
         .sort({ createdAt: -1 })
-        .limit(3)
+        
         .select("jobTitle internshipType location c_by companyName duration salary eligibility createdAt")
         .populate("c_by", "role"),
 
@@ -488,7 +488,7 @@ const getJobs = async (req, res) => {
         _id: { $nin: excludedIds }, isActive:true,status:"approved"
       })
         .sort({ createdAt: -1 })
-        .limit(3)
+      
         .select("eligibility c_by description companyName jobTitle jobStartDate totalOpenings mode salary createdAt")
         .populate("c_by", "role"),
     ]);
@@ -722,6 +722,7 @@ const getSavedJobs = async (req, res) => {
     const savedJobs = await SavedJob.find({ userId })
   .populate({
     path: "jobId",
+      match: { isActive: true }, 
     select:
       "jobTitle location c_by companyName duration salary eligibility createdAt description jobStartDate totalOpenings mode",
     populate: {
@@ -782,7 +783,7 @@ const getSavedJobs = async (req, res) => {
 const applyJob = async (req, res) => {
   try {
     const userId = req.user._id;
-    const { jobId, jobType } = req.body;
+    const { jobId, jobType,resumeId } = req.body;
  
     // Validate required fields
     if (!jobId || !jobType) {
@@ -829,6 +830,7 @@ const applyJob = async (req, res) => {
       userId,
       jobId,
       jobType,
+      resumeId,
       c_by: job.c_by,
     });
  
@@ -854,6 +856,7 @@ const getAppliedJobs = async (req, res) => {
     const appliedJobs = await AppliedJob.find({ userId })
   .populate({
     path: "jobId",
+    match: { isActive: true }, 
     select:
       "jobTitle location c_by companyName duration salary eligibility createdAt description jobStartDate totalOpenings mode",
     populate: {
@@ -2356,48 +2359,12 @@ const createEventRegistration = async (req, res) => {
     // CALCULATE FEES
     // ==============================
 
-    let finalAmount = 0;
-
-    // Free Event
-    if (
-      eventDoc.registrationType === "Free"
-    ) {
-
-      finalAmount = 0;
-
-    } else {
-
-      // Paid Event
-
-      // Team Fees
-      if (type === "Team") {
-
-        finalAmount =
-          Number(eventDoc.teamFees || 0);
-
-      } else {
-
-        // Individual Fees
-        finalAmount =
-          Number(eventDoc.individualFees || 0) *
-          member_count;
-      }
-
-      // Add Late Fees
-      finalAmount +=
-        Number(eventDoc.lateFees || 0);
-    }
 
     // ==============================
     // PAYMENT VALIDATION
     // ==============================
 
-    if (
-      eventDoc.registrationType === "Paid"
-    ) {
-
-      if (finalAmount > 0) {
-
+    if (eventDoc.registrationType === "Paid") {
         if (!transaction_id) {
           return res.status(400).json({
             status: false,
@@ -2411,16 +2378,7 @@ const createEventRegistration = async (req, res) => {
             status: false,
             message: "amount is required",
           });
-        }
-
-        if (Number(amount) !== finalAmount) {
-          return res.status(400).json({
-            status: false,
-            message:
-              `Invalid amount. Payable amount is ${finalAmount}`,
-          });
-        }
-      }
+        } 
     }
 
     // ==============================
@@ -2461,8 +2419,7 @@ const createEventRegistration = async (req, res) => {
     let paymentData = null;
 
     if (
-      eventDoc.registrationType === "Paid" &&
-      finalAmount > 0
+      eventDoc.registrationType === "Paid" 
     ) {
 
       paymentData = await Payment.create({
@@ -2473,7 +2430,7 @@ const createEventRegistration = async (req, res) => {
         eventId,
         eventType,
         c_by: eventDoc.c_by,
-        amount: finalAmount,
+        amount:  amount,
         paymentMethod: "UPI",
         paymentStatus: "Success",
         paymentGateway: "Offline",
@@ -2502,7 +2459,7 @@ const createEventRegistration = async (req, res) => {
           registration._id,
         paymentId:
           paymentData?._id || null,
-        amount: finalAmount,
+        amount,
         registrationType:
           eventDoc.registrationType,
         food: food || "no",
@@ -2522,7 +2479,7 @@ const createEventRegistration = async (req, res) => {
       data: {
         registration,
         payment: paymentData,
-        payableAmount: finalAmount,
+        payableAmount:amount,
         registrationType:
           eventDoc.registrationType,
       },
@@ -3143,12 +3100,12 @@ const getEventsPage = async (req, res) => {
     const [technicalRaw, nonTechnicalRaw] = await Promise.all([
       Event.find({isActive: true,status:"approved", eventType: "Technical", _id: { $nin: upcomingIds } })
         .sort({ createdAt: -1 })
-        .limit(3)
+ 
         .select("eventName registrationType eventType organizer mode eventDate coverImage city totalSeats individualFees teamFees registrationEndDate createdAt"),
 
       Event.find({ isActive: true,status:"approved", eventType: "Non Technical", _id: { $nin: upcomingIds } })
         .sort({ createdAt: -1 })
-        .limit(3)
+       
         .select("eventName registrationType eventType organizer mode eventDate coverImage city totalSeats individualFees teamFees registrationEndDate createdAt"),
     ]);
 
@@ -3203,12 +3160,12 @@ const getSeminarsPage = async (req, res) => {
     const [technicalRaw, nonTechnicalRaw] = await Promise.all([
       Seminar.find({isActive: true, status:"approved", eventType: "Technical", _id: { $nin: upcomingIds } })
         .sort({ createdAt: -1 })
-        .limit(3)
+  
         .select("eventName eventType registrationType city organizer mode eventDate coverImage venueAddress totalSeats individualFees teamFees registrationEndDate createdAt"),
 
       Seminar.find({ isActive: true, status:"approved",  eventType: "Non Technical", _id: { $nin: upcomingIds } })
         .sort({ createdAt: -1 })
-        .limit(3)
+
         .select("eventName eventType registrationType city organizer mode eventDate coverImage venueAddress totalSeats individualFees teamFees registrationEndDate createdAt"),
     ]);
 

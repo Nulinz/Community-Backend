@@ -1,6 +1,8 @@
 import User from "../../models/userModel.js"
 import jwt from "jsonwebtoken";
 import UserDetails from "../../models/userDetails.js";
+import  OtpService  from "../../config/sendSMS.js";
+
 
 export const loginUser = async (req, res) => {
   try {
@@ -24,14 +26,14 @@ export const loginUser = async (req, res) => {
     }
 
     // // 🔹 3. Check user active
-    if (!user.is_active) {
-      return res.status(400).json({
-        status: false,
-        message: "Your Account is deactive",
-        pending:(user.register_status==="completed" )? false : true, // 👈 key logic
-        register_status:user.register_status
-      });
-    }
+    // if (!user.is_active) {
+    //   return res.status(400).json({
+    //     status: false,
+    //     message: "Your Account is deactive",
+    //     pending:(user.register_status==="completed" )? false : true, // 👈 key logic
+    //     register_status:user.register_status
+    //   });
+    // }
 
     // 🔹 4. Compare password
     const isMatch = await user.comparePassword(password);
@@ -147,6 +149,11 @@ export const registerUser = async (req, res) => {
       otp,
       otp_expire,
     });
+    await OtpService.sendOtp(
+  phone,
+  name,
+  otp
+);
     return res.status(200).json({
        status:true,
        message: "User registered. OTP generated",
@@ -459,9 +466,9 @@ export const resendOtp = async (req, res) => {
           message: "User already registered",
         });
       }
-
       user.otp = otp;
       user.otp_expire = otp_expire;
+      await sendOtpSMS({name:user?.name,otp,mobile:phone})
     }
 
     if (type === "forgot") {
