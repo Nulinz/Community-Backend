@@ -12,7 +12,7 @@ const toCleanString = (value) =>
 export const createInternshipForm = async (req, res, next) => {
     try {
         const { id, _id, ...rest } = req.body;
-        const targetId = id || _id;
+        const targetId = id || _id || req.params?.id;;
         const isUpdate = !!targetId;
         const status=req?.user?.role==="admin"?"approved":"pending"
         const {

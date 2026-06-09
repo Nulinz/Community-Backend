@@ -18,7 +18,7 @@ import {
 
 } from "../controller/userController.js";
 import { isAuthenticated, authorizeRoles } from "../middleware/authMiddleware.js";
-import { forgotOtpVerify, getCurrentUser, loginUser, forgotPassword, registerUser, resendOtp, resetPassword, verifyOtp, logout, changePassword } from "../controller/user/authController.js";
+import { forgotOtpVerify, getCurrentUser, loginUser, forgotPassword, registerUser, resendOtp, resetPassword, verifyOtp, logout, changePassword, webLoginUser } from "../controller/user/authController.js"
 import {
   userDashboard,
   getJobs,
@@ -69,7 +69,12 @@ const uploader = multer();
 
 router.post("/register", uploader.none(), registerUser);
 router.get("/logout",isAuthenticated,logout)
+// App login
 router.post("/login", uploader.none(), loginUser)
+// Web login
+router.post("/web-login", uploader.none(), webLoginUser);
+
+
 // 🔹 VERIFY OTP (after register)
 router.post("/verify-otp", uploader.none(), verifyOtp);
 

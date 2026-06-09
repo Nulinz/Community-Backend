@@ -14,6 +14,9 @@ router.get("/all", isAuthenticated, getAllInternships);
 router.get("/getById/:id", isAuthenticated, getInternshipById);
 router.patch("/toggle-status/:id", isAuthenticated, toggleInternshipStatus);
 
+// Update the Internship
+router.put("/update/:id", isAuthenticated, createInternshipForm);
+
 
 
 

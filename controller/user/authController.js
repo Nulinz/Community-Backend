@@ -1,7 +1,7 @@
 import User from "../../models/userModel.js"
 import jwt from "jsonwebtoken";
 import UserDetails from "../../models/userDetails.js";
-import  OtpService  from "../../config/sendSMS.js";
+import  otpService  from "../../config/sendSMS.js";
 
 
 export const loginUser = async (req, res) => {
@@ -16,7 +16,7 @@ export const loginUser = async (req, res) => {
     }
 
     // 🔹 2. Find user
-    const user = await User.findOne({ phone });
+    const user = await User.findOne({ phone })
 
     if (!user) {
       return res.status(404).json({
@@ -96,7 +96,7 @@ export const loginUser = async (req, res) => {
           name: user.name,
           phone: user.phone,
           email: user.email,
-          role:user?.role,
+          role: "user",
           profile_pic:userDetails?.profile_pic
         },
       },
@@ -149,11 +149,11 @@ export const registerUser = async (req, res) => {
       otp,
       otp_expire,
     });
-    await OtpService.sendOtp(
-  phone,
-  name,
-  otp
-);
+    await otpService.sendOtp(
+      phone,
+      name,
+      otp
+    );
     return res.status(200).json({
        status:true,
        message: "User registered. OTP generated",
@@ -292,6 +292,8 @@ export const forgotPassword = async (req, res) => {
     user.forgot_status = "otp_pending";
 
     await user.save();
+
+    await otpService.sendOtp(phone, user.name, otp);
 
     return res.json({
       status:true,
@@ -468,13 +470,14 @@ export const resendOtp = async (req, res) => {
       }
       user.otp = otp;
       user.otp_expire = otp_expire;
-      await sendOtpSMS({name:user?.name,otp,mobile:phone})
+      await otpService.sendOtp(phone, user.name, otp);
     }
 
     if (type === "forgot") {
       user.forgot_otp = otp;
       user.forgot_otp_expire = otp_expire;
       user.forgot_status = "otp_pending";
+      await otpService.sendOtp(phone, user.name, otp);
     }
 
     await user.save();
@@ -621,6 +624,66 @@ export const changePassword = async (req, res) => {
       message: "Failed to change password",
       error: error.message,
     });
+  }
+};
+
+export const webLoginUser = async (req, res) => {
+  try {
+    // 🔹 1. Role is no longer required from the frontend
+    const { phone, password } = req.body; 
+
+    if (!phone || !password)
+      return res.status(400).json({ status: false, message: "Phone and password are required" });
+
+    // 🔹 2. Find user by phone ONLY
+    const user = await User.findOne({ phone }).select("+password");
+
+    if (!user)
+      return res.status(404).json({ status: false, message: "Invalid credentials" });
+
+    // 🔹 3. THE BOUNCER: Check if their actual DB role is allowed on the web
+    const allowedRoles = ["admin", "college", "company"];
+    if (!allowedRoles.includes(user.role)) {
+      return res.status(403).json({ status: false, message: "Access denied. Please use the mobile app." });
+    }
+
+    // 🔹 4. Password check
+    const isMatch = await user.comparePassword(password);
+    if (!isMatch)
+      return res.status(400).json({ status: false, message: "Invalid credentials" });
+
+    // 🔹 5. Active check
+    if (user.is_active === false)
+      return res.status(403).json({ status: false, message: "Account deactivated. Contact support." });
+
+    // 🔹 6. JWT with their auto-detected role
+    const token = jwt.sign(
+      { id: user._id, phone: user.phone, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: "30d" }
+    );
+
+    const userDetails = await UserDetails.findOne({ userId: user._id });
+
+    return res.status(200).json({
+      status: true,
+      message: "Login successfully",
+      data: {
+        token,
+        user: {
+          _id: user._id,
+          name: user.name,
+          phone: user.phone,
+          email: user.email,
+          role: user.role, // Sends the correct role back to React
+          profile_pic: userDetails?.profile_pic
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ status: false, message: "Server error" });
   }
 };
 

@@ -111,9 +111,11 @@ export const loginUser = async (req, res, next) => {
             throw error;
         }
 
-        const user = await User.findOne(email ? { email } : { phone }).select(
-            "+password"
-        );
+        const user = await User.findOne(
+            email 
+                ? { email, role: { $in: ["admin", "college", "company"] } } 
+                : { phone, role: { $in: ["admin", "college", "company"] } }
+            ).select("+password");
 
         if (!user) {
             const error = new Error("Invalid email/phone or password");
@@ -178,7 +180,10 @@ export const forgotPassword = async (req, res, next) => {
             throw error;
         }
 
-        const user = await User.findOne({ phone });
+        const user = await User.findOne({ 
+            phone, 
+            role: { $in: ["admin", "college", "company"] } 
+            });
 
         if (!user) {
             const error = new Error("User not found with this phone number");
@@ -227,7 +232,10 @@ export const verifyOtp = async (req, res, next) => {
             throw error;
         }
 
-        const user = await User.findOne({ phone });
+        const user = await User.findOne({ 
+            phone, 
+            role: { $in: ["admin", "college", "company"] } 
+        });
 
         if (!user) {
             const error = new Error("User not found with this phone number");
@@ -323,7 +331,10 @@ export const createNewPassword = async (req, res, next) => {
             throw error;
         }
 
-        const user = await User.findOne({ phone }).select("+password");
+        const user = await User.findOne({ 
+            phone, 
+            role: { $in: ["admin", "college", "company"] } 
+            }).select("+password");
 
         if (!user) {
             const error = new Error("User not found with this phone number");
@@ -467,7 +478,7 @@ export const adminLogin = async (req, res, next) => {
             throw error;
         }
 
-        const admin = await User.findOne({ phone }).select("+password");
+        const admin = await User.findOne({ phone, role: "admin" }).select("+password");
 
 
         if(!admin){

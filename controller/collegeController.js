@@ -389,7 +389,7 @@ export const createCollegeForm = async (req, res, next) => {
 
 export const getAllCollege = async (req, res, next) => {
   try {
-    const colleges = await College.find({}).populate("userId", "email phone role isActive").lean();
+    const colleges = await College.find({}).populate("userId", "email phone role is_active").lean();
 
     const flattenedColleges = colleges.map(college => {
       const { userId, ...rest } = college;
@@ -414,7 +414,9 @@ export const getAllCollege = async (req, res, next) => {
 export const toggleCollegeStatus = async (req, res, next) => {
   try {
     const { id } = req.params;
+    console.log("toggle hit for id:", id);
     const college = await College.findById(id);
+    console.log("College found:", college?._id);
 
     if (!college) {
       const error = new Error("College not found");
@@ -423,6 +425,7 @@ export const toggleCollegeStatus = async (req, res, next) => {
     }
 
     const user = await User.findById(college.userId);
+    console.log("user before toggle:", user?.is_active);
     if (!user) {
       const error = new Error("Associated user not found");
       error.status = 404;
@@ -431,6 +434,7 @@ export const toggleCollegeStatus = async (req, res, next) => {
 
     user.is_active = !user.is_active;
     await user.save();
+     console.log("user after toggle:", user?.is_active);
 
     res.status(200).json({
       success: true,

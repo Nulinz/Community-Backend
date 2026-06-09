@@ -4,7 +4,7 @@ export class OtpService {
   constructor() {
     this.authKey = "3834756c696e7a36343939";
     this.senderId = "NULINZ";
-    this.templateId = "1707177165132515270";
+    this.templateId = "1707172951004827514";
     this.baseUrl = "https://promo.smso2.com/api/sendhttp.php";
   }
 
