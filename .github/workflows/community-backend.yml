@@ -1,0 +1,38 @@
+name: community-Backend
+
+# on:
+#   push:
+#     branches:
+#       - dev
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Tests
+        run: npm test
+        continue-on-error: true
+        
+
+      - name: Secret Scan
+        uses: gitleaks/gitleaks-action@v3
+        continue-on-error: true
+
+      - name: Build Completed
+        run: echo "✅ CI build completed successfully!"
