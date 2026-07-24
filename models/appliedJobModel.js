@@ -16,18 +16,23 @@ const appliedJobSchema = new mongoose.Schema(
     resumeId: {
       type: mongoose.Schema.Types.ObjectId,
       required: true,
-       ref: "Resume",
+      ref: "Resume",
     },
     c_by:{
-   type: mongoose.Schema.Types.ObjectId,
+      type: mongoose.Schema.Types.ObjectId,
       required: true,
-        ref: "User",
-},
+      ref: "User",
+    },
     jobType: {
       type: String,
       enum: ["Internship", "Freelance"],
       required: true,
     },
+    status: {
+      type: String,
+      enum: ["applied", "selected", "rejected"],
+      default: "applied",
+    }
   },
   { timestamps: true }
 );
