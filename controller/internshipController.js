@@ -3,6 +3,7 @@ import Internship from "../models/internshipModel.js";
 import AppliedJob from "../models/appliedJobModel.js";
 import Attendance from "../models/attendanceModel.js";
 import UserDetails from "../models/userDetails.js";
+import PerformanceEvaluation from "../models/performanceEvaluationModel.js";
 import { notifyJobAudience } from "../helper/jobNotification.js";
 
 const toCleanString = (value) =>
@@ -311,8 +312,10 @@ export const getSelectedCandidates = async (req, res, next) => {
         const userDetails = await UserDetails.findOne({
           userId: app.userId?._id,
         })
-          .select("collegeName ugDegree ugYear pgDegree pgYear")
+          .select("collegeName ugCollegeName pgCollegeName location city ugDegree ugYear pgDegree pgYear")
           .lean();
+
+        const candidateCity = userDetails?.city || app.location || userDetails?.location || "-";
 
         return {
           id: app.userId?._id || app._id,
@@ -321,7 +324,9 @@ export const getSelectedCandidates = async (req, res, next) => {
           name: app.userId?.name || "Candidate",
           mail: app.userId?.email || "",
           contact: app.userId?.phone || "",
-          college: userDetails?.collegeName || "-",
+          college: userDetails?.collegeName || userDetails?.ugCollegeName || userDetails?.pgCollegeName || "-",
+          location: candidateCity,
+          city: candidateCity,
           department: userDetails?.pgDegree || userDetails?.ugDegree || "-",
           year: userDetails?.ugYear || userDetails?.pgYear || "-",
         };
@@ -338,6 +343,22 @@ export const getSelectedCandidates = async (req, res, next) => {
   }
 };
 
+// Helper: Parse date string to UTC Midnight Date to prevent local timezone offsets
+const parseToUTCMidnight = (dateStr) => {
+  if (!dateStr) return new Date();
+  if (dateStr.includes('/')) {
+    const [dd, mm, yyyy] = dateStr.split('/');
+    return new Date(Date.UTC(Number(yyyy), Number(mm) - 1, Number(dd), 0, 0, 0, 0));
+  }
+  const cleanDateStr = dateStr.split('T')[0];
+  const parts = cleanDateStr.split('-').map(Number);
+  if (parts.length === 3) {
+    return new Date(Date.UTC(parts[0], parts[1] - 1, parts[2], 0, 0, 0, 0));
+  }
+  const d = new Date(dateStr);
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0));
+};
+
 // ── Save / Update Daily Attendance ─────────────────────────────
 export const saveAttendance = async (req, res, next) => {
   try {
@@ -348,8 +369,7 @@ export const saveAttendance = async (req, res, next) => {
       throw Object.assign(new Error("Date and records array are required"), { status: 400 });
     }
 
-    const attendanceDate = new Date(date);
-    attendanceDate.setHours(0, 0, 0, 0);
+    const attendanceDate = parseToUTCMidnight(date);
 
     const operations = records.map((record) => {
       const recordStatus = (record.status || "").toLowerCase();
@@ -395,7 +415,7 @@ export const getAttendanceHistory = async (req, res, next) => {
       { $match: { jobId: new mongoose.Types.ObjectId(jobId) } },
       {
         $group: {
-          _id: { $dateToString: { format: "%d/%m/%Y", date: "$date" } },
+          _id: { $dateToString: { format: "%d/%m/%Y", date: "$date", timezone: "UTC" } },
           rawDate: { $first: "$date" },
           presentCount: {
             $sum: { $cond: [{ $eq: ["$status", "present"] }, 1, 0] },
@@ -413,7 +433,7 @@ export const getAttendanceHistory = async (req, res, next) => {
       sNo: String(index + 1).padStart(2, "0"),
       date: item._id,
       rawDate: item.rawDate,
-      presentCount: item.presentCount,
+      presentCount: item.presentCount > 0 ? item.presentCount : null,
       absentCount: item.absentCount > 0 ? item.absentCount : null,
     }));
 
@@ -437,8 +457,7 @@ export const getAttendanceDetails = async (req, res, next) => {
       throw Object.assign(new Error("Date query parameter is required"), { status: 400 });
     }
 
-    const searchDate = new Date(date);
-    searchDate.setHours(0, 0, 0, 0);
+    const searchDate = parseToUTCMidnight(date);
 
     const attendanceRecords = await Attendance.find({
       jobId,
@@ -558,6 +577,61 @@ export const getAppliedCandidateProfile = async (req, res, next) => {
     res.status(200).json({
       success: true,
       data: candidateProfile,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ── Save or Update Performance Evaluation ──────────────────────
+export const savePerformanceEvaluation = async (req, res, next) => {
+  try {
+    const { applicationId, jobId, ratings, remarks } = req.body;
+
+    if (!applicationId) {
+      throw Object.assign(new Error("Application ID is required"), { status: 400 });
+    }
+
+    const application = await AppliedJob.findById(applicationId);
+    if (!application) {
+      throw Object.assign(new Error("Application not found"), { status: 404 });
+    }
+
+    const evaluation = await PerformanceEvaluation.findOneAndUpdate(
+      { applicationId },
+      {
+        $set: {
+          applicationId,
+          jobId: jobId || application.jobId,
+          userId: application.userId,
+          evaluatorId: req.user?._id,
+          ratings: ratings || {},
+          remarks: remarks || {},
+        },
+      },
+      { new: true, upsert: true, runValidators: true }
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Performance evaluation saved successfully",
+      data: evaluation,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ── Get Performance Evaluation by Application ID ─────────────
+export const getPerformanceEvaluation = async (req, res, next) => {
+  try {
+    const { applicationId } = req.params;
+
+    const evaluation = await PerformanceEvaluation.findOne({ applicationId });
+
+    res.status(200).json({
+      success: true,
+      data: evaluation || null,
     });
   } catch (error) {
     next(error);
