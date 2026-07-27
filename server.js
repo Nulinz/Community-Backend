@@ -21,6 +21,7 @@ import seminarRoutes from "./routes/seminarRoutes.js"
 import internshipRoutes from "./routes/internshipRoutes.js"
 import freelanceRoutes from "./routes/freelanceRoutes.js"
 import adminRoutes from "./routes/adminRoutes.js"
+import certificateRoutes from "./routes/certificateRoutes.js";
 import { seedTamilNaduLocations } from "./services/uploadLocation.js";
 import { startEventReminderCron } from "./jobs/eventRemainder.js";
 import { startJobSuggestionCron } from "./jobs/jobSuggested.js";
@@ -83,6 +84,7 @@ app.use("/api/seminar", seminarRoutes)
 app.use("/api/internship", internshipRoutes)
 app.use("/api/freelance", freelanceRoutes)
 app.use("/api/admin", adminRoutes)
+app.use("/api/certificates", certificateRoutes)
 
 
 //  migrateStatusField()

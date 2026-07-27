@@ -318,6 +318,7 @@ export const getSelectedCandidates = async (req, res, next) => {
         const candidateCity = userDetails?.city || app.location || userDetails?.location || "-";
 
         return {
+          userId: app.userId?._id,
           id: app.userId?._id || app._id,
           applicationId: app._id,
           sNo: String(index + 1).padStart(2, "0"),
@@ -514,6 +515,7 @@ export const getAppliedCandidateProfile = async (req, res, next) => {
     }).lean();
 
     const candidateProfile = {
+      userId: application.userId?._id || application.userId,
       applicationId: application._id,
       jobId: application.jobId,
       jobType: application.jobType,

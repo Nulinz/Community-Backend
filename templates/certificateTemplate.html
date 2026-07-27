@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Certificate of Completion</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 0;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      width: 210mm;
+      height: 297mm;
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+      background-color: #f8fafc;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      color: #1e293b;
+    }
+    .certificate-container {
+      width: 194mm;
+      height: 281mm;
+      background: #ffffff;
+      border: 12px solid #0f172a;
+      outline: 2px solid #cbd5e1;
+      outline-offset: -8px;
+      padding: 45px 50px;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      align-items: center;
+      text-align: center;
+    }
+    .header-top-bar {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding: 0 10px;
+    }
+    .header-left, .header-right {
+      display: flex;
+      align-items: center;
+      min-height: 60px;
+    }
+    .company-logo {
+      max-height: 100px;
+      max-width: 250px;
+      object-fit: contain;
+    }
+    .gradenvy-logo {
+      max-height: 60px;
+      max-width: 180px;
+      object-fit: contain;
+    }
+    .header-content {
+      margin-top: 10px;
+    }
+    .org-name {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 3px;
+      color: #2563eb;
+      text-transform: uppercase;
+    }
+    .title {
+      font-size: 34px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      margin-top: 16px;
+      color: #0f172a;
+    }
+    .subtitle {
+      font-size: 16px;
+      color: #64748b;
+      margin-top: 24px;
+      font-style: italic;
+    }
+    .recipient-name {
+      font-size: 42px;
+      font-weight: 700;
+      color: #1d4ed8;
+      margin: 30px 0 20px 0;
+      border-bottom: 2px solid #e2e8f0;
+      display: inline-block;
+      padding-bottom: 8px;
+      min-width: 70%;
+    }
+    .course-details {
+      font-size: 18px;
+      color: #334155;
+      line-height: 1.8;
+      max-width: 85%;
+      margin: 0 auto;
+    }
+    .course-title {
+      font-weight: 700;
+      color: #0f172a;
+      font-size: 20px;
+    }
+    .footer {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      margin-bottom: 15px;
+      padding: 0 15px;
+    }
+    .footer-col {
+      text-align: center;
+    }
+    .signature-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .signature-img {
+      max-height: 52px;
+      max-width: 180px;
+      object-fit: contain;
+      margin-bottom: 4px;
+    }
+    .signature-line {
+      width: 190px;
+      border-bottom: 1.5px solid #94a3b8;
+      margin-bottom: 8px;
+    }
+    .signature-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #475569;
+    }
+    .signatory-designation {
+      font-size: 12px;
+      color: #64748b;
+      margin-top: 2px;
+    }
+    .cert-meta {
+      font-size: 12px;
+      color: #64748b;
+      line-height: 1.6;
+    }
+    .cert-id {
+      font-family: monospace;
+      font-weight: 700;
+      color: #2563eb;
+    }
+  </style>
+</head>
+<body>
+  <div class="certificate-container">
+    <!-- Top Header Bar with Company Logo (Left) and GradEnvy Logo (Right) -->
+    <div class="header-top-bar">
+      <div class="header-left">
+        {{#if companyLogo}}
+          <img src="{{companyLogo}}" class="company-logo" alt="Company Logo" />
+        {{/if}}
+      </div>
+      <div class="header-right">
+        {{#if gradenvyLogo}}
+          <img src="{{gradenvyLogo}}" class="gradenvy-logo" alt="GradEnvy Logo" />
+        {{/if}}
+      </div>
+    </div>
+
+    <!-- Certificate Header Titles -->
+    <div class="header-content">
+      <div class="org-name">{{#if companyName}}{{companyName}}{{else}}Nulinz Community{{/if}}</div>
+      <div class="title">Certificate of Completion</div>
+      <div class="subtitle">This is to certify that</div>
+    </div>
+
+    <!-- Recipient Candidate Name -->
+    <div class="recipient-name">{{name}}</div>
+
+    <!-- Course / Internship Details Body -->
+    <div class="course-details">
+      {{#if customContentBody}}
+        {{{customContentBody}}}
+      {{else}}
+        has successfully completed the internship program in
+        <br />
+        <span class="course-title">{{domain}}</span>
+      {{/if}}
+    </div>
+
+    <!-- Certificate Footer -->
+    <div class="footer">
+      <div class="footer-col cert-meta" style="text-align: left;">
+        <div>Issued Date: <strong>{{issuedDate}}</strong></div>
+        <div>Certificate ID: <span class="cert-id">{{certificateId}}</span></div>
+      </div>
+      <div class="footer-col signature-container">
+        {{#if signatureImg}}
+          <img src="{{signatureImg}}" class="signature-img" alt="Authorized Signature" />
+        {{/if}}
+        <div class="signature-line"></div>
+        <div class="signature-title">{{#if signatoryName}}{{signatoryName}}{{else}}Authorized Signature{{/if}}</div>
+        {{#if signatoryDesignation}}
+          <div class="signatory-designation">{{signatoryDesignation}}</div>
+        {{/if}}
+      </div>
+    </div>
+  </div>
+</body>
+</html>

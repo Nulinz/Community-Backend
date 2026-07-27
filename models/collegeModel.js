@@ -20,34 +20,34 @@ const collegeSchema = new mongoose.Schema(
             trim: true,
         },
         accountHolderName: {
-  type: String,
-  required: true,
-  trim: true,
-},
+            type: String,
+            required: true,
+            trim: true,
+        },
 
-bankName: {
-  type: String,
-  required: true,
-  trim: true,
-},
+        bankName: {
+            type: String,
+            required: true,
+            trim: true,
+        },
 
-branchName: {
-  type: String,
-  required: true,
-  trim: true,
-},
+        branchName: {
+            type: String,
+            required: true,
+            trim: true,
+        },
 
-accountNumber: {
-  type: String,
-  required: true,
-  trim: true,
-},
+        accountNumber: {
+            type: String,
+            required: true,
+            trim: true,
+        },
 
-ifscCode: {
-  type: String,
-  required: true,
-  trim: true,
-},
+        ifscCode: {
+            type: String,
+            required: true,
+            trim: true,
+        },
 
         collegeType: {
             type: String,

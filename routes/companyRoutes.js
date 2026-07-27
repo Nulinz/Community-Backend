@@ -9,6 +9,7 @@ const companyUpload = createUpload("company");
 const uploader = companyUpload.fields([
   { name: "companyLogo", maxCount: 1 },
   { name: "coverImage", maxCount: 1 },
+  { name: "signatureUrl", maxCount: 1 },
 ])
 
 router.get("/dashboard",isAuthenticated,getCompanyDashboard)

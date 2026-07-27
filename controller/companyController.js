@@ -154,6 +154,7 @@ export const createCompanyForm = async (req, res, next) => {
 
         const companyLogoFile = req.files?.companyLogo?.[0];
         const coverImageFile = req.files?.coverImage?.[0];
+        const signatureUrlFile = req.files?.signatureUrl?.[0];
 
         const companyName = toCleanString(req.body?.companyName);
         const companyType = toCleanString(req.body?.companyType);
@@ -164,6 +165,7 @@ export const createCompanyForm = async (req, res, next) => {
         const employees=req?.body?.employees
         let companyLogo = getUploadedFilePath(companyLogoFile);
         let coverImage = getUploadedFilePath(coverImageFile);
+        let signatureUrl = getUploadedFilePath(signatureUrlFile);
 
         const contactPersonName = toCleanString(req.body?.contactPersonName);
         const phoneNumber = toCleanString(req.body?.phoneNumber);
@@ -191,6 +193,9 @@ const ifscCode = toCleanString(req.body?.ifscCode);
 
         const aboutUs = toCleanString(req.body?.aboutUs);
         const certificateAvailability = toCleanString(req.body?.certificateAvailability);
+        const signatoryName = toCleanString(req.body?.signatoryName);
+        const signatoryDesignation = toCleanString(req.body?.signatoryDesignation);
+        const certificateContentBody = toCleanString(req.body?.certificateContentBody);
 
         // Validation
         if (!companyName) throw Object.assign(new Error("Company Name is required"), { status: 400 });
@@ -356,19 +361,18 @@ if (!ifscCode) {
             company.learningOutcomes = learningOutcomes;
             company.aboutUs = aboutUs;
             company.certificateAvailability = certificateAvailability;
-            company.employees=employees
-            company.accountHolderName =
-  accountHolderName;
-
-company.bankName = bankName;
-
-company.branchName = branchName;
-
-company.accountNumber =
-  accountNumber;
-
-company.ifscCode = ifscCode;
-
+            company.employees = employees;
+            company.accountHolderName = accountHolderName;
+            company.bankName = bankName;
+            company.branchName = branchName;
+            company.accountNumber = accountNumber;
+            company.ifscCode = ifscCode;
+            if (signatureUrl) {
+                company.signatureUrl = signatureUrl;
+            }
+            company.signatoryName = signatoryName;
+            company.signatoryDesignation = signatoryDesignation;
+            company.certificateContentBody = certificateContentBody;
 
             await company.save();
         } else {
@@ -394,6 +398,10 @@ company.ifscCode = ifscCode;
                 learningOutcomes,
                 aboutUs,
                 certificateAvailability,
+                signatureUrl: signatureUrl || "",
+                signatoryName: signatoryName || "",
+                signatoryDesignation: signatoryDesignation || "",
+                certificateContentBody: certificateContentBody || "",
                 employees,
                 accountHolderName,
                 bankName,
