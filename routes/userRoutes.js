@@ -55,7 +55,16 @@ import {
 import fileUploader from "../middleware/fileUploader.js";
 import { getNotifications, getUserResumes, markAsRead, updateProfilePic, updateUserDetails, uploadResume } from "../controller/user/profileController.js";
 import { getUserDetails } from "../controller/userDetailController.js";
-import { markEventAttendance, getEventAttendanceStats } from "../controller/user/eventAttendanceController.js";
+import {
+  markEventAttendance,
+  getEventAttendanceStats
+} from "../controller/user/eventAttendanceController.js";
+import {
+  exportEventRegistrationsCSV,
+  exportEventAttendanceCSV,
+  exportJobCandidatesCSV,
+  exportCollegeDashboardRegistrationsCSV
+} from "../controller/exportController.js";
 
 const router = express.Router();
 const uploader = multer();
@@ -227,5 +236,13 @@ router.get("/me", isAuthenticated, getCurrentUser);
 // ─────────────────────────────────────────────
 router.post("/attendance/scan-event-qr", uploader.none(), isAuthenticated, markEventAttendance);
 router.get("/attendance/stats/:eventId", isAuthenticated, getEventAttendanceStats);
+
+// ─────────────────────────────────────────────
+// CSV Export Routes
+// ─────────────────────────────────────────────
+router.get("/export/event-registrations/:eventId", isAuthenticated, exportEventRegistrationsCSV);
+router.get("/export/event-attendance/:eventId", isAuthenticated, exportEventAttendanceCSV);
+router.get("/export/job-candidates/:jobId", isAuthenticated, exportJobCandidatesCSV);
+router.get("/export/college-dashboard-registrations", isAuthenticated, exportCollegeDashboardRegistrationsCSV);
 
 export default router;
