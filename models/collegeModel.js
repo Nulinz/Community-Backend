@@ -119,8 +119,26 @@ const collegeSchema = new mongoose.Schema(
             default: "",
             trim: true,
         },
-
-
+        signatureUrl: {
+            type: String,
+            default: "",
+            trim: true,
+        },
+        signatoryName: {
+            type: String,
+            default: "",
+            trim: true,
+        },
+        signatoryDesignation: {
+            type: String,
+            default: "",
+            trim: true,
+        },
+        certificateContentBody: {
+            type: String,
+            default: "",
+            trim: true,
+        },
     },
     {
         timestamps: true,

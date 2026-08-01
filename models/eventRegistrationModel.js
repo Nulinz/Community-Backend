@@ -91,6 +91,16 @@ const eventRegistrationSchema = new mongoose.Schema(
       enum: ["boys", "girls"],
       default: null,
     },
+    // Attendance Tracking
+    attendanceStatus: {
+      type: String,
+      enum: ["absent", "present"],
+      default: "absent",
+    },
+    attendedAt: {
+      type: Date,
+      default: null,
+    },
   },
   { timestamps: true }
 );

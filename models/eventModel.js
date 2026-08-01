@@ -36,6 +36,7 @@ const eventSchema = new mongoose.Schema(
 },
     // Basic Details
     eventType: { type: String, required: true },
+    eventCategory: { type: String, trim: true },
     eventName: { type: String, required: true, trim: true },
     organizer: { type: String, required: true, trim: true },
     mode: { type: String, required: true },

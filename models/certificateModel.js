@@ -32,7 +32,6 @@ const certificateSchema = new mongoose.Schema(
     companyName: {
       type: String,
       trim: true,
-      default: "Nulinz Community",
     },
     issuedDate: {
       type: Date,

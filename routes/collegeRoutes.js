@@ -9,7 +9,8 @@ const collegeUpload = createUpload("college");
 
 const uploader = collegeUpload.fields([
   { name: "collegeLogo", maxCount: 1 },
-])
+  { name: "signatureUrl", maxCount: 1 },
+]);
 
 router.get("/dashboard",isAuthenticated, getCollegeDashboard)
 router.post("/create", isAuthenticated, uploader, createCollegeForm);

@@ -55,6 +55,7 @@ import {
 import fileUploader from "../middleware/fileUploader.js";
 import { getNotifications, getUserResumes, markAsRead, updateProfilePic, updateUserDetails, uploadResume } from "../controller/user/profileController.js";
 import { getUserDetails } from "../controller/userDetailController.js";
+import { markEventAttendance, getEventAttendanceStats } from "../controller/user/eventAttendanceController.js";
 
 const router = express.Router();
 const uploader = multer();
@@ -221,7 +222,10 @@ router.post("/adminchangepassword", uploader.none(), adminChangePassword);
 router.post("/adminlogout", uploader.none(), adminLogout);
 router.get("/me", isAuthenticated, getCurrentUser);
 
-
-
+// ─────────────────────────────────────────────
+// Event & Competition QR Attendance Routes
+// ─────────────────────────────────────────────
+router.post("/attendance/scan-event-qr", uploader.none(), isAuthenticated, markEventAttendance);
+router.get("/attendance/stats/:eventId", isAuthenticated, getEventAttendanceStats);
 
 export default router;

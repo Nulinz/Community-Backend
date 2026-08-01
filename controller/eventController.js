@@ -44,6 +44,7 @@ export const createEventForm = async (req, res, next) => {
         const status=req?.user?.role==="admin"?"approved":"pending"
         const {
             eventType,
+            eventCategory,
             eventName,
             organizer,
             mode,
@@ -119,6 +120,7 @@ export const createEventForm = async (req, res, next) => {
         }
 event.status=status
         event.eventType = toCleanString(eventType);
+        event.eventCategory = toCleanString(eventCategory);
         event.eventName = toCleanString(eventName);
         event.organizer = toCleanString(organizer);
         event.mode = toCleanString(mode);

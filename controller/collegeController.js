@@ -18,6 +18,8 @@ import EventRegistration from "../models/eventRegistrationModel.js";
 
 import Conference from "../models/conferenceModel.js";
 import Seminar from "../models/seminarModel.js";
+import Certificate from "../models/certificateModel.js";
+import Attendance from "../models/attendanceModel.js";
 
 
 
@@ -78,32 +80,81 @@ export const getCollegeDashboard = async (req, res) => {
   try {
     const userId = req.user._id;
 
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+
     const [
       totalConferences,
       activeConferences,
+      todayConferences,
+      upcomingConferences,
+      liveConferences,
+
       totalCompetitions,
       activeCompetitions,
+      todayCompetitions,
+      upcomingCompetitions,
+      liveCompetitions,
+
       totalSeminars,
       activeSeminars,
+      todaySeminars,
+      upcomingSeminars,
+      liveSeminars,
+
       totalEvents,
       activeEvents,
+      todayEvents,
+      upcomingEvents,
+      liveEvents,
+
+      totalRegistrations,
+      totalAttendance,
+      totalCertificates,
+      activeCertificates,
+
       lastRegistrations,
     ] = await Promise.all([
       // ── Conference ─────────────────────────────────────────
       Conference.countDocuments({ c_by: userId }),
       Conference.countDocuments({ c_by: userId, isActive: true }),
+      Conference.countDocuments({ c_by: userId, eventDate: { $gte: startOfToday, $lte: endOfToday } }),
+      Conference.countDocuments({ c_by: userId, eventDate: { $gt: endOfToday } }),
+      Conference.countDocuments({ c_by: userId, eventDate: { $gte: startOfToday, $lte: endOfToday }, isActive: true }),
 
       // ── Competition ────────────────────────────────────────
       Competition.countDocuments({ c_by: userId }),
       Competition.countDocuments({ c_by: userId, isActive: true }),
+      Competition.countDocuments({ c_by: userId, eventDate: { $gte: startOfToday, $lte: endOfToday } }),
+      Competition.countDocuments({ c_by: userId, eventDate: { $gt: endOfToday } }),
+      Competition.countDocuments({ c_by: userId, eventDate: { $gte: startOfToday, $lte: endOfToday }, isActive: true }),
 
       // ── Seminar ────────────────────────────────────────────
       Seminar.countDocuments({ c_by: userId }),
       Seminar.countDocuments({ c_by: userId, isActive: true }),
+      Seminar.countDocuments({ c_by: userId, eventDate: { $gte: startOfToday, $lte: endOfToday } }),
+      Seminar.countDocuments({ c_by: userId, eventDate: { $gt: endOfToday } }),
+      Seminar.countDocuments({ c_by: userId, eventDate: { $gte: startOfToday, $lte: endOfToday }, isActive: true }),
 
       // ── Event ──────────────────────────────────────────────
       Event.countDocuments({ c_by: userId }),
       Event.countDocuments({ c_by: userId, isActive: true }),
+      Event.countDocuments({ c_by: userId, eventDate: { $gte: startOfToday, $lte: endOfToday } }),
+      Event.countDocuments({ c_by: userId, eventDate: { $gt: endOfToday } }),
+      Event.countDocuments({ c_by: userId, eventDate: { $gte: startOfToday, $lte: endOfToday }, isActive: true }),
+
+      // ── Total Registrations ────────────────────────────────
+      EventRegistration.countDocuments({ c_by: userId }),
+
+      // ── Total Attendance ───────────────────────────────────
+      EventRegistration.countDocuments({ c_by: userId, attendanceStatus: "present" }),
+
+      // ── Certificates ───────────────────────────────────────
+      Certificate.countDocuments({ $or: [{ createdBy: userId }, { c_by: userId }] }),
+      Certificate.countDocuments({ $or: [{ createdBy: userId }, { c_by: userId }], verified: true }),
 
       // ── Last 5 registrations for this college's events ─────
       EventRegistration.find({ c_by: userId })
@@ -111,6 +162,10 @@ export const getCollegeDashboard = async (req, res) => {
         .limit(5)
         .populate({ path: "userId", select: "name email phone" }),
     ]);
+
+    const aggregatedTodayTotal = todayConferences + todayCompetitions + todaySeminars + todayEvents;
+    const aggregatedLiveTotal = liveConferences + liveCompetitions + liveSeminars + liveEvents;
+    const aggregatedUpcomingTotal = upcomingConferences + upcomingCompetitions + upcomingSeminars + upcomingEvents;
 
     return res.status(200).json({
       status: true,
@@ -120,6 +175,12 @@ export const getCollegeDashboard = async (req, res) => {
           competitions: { total: totalCompetitions, active: activeCompetitions },
           seminars: { total: totalSeminars, active: activeSeminars },
           events: { total: totalEvents, active: activeEvents },
+          today_events: { total: aggregatedTodayTotal, active: aggregatedLiveTotal },
+          upcoming_events: { total: aggregatedUpcomingTotal, active: aggregatedUpcomingTotal },
+          live_events: { total: aggregatedLiveTotal, active: aggregatedLiveTotal },
+          total_registrations: { total: totalRegistrations, active: totalRegistrations },
+          total_attendance: { total: totalAttendance, active: totalAttendance },
+          certificates: { total: totalCertificates, active: activeCertificates },
         },
 
         // Last 5 registered users
@@ -157,6 +218,7 @@ export const createCollegeForm = async (req, res, next) => {
     const isUpdate = !!id;
 
     const collegeLogoFile = req.files?.collegeLogo?.[0];
+    const signatureUrlFile = req.files?.signatureUrl?.[0];
 
     const collegeName = toCleanString(req.body?.collegeName);
     const collegeType = toCleanString(req.body?.collegeType);
@@ -178,12 +240,15 @@ export const createCollegeForm = async (req, res, next) => {
     const branchName = toCleanString(req.body?.branchName);
     const accountNumber = toCleanString(req.body?.accountNumber);
     const ifscCode = toCleanString(req.body?.ifscCode);
-
+    const signatoryName = toCleanString(req.body?.signatoryName);
+    const signatoryDesignation = toCleanString(req.body?.signatoryDesignation);
+    const certificateContentBody = toCleanString(req.body?.certificateContentBody);
 
     const departments = toCleanStringArray(req.body?.departments);
     const coursesAvailable = toCleanStringArray(req.body?.coursesAvailable);
 
     let collegeLogo = getUploadedFilePath(collegeLogoFile);
+    let signatureUrl = getUploadedFilePath(signatureUrlFile);
 
     // Validation
     if (!collegeName) throw Object.assign(new Error("College Name is required"), { status: 400 });
@@ -341,6 +406,12 @@ export const createCollegeForm = async (req, res, next) => {
         accountNumber;
 
       college.ifscCode = ifscCode;
+      if (signatureUrl) {
+        college.signatureUrl = signatureUrl;
+      }
+      college.signatoryName = signatoryName || "";
+      college.signatoryDesignation = signatoryDesignation || "";
+      college.certificateContentBody = certificateContentBody || "";
       await college.save();
     } else {
       college = await College.create({
@@ -367,6 +438,10 @@ export const createCollegeForm = async (req, res, next) => {
         branchName,
         accountNumber,
         ifscCode,
+        signatureUrl: signatureUrl || "",
+        signatoryName: signatoryName || "",
+        signatoryDesignation: signatoryDesignation || "",
+        certificateContentBody: certificateContentBody || "",
       });
     }
 
@@ -382,6 +457,7 @@ export const createCollegeForm = async (req, res, next) => {
     // Cleanup newly uploaded files on failure
     cleanupUploadedFiles([
       ...(req.files?.collegeLogo || []),
+      ...(req.files?.signatureUrl || []),
     ]);
     next(error);
   }

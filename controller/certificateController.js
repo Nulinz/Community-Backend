@@ -4,6 +4,7 @@ import crypto from "crypto";
 import Certificate from "../models/certificateModel.js";
 import User from "../models/userModel.js";
 import Company from "../models/companyModel.js";
+import College from "../models/collegeModel.js";
 import { generateCertificatePDFBuffer } from "../services/pdfService.js";
 import mongoose from "mongoose";
 
@@ -53,28 +54,46 @@ export const generateCertificate = async (req, res, next) => {
       }
     }
 
-    // Fetch Company profile details (Logo, Signature, Signatory details, Custom Content)
+    // Fetch Company or College profile details (Logo, Signature, Signatory details, Custom Content)
     let companyRecord = null;
     if (companyId) {
-      companyRecord = await Company.findById(companyId).lean();
+      companyRecord = (await Company.findById(companyId).lean()) || (await College.findById(companyId).lean());
     } else if (req.user?._id) {
-      companyRecord = await Company.findOne({
+      companyRecord = (await Company.findOne({
         $or: [{ userId: req.user._id }, { c_by: req.user._id }]
-      }).lean();
+      }).lean()) || (await College.findOne({
+        $or: [{ userId: req.user._id }, { c_by: req.user._id }]
+      }).lean());
     }
     if (!companyRecord && companyName) {
-      companyRecord = await Company.findOne({
+      companyRecord = (await Company.findOne({
         companyName: new RegExp(`^${companyName.trim()}$`, "i")
-      }).lean();
+      }).lean()) || (await College.findOne({
+        collegeName: new RegExp(`^${companyName.trim()}$`, "i")
+      }).lean());
     }
 
-    if (companyRecord?.companyName) {
-      company = companyRecord.companyName;
+    if (companyRecord?.companyName || companyRecord?.collegeName) {
+      company = companyRecord.companyName || companyRecord.collegeName;
     }
 
-    const companyLogoDataUri = companyRecord?.companyLogo ? await getBase64Image(companyRecord.companyLogo) : "";
+    const logoFile = companyRecord?.companyLogo || companyRecord?.collegeLogo || "";
+    const companyLogoDataUri = logoFile ? await getBase64Image(logoFile) : "";
     const signatureImgDataUri = companyRecord?.signatureUrl ? await getBase64Image(companyRecord.signatureUrl) : "";
     const gradenvyLogoDataUri = await getBase64Image("templates/gradenvyLogo.png");
+
+    let customContentBody = companyRecord?.certificateContentBody || "";
+    if (customContentBody) {
+      customContentBody = customContentBody
+        .replace(/\{\{\s*domain\s*\}\}/gi, internshipDomain)
+        .replace(/\{\s*domain\s*\}/gi, internshipDomain)
+        .replace(/\{\{\s*name\s*\}\}/gi, name)
+        .replace(/\{\s*name\s*\}/gi, name);
+
+      if (!customContentBody.toLowerCase().includes(internshipDomain.toLowerCase())) {
+        customContentBody = `${customContentBody}<br /><span class="course-title">${internshipDomain}</span>`;
+      }
+    }
 
     // Generate unique Certificate ID (e.g. CERT-A8F92B10)
     const randomHex = crypto.randomBytes(4).toString("hex").toUpperCase();
@@ -94,7 +113,7 @@ export const generateCertificate = async (req, res, next) => {
       signatureImg: signatureImgDataUri,
       signatoryName: companyRecord?.signatoryName || "",
       signatoryDesignation: companyRecord?.signatoryDesignation || "",
-      customContentBody: companyRecord?.certificateContentBody || "",
+      customContentBody: customContentBody,
       issuedDate: formattedDate,
       certificateId
     });

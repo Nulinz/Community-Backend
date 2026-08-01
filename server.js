@@ -40,6 +40,7 @@ const allowedOrigins = [
   "http://127.0.0.1:5173",
   "http://192.168.1.2:5173",
   "http://192.168.29.221:5173",
+  "http://192.168.29.74:5173",
 ].filter(Boolean);
 
 app.set("trust proxy", true);
