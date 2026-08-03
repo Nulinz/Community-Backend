@@ -12,6 +12,7 @@ import { checkIsApplied } from "../../helper/isApplied.js";
 import Competition from "../../models/competitionModel.js";
 import EventRegistration from "../../models/eventRegistrationModel.js";
 import { checkIsRegistered } from "../../helper/isRegistered.js";
+import { getSeatAvailability } from "../../helper/getSeatAvailability.js";
 
 
 import Conference from "../../models/conferenceModel.js";
@@ -23,11 +24,12 @@ import CompanyFollow from "../../models/companyFollowModel.js";
 import Location from "../../models/locationModel.js";
 import { saveNotification } from "../../helper/saveNotification.js";
 import { sendAndSaveNotification } from "../../helper/sendAndSaveNotification.js";
+import { awardXP } from "../../services/xpService.js";
+import { calculateLevelInfo } from "../../config/xpConfig.js";
+import User from "../../models/userModel.js";
 import JobSuggested from "../../models/jobSuggestedModel.js"
 import { getCollegeByEventId } from "../../helper/collegeDetails.js";
-import { getSeatAvailability } from "../../helper/getSeatAvailability.js";
-import Payment from "../../models/paymentModel.js"
-import User from "../../models/userModel.js"
+import Payment from "../../models/paymentModel.js";
 
 // const userDashboard = async (req, res) => {
 //   try {
@@ -290,11 +292,11 @@ const userDashboard = async (req, res) => {
 
     // ── Step 2: Fetch data ──────────────────────────────────────
     const [popularEventsRaw, topCompanies, suggestedJobs] = await Promise.all([
-      Event.find({ isActive: true ,status:"approved"})
+      Event.find({ isActive: true, status: { $in: ["approved", "Approved"] } })
         .sort({ createdAt: -1 })
         .limit(3)
         .select(
-          "eventName coverImage registrationType organizer c_by mode description individualFees teamFees lateFees totalSeats eventDate city image isActive createdAt"
+          "eventName coverImage registrationType eventType eventCategory organizer c_by mode description individualFees teamFees lateFees totalSeats eventDate city image isActive createdAt"
         ),
 
       Company.find()
@@ -360,9 +362,20 @@ const userDashboard = async (req, res) => {
       .filter(Boolean)
       .slice(0, 3);                                                  // cap at 3
 
+    // ── Step 5: Fetch User XP & Level Details ──────────────────
+    const userDoc = await User.findById(userId).select("xp level");
+    const levelInfo = calculateLevelInfo(userDoc?.xp || 0);
+
     return res.status(200).json({
       status: true,
       data: {
+        userXp: {
+          xp: userDoc?.xp || 0,
+          level: levelInfo.currentLevel,
+          progressPercentage: levelInfo.progressPercentage,
+          xpForNextLevel: levelInfo.xpForNextLevel,
+          xpNeeded: levelInfo.xpNeeded,
+        },
         popularEvents,
         preferredInternships: preferredInternshipsData,
         topCompanies,
@@ -2469,6 +2482,24 @@ const createEventRegistration = async (req, res) => {
     });
 
     // ==============================
+    // AWARD XP FOR REGISTRATION
+    // ==============================
+
+    const regActionMap = {
+      Event: "EVENT_REGISTRATION",
+      Seminar: "SEMINAR_REGISTRATION",
+      Conference: "CONFERENCE_REGISTRATION",
+      Competition: "COMPETITION_REGISTRATION",
+    };
+    const regActionKey = regActionMap[eventType] || "EVENT_REGISTRATION";
+
+    const xpResult = await awardXP({
+      userId,
+      actionKey: regActionKey,
+      referenceId: registration._id,
+    });
+
+    // ==============================
     // RESPONSE
     // ==============================
 
@@ -2482,6 +2513,9 @@ const createEventRegistration = async (req, res) => {
         payableAmount:amount,
         registrationType:
           eventDoc.registrationType,
+        xpGained: xpResult.xpAwarded || 0,
+        isLevelUp: xpResult.isLevelUp || false,
+        currentLevel: xpResult.level || 1,
       },
     });
 
@@ -2580,10 +2614,10 @@ const getAllTechnicalEvents = async (req, res) => {
   try {
     const userId = req.user._id;
 
-    const events = await Event.find({ isActive:true,status:"approved", eventType: "Technical" })
+    const events = await Event.find({ isActive: true, status: { $in: ["approved", "Approved"] }, eventType: "Technical" })
       .sort({ createdAt: -1 })
       .select(
-        "eventName eventType  organizer mode eventDate registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees city  eligibilityDetails teamOrIndividualEvent createdAt"
+        "eventName eventType eventCategory description allowedDepartments organizer mode eventDate registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees city eligibilityDetails teamOrIndividualEvent c_by status isActive createdAt"
       );
 
     const data = await Promise.all(
@@ -2612,10 +2646,10 @@ const getAllNonTechnicalEvents = async (req, res) => {
   try {
     const userId = req.user._id;
 
-    const events = await Event.find({ isActive:true,status:"approved", eventType: "Non Technical" })
+    const events = await Event.find({ isActive: true, status: { $in: ["approved", "Approved"] }, eventType: "Non Technical" })
       .sort({ createdAt: -1 })
       .select(
-        "eventName eventType organizer mode eventDate registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees city  eligibilityDetails teamOrIndividualEvent createdAt"
+        "eventName eventType eventCategory description allowedDepartments organizer mode eventDate registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees city eligibilityDetails teamOrIndividualEvent c_by status isActive createdAt"
       );
 
     const data = await Promise.all(
@@ -3090,23 +3124,21 @@ const getEventsPage = async (req, res) => {
     const userId = req.user._id;
     const now = new Date();
 
-    const upcomingRaw = await Event.find({ isActive: true,status:"approved", eventDate: { $gte: now } })
+    const upcomingRaw = await Event.find({ isActive: true, status: { $in: ["approved", "Approved"] }, eventDate: { $gte: now } })
       .sort({ eventDate: 1 })
       .limit(2)
-      .select("eventName registrationType eventType organizer mode eventDate coverImage city totalSeats individualFees teamFees registrationEndDate createdAt");
+      .select("eventName registrationType eventType eventCategory description allowedDepartments organizer mode eventDate coverImage city totalSeats individualFees teamFees registrationStartDate registrationEndDate c_by status isActive createdAt");
 
     const upcomingIds = upcomingRaw.map((e) => e._id);
 
     const [technicalRaw, nonTechnicalRaw] = await Promise.all([
-      Event.find({isActive: true,status:"approved", eventType: "Technical", _id: { $nin: upcomingIds } })
+      Event.find({ isActive: true, status: { $in: ["approved", "Approved"] }, eventType: "Technical", _id: { $nin: upcomingIds } })
         .sort({ createdAt: -1 })
- 
-        .select("eventName registrationType eventType organizer mode eventDate coverImage city totalSeats individualFees teamFees registrationEndDate createdAt"),
+        .select("eventName registrationType eventType eventCategory description allowedDepartments organizer mode eventDate coverImage city totalSeats individualFees teamFees registrationStartDate registrationEndDate c_by status isActive createdAt"),
 
-      Event.find({ isActive: true,status:"approved", eventType: "Non Technical", _id: { $nin: upcomingIds } })
+      Event.find({ isActive: true, status: { $in: ["approved", "Approved"] }, eventType: "Non Technical", _id: { $nin: upcomingIds } })
         .sort({ createdAt: -1 })
-       
-        .select("eventName registrationType eventType organizer mode eventDate coverImage city totalSeats individualFees teamFees registrationEndDate createdAt"),
+        .select("eventName registrationType eventType eventCategory description allowedDepartments organizer mode eventDate coverImage city totalSeats individualFees teamFees registrationStartDate registrationEndDate c_by status isActive createdAt"),
     ]);
 
     // ✅ attachFlags + is_registered for all three

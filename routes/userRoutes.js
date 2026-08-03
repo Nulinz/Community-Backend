@@ -1,5 +1,6 @@
 import express from "express";
 import multer from "multer";
+import { getAiTools } from "../controller/user/aiToolsController.js";
 
 import {
   // createNewPassword,
@@ -244,5 +245,10 @@ router.get("/export/event-registrations/:eventId", isAuthenticated, exportEventR
 router.get("/export/event-attendance/:eventId", isAuthenticated, exportEventAttendanceCSV);
 router.get("/export/job-candidates/:jobId", isAuthenticated, exportJobCandidatesCSV);
 router.get("/export/college-dashboard-registrations", isAuthenticated, exportCollegeDashboardRegistrationsCSV);
+
+// ─────────────────────────────────────────────
+// Static AI Tools Route
+// ─────────────────────────────────────────────
+router.get("/ai-tools", getAiTools);
 
 export default router;

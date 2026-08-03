@@ -2,6 +2,8 @@ import User from "../../models/userModel.js"
 import jwt from "jsonwebtoken";
 import UserDetails from "../../models/userDetails.js";
 import  otpService  from "../../config/sendSMS.js";
+import { awardXP } from "../../services/xpService.js";
+import { calculateLevelInfo } from "../../config/xpConfig.js";
 
 
 export const loginUser = async (req, res) => {
@@ -509,7 +511,15 @@ export const getCurrentUser = async (req, res) => {
         userId: user._id,
       });
       details_comp = (userDetails && user.register_status==="completed") ? true : false;
+
+      // 🔹 Award Daily Login XP (Once per calendar day)
+      await awardXP({ userId: user._id, actionKey: "DAILY_LOGIN" });
     }
+
+    // Refetch user to include up-to-date XP & Level details
+    const latestUser = await User.findById(user._id).select("xp level");
+    const levelInfo = calculateLevelInfo(latestUser?.xp || 0);
+
     return res.status(200).json({
       status: true,
       message: "User fetched successfully",
@@ -521,7 +531,11 @@ export const getCurrentUser = async (req, res) => {
           phone: user.phone,
           email: user.email,
           role: user.role,
-          register_status:user.register_status
+          register_status: user.register_status,
+          xp: latestUser?.xp || 0,
+          level: levelInfo.currentLevel,
+          xpForNextLevel: levelInfo.xpForNextLevel,
+          progressPercentage: levelInfo.progressPercentage,
         },
         userDetails: userDetails || null,
       },

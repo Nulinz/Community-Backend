@@ -104,6 +104,18 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+
+    // 🔹 GAMIFICATION / XP SYSTEM
+    xp: {
+      type: Number,
+      default: 0,
+      index: true,
+    },
+
+    level: {
+      type: Number,
+      default: 1,
+    },
   },
   {
     timestamps: true,
