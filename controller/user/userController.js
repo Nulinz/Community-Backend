@@ -311,7 +311,7 @@ const userDashboard = async (req, res) => {
         .populate({
           path: "jobId",
           select:
-            "jobTitle location c_by companyName duration salary eligibility createdAt isActive",
+            "jobTitle location c_by companyName duration salary eligibility createdAt isActive mode internshipType description applicationDeadline skill_set totalOpenings",
           populate: { path: "c_by", select: "role" },
         })
         .sort({ createdAt: -1 }),
@@ -328,8 +328,8 @@ const userDashboard = async (req, res) => {
     // ── Step 4: Build preferredInternships from suggestions ─────
     //           • skip deleted jobs
     //           • skip already-applied jobs
-    //           • limit to 3
-    const preferredInternshipsData = (
+    //           • backfill with recent active internships if < 3
+    let preferredInternshipsData = (
       await Promise.all(
         suggestedJobs.map(async (item) => {
           const job = item.jobId;
@@ -358,9 +358,47 @@ const userDashboard = async (req, res) => {
           };
         })
       )
-    )
-      .filter(Boolean)
-      .slice(0, 3);                                                  // cap at 3
+    ).filter(Boolean);
+
+    // ── Fallback: backfill with latest active approved internships if < 3 ──
+    if (preferredInternshipsData.length < 3) {
+      const existingIds = new Set(
+        preferredInternshipsData.map((j) => j._id.toString())
+      );
+
+      const fallbackJobs = await Internship.find({
+        isActive: true,
+        status: "approved",
+        _id: { $nin: Array.from(appliedIds) },
+      })
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .populate("c_by", "role");
+
+      for (const jobItem of fallbackJobs) {
+        if (preferredInternshipsData.length >= 3) break;
+        if (existingIds.has(jobItem._id.toString())) continue;
+
+        let companyImage = null;
+        if (jobItem.c_by?.role === "admin") {
+          companyImage = STATIC_ADMIN_IMAGE;
+        } else if (jobItem.c_by?.role === "company") {
+          const company = await Company.findOne({ userId: jobItem.c_by._id })
+            .select("companyLogo")
+            .lean();
+          companyImage = company?.companyLogo || null;
+        }
+
+        preferredInternshipsData.push({
+          ...jobItem.toObject(),
+          companyImage,
+          is_applied: false,
+          is_saved: await checkIsSaved(userId, jobItem._id, "Internship"),
+        });
+      }
+    }
+
+    preferredInternshipsData = preferredInternshipsData.slice(0, 3);
 
     // ── Step 5: Fetch User XP & Level Details ──────────────────
     const userDoc = await User.findById(userId).select("xp level");
