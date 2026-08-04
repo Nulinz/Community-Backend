@@ -510,7 +510,7 @@ export const getMyCompany = async (req, res, next) => {
 
     // ── 4. Get Followers ───────────────────────────────────────
     const followers = await CompanyFollow.find({ companyId: companyUserId })
-      .populate("userId", "email phone")
+      .populate("userId", "name email phone")
       .lean();
 
     // ── 5. Enrich each follower with UserDetails ───────────────
@@ -519,15 +519,19 @@ export const getMyCompany = async (req, res, next) => {
         const userDetails = await UserDetails.findOne({
           userId: follow.userId?._id,
         })
-          .select("dob gender profile_pic currentStatus education ugDegree ugFieldOfStudy ugYear pgDegree pgFieldOfStudy pgYear companyName jobTitle yearOfExperience")
+          .select("name dob gender profile_pic currentStatus education ugDegree ugFieldOfStudy ugYear pgDegree pgFieldOfStudy pgYear companyName jobTitle yearOfExperience")
           .lean();
+
+        const followerName = follow.userId?.name || userDetails?.name || null;
 
         return {
           userId: follow.userId?._id,
+          name: followerName,
           email: follow.userId?.email || "",
           phone: follow.userId?.phone || "",
           followedAt: follow.createdAt,
           ...userDetails,
+          name: followerName,
         };
       })
     );
