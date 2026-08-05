@@ -23,6 +23,7 @@ const freelanceSchema = new mongoose.Schema(
     location: { type: String, required: true, trim: true },
     applicationDeadline: { type: Date },
     jobStartDate: { type: Date },
+    jobEndDate: { type: Date },
     salary: { type: Number, default: 0 },
     projectNeeds: [{ type: String, trim: true }],
     eligibility: [{ type: String, trim: true }],

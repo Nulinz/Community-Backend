@@ -505,7 +505,7 @@ export const getMyCompany = async (req, res, next) => {
     // ── 3. Get Freelances (c_by = companyUserId) ───────────────
     const freelances = await Freelance.find({ c_by: companyUserId })
       .sort({ createdAt: -1 })
-      .select("jobTitle location  companyName eligibility jobStartDate duration totalOpenings mode salary createdAt")
+      .select("jobTitle location companyName eligibility jobStartDate jobEndDate duration totalOpenings mode salary createdAt")
       .lean();
 
     // ── 4. Get Followers ───────────────────────────────────────
@@ -622,7 +622,7 @@ export const getCompanyById = async (req, res, next) => {
     // ── 3. Get Freelances (c_by = companyUserId) ───────────────
     const freelances = await Freelance.find({ c_by: companyUserId })
       .sort({ createdAt: -1 })
-      .select("jobTitle location  companyName eligibility jobStartDate duration totalOpenings mode salary createdAt")
+      .select("jobTitle location companyName eligibility jobStartDate jobEndDate duration totalOpenings mode salary createdAt")
       .lean();
 
     // ── 4. Get Followers ───────────────────────────────────────

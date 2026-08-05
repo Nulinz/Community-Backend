@@ -28,6 +28,7 @@ export const createFreelanceForm = async (req, res, next) => {
             duration,
             applicationDeadline,
             jobStartDate,
+            jobEndDate,
             salary,
             projectNeeds,
             eligibility,
@@ -72,6 +73,7 @@ freelance.status=status
         freelance.duration = toCleanString(duration);
         freelance.applicationDeadline = applicationDeadline || undefined;
         freelance.jobStartDate = jobStartDate || undefined;
+        freelance.jobEndDate = jobEndDate || undefined;
         freelance.salary = Number(salary) || 0;
         freelance.location = toCleanString(location)
         freelance.learning = toCleanString(learning);

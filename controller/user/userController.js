@@ -540,7 +540,7 @@ const getJobs = async (req, res) => {
       })
         .sort({ createdAt: -1 })
       
-        .select("eligibility c_by description companyName jobTitle jobStartDate totalOpenings mode salary createdAt")
+        .select("eligibility c_by description companyName jobTitle jobStartDate jobEndDate totalOpenings mode salary createdAt")
         .populate("c_by", "role"),
     ]);
 
@@ -665,7 +665,7 @@ const getAllFreelances = async (req, res) => {
       status:"approved"
     })
       .sort({ createdAt: -1 })
-      .select("eligibility description companyName jobTitle jobStartDate totalOpenings mode salary createdAt c_by")
+      .select("eligibility description companyName jobTitle jobStartDate jobEndDate totalOpenings mode salary createdAt c_by")
       .populate("c_by", "role");
 
     const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
@@ -775,7 +775,7 @@ const getSavedJobs = async (req, res) => {
     path: "jobId",
       match: { isActive: true }, 
     select:
-      "jobTitle location c_by companyName duration salary eligibility createdAt description jobStartDate totalOpenings mode",
+      "jobTitle location c_by companyName duration salary eligibility createdAt description jobStartDate jobEndDate totalOpenings mode",
     populate: {
       path: "c_by",
       select: "role",
@@ -909,7 +909,7 @@ const getAppliedJobs = async (req, res) => {
     path: "jobId",
     match: { isActive: true }, 
     select:
-      "jobTitle location c_by companyName duration salary eligibility createdAt description jobStartDate totalOpenings mode",
+      "jobTitle location c_by companyName duration salary eligibility createdAt description jobStartDate jobEndDate totalOpenings mode",
     populate: {
       path: "c_by",
       select: "role",
@@ -983,7 +983,7 @@ const getMySuggestions = async (req, res) => {
       .populate({
         path: "jobId",
         select:
-          "jobTitle location c_by companyName duration salary eligibility createdAt description jobStartDate totalOpenings mode",
+          "jobTitle location c_by companyName duration salary eligibility createdAt description jobStartDate jobEndDate totalOpenings mode",
         populate: {
           path: "c_by",
           select: "role",
@@ -3716,8 +3716,89 @@ const getCompanyMetaPage = async (req, res) => {
     return res.status(500).send("<h1>Something went wrong</h1>");
   }
 };
+
+const getSubscriptionStatus = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user._id).select(
+      "name email phone subscription"
+    );
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const isExpired = user.subscription?.expiryDate
+      ? new Date() > new Date(user.subscription.expiryDate)
+      : false;
+
+    // Auto-expire only if an explicit expiryDate was set and has passed
+    if (isExpired && user.subscription?.isPlanActive) {
+      user.subscription.isPlanActive = false;
+      await user.save();
+    }
+
+    const isPlanActive = Boolean(user.subscription?.isPlanActive);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        userId: user._id,
+        name: user.name || "",
+        email: user.email || "",
+        phone: user.phone || "",
+        planName: user.subscription?.planName || "Free",
+        isPlanActive,
+        startDate: user.subscription?.startDate || null,
+        expiryDate: user.subscription?.expiryDate || null,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getAllRegisteredUsers = async (req, res, next) => {
+  try {
+    const search = req.query.search || "";
+    const roleFilter = req.query.role;
+
+    const query = { role: "user" };
+
+    if (roleFilter) {
+      query.role = roleFilter;
+    }
+
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { email: { $regex: search, $options: "i" } },
+        { phone: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    const users = await User.find(query)
+      .select(
+        "name email phone role register_status is_active is_pending level xp subscription createdAt updatedAt"
+      )
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      count: users.length,
+      data: users,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export {
   userDashboard,
+  getSubscriptionStatus,
+  getAllRegisteredUsers,
   getJobs,
   getAllInternships,
   getAllFreelances,

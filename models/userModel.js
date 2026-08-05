@@ -116,6 +116,14 @@ const userSchema = new mongoose.Schema(
       type: Number,
       default: 1,
     },
+
+    // 🔹 SUBSCRIPTION / PLAN INFO
+    subscription: {
+      planName: { type: String, default: "Free" },
+      isPlanActive: { type: Boolean, default: false },
+      startDate: { type: Date, default: null },
+      expiryDate: { type: Date, default: null },
+    },
   },
   {
     timestamps: true,

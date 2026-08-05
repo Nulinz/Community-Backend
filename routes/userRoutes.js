@@ -22,6 +22,8 @@ import { isAuthenticated, authorizeRoles } from "../middleware/authMiddleware.js
 import { forgotOtpVerify, getCurrentUser, loginUser, forgotPassword, registerUser, resendOtp, resetPassword, verifyOtp, logout, changePassword, webLoginUser } from "../controller/user/authController.js"
 import {
   userDashboard,
+  getSubscriptionStatus,
+  getAllRegisteredUsers,
   getJobs,
   getAllInternships,
   getAllFreelances,
@@ -231,6 +233,10 @@ router.post("/adminverify", uploader.none(), adminVerifyOtp);
 router.post("/adminchangepassword", uploader.none(), adminChangePassword);
 router.post("/adminlogout", uploader.none(), adminLogout);
 router.get("/me", isAuthenticated, getCurrentUser);
+router.get("/subscription-status", isAuthenticated, getSubscriptionStatus);
+
+// GET /api/users/all-registered  (role = user)
+router.get("/all-registered", isAuthenticated, getAllRegisteredUsers);
 
 // ─────────────────────────────────────────────
 // Event & Competition QR Attendance Routes
