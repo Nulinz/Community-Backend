@@ -2,6 +2,7 @@ import crypto from "crypto";
 import User from "../../models/userModel.js";
 import Payment from "../../models/paymentModel.js";
 import SubscriptionPlan from "../../models/subscriptionPlanModel.js";
+import { awardXP } from "../../services/xpService.js";
 
 // Helper to safely get Razorpay instance if key is configured
 const getRazorpayInstance = async () => {
@@ -166,6 +167,9 @@ export const verifySubscriptionPayment = async (req, res, next) => {
       },
       { new: true }
     ).select("name email subscription");
+
+    // 3. Award First Subscription XP (+50 XP) if it's the user's first subscription
+    await awardXP({ userId, actionKey: "FIRST_SUBSCRIPTION" });
 
     return res.status(200).json({
       success: true,

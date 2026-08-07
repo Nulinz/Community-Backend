@@ -1,4 +1,5 @@
 import EventRegistration from "../../models/eventRegistrationModel.js";
+import { awardXP } from "../../services/xpService.js";
 
 /**
  * Mark event attendance via scanned QR payload.
@@ -40,6 +41,19 @@ export const markEventAttendance = async (req, res) => {
     registration.attendanceStatus = "present";
     registration.attendedAt = new Date();
     await registration.save();
+
+    const targetAttendeeId = registration.userId || userId;
+
+    // Award standard event attendance XP & one-time first event attendance XP
+    await awardXP({
+      userId: targetAttendeeId,
+      actionKey: "EVENT_ATTENDANCE",
+      referenceId: registration._id,
+    });
+    await awardXP({
+      userId: targetAttendeeId,
+      actionKey: "FIRST_EVENT_ATTENDANCE",
+    });
 
     return res.status(200).json({
       success: true,

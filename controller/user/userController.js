@@ -400,7 +400,11 @@ const userDashboard = async (req, res) => {
 
     preferredInternshipsData = preferredInternshipsData.slice(0, 3);
 
-    // ── Step 5: Fetch User XP & Level Details ──────────────────
+    // ── Step 5: Award Daily Login XP & Fetch User XP & Level Details ──
+    if (req.user?.role === "user") {
+      await awardXP({ userId, actionKey: "DAILY_LOGIN" });
+    }
+
     const userDoc = await User.findById(userId).select("xp level");
     const levelInfo = calculateLevelInfo(userDoc?.xp || 0);
 
@@ -2537,6 +2541,20 @@ const createEventRegistration = async (req, res) => {
       referenceId: registration._id,
     });
 
+    if (eventType === "Event") {
+      await awardXP({
+        userId,
+        actionKey: "FIRST_EVENT_REGISTRATION",
+      });
+    }
+
+    if (eventType === "Competition") {
+      await awardXP({
+        userId,
+        actionKey: "FIRST_COMPETITION_REGISTRATION",
+      });
+    }
+
     // ==============================
     // RESPONSE
     // ==============================
@@ -2896,16 +2914,24 @@ const getMyRegistrations = async (req, res) => {
 
 const getAllCompanies = async (req, res) => {
   try {
-    const companies = await Company.find({ isActive: true })
+    const companies = await Company.find()
+      .populate("userId", "is_active")
       .sort({ createdAt: -1 })
       .select(
-        "companyName companyType companyTagLine companyCultureTags companyLogo coverImage city state technologies whatWeDo yearFounded websiteLink createdAt"
+        "companyName companyType companyTagLine companyCultureTags companyLogo coverImage city state technologies whatWeDo yearFounded websiteLink userId isActive is_active createdAt"
       );
- 
+
+    // Filter only companies where linked User account is_active is not false and company status is active
+    const activeCompanies = companies.filter((c) => {
+      const isUserActive = c.userId?.is_active !== false;
+      const isCompActive = c.isActive !== false && c.is_active !== false;
+      return isUserActive && isCompActive;
+    });
+
     return res.status(200).json({
       status: true,
-      count: companies.length,
-      data: companies,
+      count: activeCompanies.length,
+      data: activeCompanies,
     });
   } catch (error) {
     console.error("Companies API Error:", error.message);
@@ -2946,6 +2972,10 @@ const toggleFollow = async (req, res) => {
       // Follow
       await CompanyFollow.create({ userId, companyId });
       const followCount = await CompanyFollow.countDocuments({ companyId });
+
+      // Award FIRST_COMPANY_FOLLOW XP (+10 XP) on first company follow
+      await awardXP({ userId, actionKey: "FIRST_COMPANY_FOLLOW" });
+
       return res.status(200).json({
         status: true,
         is_following: true,
@@ -3717,6 +3747,65 @@ const getCompanyMetaPage = async (req, res) => {
   }
 };
 
+/**
+ * POST /api/users/active-ping
+ * Called by frontend / mobile app every 60 seconds while active on screen.
+ * Increments dailyActiveMinutes and awards 10 XP when active time reaches 30 minutes.
+ */
+const activePing = async (req, res, next) => {
+  try {
+    const userId = req.user?._id;
+    if (!userId) {
+      return res.status(401).json({ status: false, message: "Unauthorized user." });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ status: false, message: "User not found." });
+    }
+
+    const now = new Date();
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    // Reset daily count if it's a new calendar day
+    if (!user.lastActiveDate || user.lastActiveDate < startOfToday) {
+      user.dailyActiveMinutes = 1;
+    } else {
+      user.dailyActiveMinutes = (user.dailyActiveMinutes || 0) + 1;
+    }
+
+    user.lastActiveDate = now;
+    await user.save();
+
+    let xpResult = null;
+
+    // Trigger 10 XP reward when user reaches 30 active minutes ONLY if user is Level 1
+    if (user.dailyActiveMinutes >= 30 && user.level === 1) {
+      xpResult = await awardXP({ userId: user._id, actionKey: "ACTIVE_30_MIN" });
+    }
+
+    // Trigger 15 XP reward when user reaches 60 active minutes ONLY if user is Level 2
+    if (user.dailyActiveMinutes >= 60 && user.level === 2) {
+      xpResult = await awardXP({ userId: user._id, actionKey: "ACTIVE_60_MIN" });
+    }
+
+    // Trigger 20 XP reward when user reaches 180 active minutes ONLY if user is Level 3
+    if (user.dailyActiveMinutes >= 180 && user.level === 3) {
+      xpResult = await awardXP({ userId: user._id, actionKey: "ACTIVE_180_MIN" });
+    }
+
+    return res.status(200).json({
+      status: true,
+      dailyActiveMinutes: user.dailyActiveMinutes,
+      xpAwarded: xpResult?.success || false,
+      xpResult,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 const getSubscriptionStatus = async (req, res, next) => {
   try {
     const user = await User.findById(req.user._id).select(
@@ -3829,5 +3918,6 @@ export {
   getMySuggestions,
   getJobMetaPage,
   getEventMetaPage,
-  getCompanyMetaPage
+  getCompanyMetaPage,
+  activePing
 };

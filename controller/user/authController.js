@@ -112,6 +112,25 @@ export const loginUser = async (req, res) => {
     });
   }
 };
+// 🔹 Helper function to generate unique 6-8 character referral codes (e.g. JOHN4819)
+const generateUniqueReferralCode = async (name = "USER") => {
+  const cleanName = name.replace(/[^a-zA-Z]/g, "").slice(0, 4).toUpperCase();
+  const prefix = cleanName.padEnd(4, "GRAD");
+  let isUnique = false;
+  let code = "";
+
+  while (!isUnique) {
+    const randomDigits = Math.floor(1000 + Math.random() * 9000);
+    code = `${prefix}${randomDigits}`;
+    const existing = await User.exists({ referralCode: code });
+    if (!existing) {
+      isUnique = true;
+    }
+  }
+
+  return code;
+};
+
 export const registerUser = async (req, res) => {
   try {
     const { name, email, phone, password } = req.body;
@@ -142,12 +161,30 @@ export const registerUser = async (req, res) => {
     // 🔹 Expiry (5 minutes)
     const otp_expire = new Date(Date.now() + 5 * 60 * 1000);
 
+    // 🔹 Generate Unique Referral Code (Only for role = user)
+    const targetRole = req.body.role || "user";
+    const referralCode = targetRole === "user" ? await generateUniqueReferralCode(name) : null;
+
+    // 🔹 Process Influencer attribution code if supplied
+    let influencerId = null;
+    if (req.body.influencerCode && typeof req.body.influencerCode === "string") {
+      const influencer = await User.findOne({
+        influencerCode: req.body.influencerCode.trim().toUpperCase(),
+        role: "influencer",
+      });
+      if (influencer) {
+        influencerId = influencer._id;
+      }
+    }
+
     // 🔹 Create user
     const user = await User.create({
       name,
       email,
       phone,
       password,
+      referralCode,
+      influencerId,
       otp,
       otp_expire,
     });
@@ -232,6 +269,9 @@ export const verifyOtp = async (req, res) => {
 
     await user.save();
 
+    // 🔹 Award First Registration XP (+10 XP)
+    await awardXP({ userId: user._id, actionKey: "FIRST_REGISTERATION" });
+
     // 🔹 6. Generate JWT token
     const token = jwt.sign(
       { id: user._id, phone: user.phone },
@@ -248,6 +288,7 @@ export const verifyOtp = async (req, res) => {
         name: user.name,
         phone: user.phone,
         email: user.email,
+        referralCode: user.referralCode,
         register_status: user.register_status,
       },
     });
@@ -505,20 +546,20 @@ export const getCurrentUser = async (req, res) => {
     let userDetails = null;
     let details_comp = false;
 
-    // 🔹 Fetch details only for role = user
+    let userReferralCode = user.referralCode;
+
+    // 🔹 Fetch details and auto-generate referralCode only for role = user
     if (user.role === "user") {
       userDetails = await UserDetails.findOne({
         userId: user._id,
       });
-      details_comp = (userDetails && user.register_status==="completed") ? true : false;
+      details_comp = (userDetails && user.register_status === "completed") ? true : false;
 
-      // 🔹 Award Daily Login XP (Once per calendar day)
-      await awardXP({ userId: user._id, actionKey: "DAILY_LOGIN" });
+      if (!userReferralCode) {
+        userReferralCode = await generateUniqueReferralCode(user.name);
+        await User.findByIdAndUpdate(user._id, { $set: { referralCode: userReferralCode } });
+      }
     }
-
-    // Refetch user to include up-to-date XP & Level details
-    const latestUser = await User.findById(user._id).select("xp level");
-    const levelInfo = calculateLevelInfo(latestUser?.xp || 0);
 
     return res.status(200).json({
       status: true,
@@ -531,11 +572,8 @@ export const getCurrentUser = async (req, res) => {
           phone: user.phone,
           email: user.email,
           role: user.role,
+          referralCode: userReferralCode,
           register_status: user.register_status,
-          xp: latestUser?.xp || 0,
-          level: levelInfo.currentLevel,
-          xpForNextLevel: levelInfo.xpForNextLevel,
-          progressPercentage: levelInfo.progressPercentage,
         },
         userDetails: userDetails || null,
       },
@@ -643,20 +681,26 @@ export const changePassword = async (req, res) => {
 
 export const webLoginUser = async (req, res) => {
   try {
-    // 🔹 1. Role is no longer required from the frontend
-    const { phone, password } = req.body; 
+    // 🔹 1. Identifier (email or phone) and password
+    const { phone, email, password } = req.body; 
+    const identifier = email || phone;
 
-    if (!phone || !password)
-      return res.status(400).json({ status: false, message: "Phone and password are required" });
+    if (!identifier || !password)
+      return res.status(400).json({ status: false, message: "Email/Phone and password are required" });
 
-    // 🔹 2. Find user by phone ONLY
-    const user = await User.findOne({ phone }).select("+password");
+    // 🔹 2. Find user by email OR phone
+    const user = await User.findOne({
+      $or: [
+        { email: identifier.toLowerCase().trim() },
+        { phone: identifier.trim() },
+      ],
+    }).select("+password");
 
     if (!user)
       return res.status(404).json({ status: false, message: "Invalid credentials" });
 
     // 🔹 3. THE BOUNCER: Check if their actual DB role is allowed on the web
-    const allowedRoles = ["admin", "college", "company"];
+    const allowedRoles = ["admin", "college", "company", "influencer"];
     if (!allowedRoles.includes(user.role)) {
       return res.status(403).json({ status: false, message: "Access denied. Please use the mobile app." });
     }

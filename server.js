@@ -24,6 +24,7 @@ import adminRoutes from "./routes/adminRoutes.js"
 import certificateRoutes from "./routes/certificateRoutes.js";
 import feedbackRoutes from "./routes/feedbackRoutes.js";
 import subscriptionRoutes from "./routes/subscriptionRoutes.js";
+import influencerRoutes from "./routes/influencerRoutes.js";
 import { seedTamilNaduLocations } from "./services/uploadLocation.js";
 import { startEventReminderCron } from "./jobs/eventRemainder.js";
 import { startJobSuggestionCron } from "./jobs/jobSuggested.js";
@@ -59,8 +60,29 @@ app.use(
 //  seedSeminars()
 
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+
+// Serve .well-known & .wellknown static files for Android App Links & iOS Universal Links
+app.use(
+  "/.well-known",
+  express.static(path.join(process.cwd(), ".wellknown"), {
+    setHeaders: (res) => res.setHeader("Content-Type", "application/json"),
+  })
+);
+app.use(
+  "/.wellknown",
+  express.static(path.join(process.cwd(), ".wellknown"), {
+    setHeaders: (res) => res.setHeader("Content-Type", "application/json"),
+  })
+);
+
+app.get(
+  ["/.well-known/assetlinks.json", "/.wellknown/assetlinks.json", "/.wellknown/assetlinks"],
+  (req, res) => {
+    res.setHeader("Content-Type", "application/json");
+    res.sendFile(path.join(process.cwd(), ".wellknown", "assetlinks.json"));
+  }
+);
 // seedTamilNaduLocations()
 
 app.get("/", (req, res) => {
@@ -90,6 +112,7 @@ app.use("/api/admin", adminRoutes)
 app.use("/api/certificates", certificateRoutes)
 app.use("/api/feedback", feedbackRoutes)
 app.use("/api/subscriptions", subscriptionRoutes)
+app.use("/api/influencer", influencerRoutes)
 
 
 //  migrateStatusField()

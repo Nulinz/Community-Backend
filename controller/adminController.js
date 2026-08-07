@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 
 // Import Models
+import User from "../models/userModel.js";
 import Company from "../models/companyModel.js";
 import College from "../models/collegeModel.js";
 import Competition from "../models/competitionModel.js";
@@ -229,6 +230,230 @@ export const updateJobStatus = async (req, res, next) => {
       success: true,
       message: `Status updated to ${status}`,
       data: updated,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Admin creates an Influencer account
+ */
+export const createInfluencer = async (req, res, next) => {
+  try {
+    const { id, _id, name, email, mailId, phone, phoneNumber, password, influencerCode, instagram, youtube, linkedin, twitter, profileImage } = req.body;
+    const influencerId = id || _id;
+    const cleanEmail = (email || mailId || "").toLowerCase().trim();
+    const cleanPhone = phone || phoneNumber;
+
+    if (!name || !cleanEmail) {
+      return res.status(400).json({
+        success: false,
+        message: "Name and email are required",
+      });
+    }
+
+    let profileImagePath = null;
+    if (req.file) {
+      profileImagePath = req.file.path.replace(/\\/g, "/");
+    } else if (profileImage && typeof profileImage === "string") {
+      profileImagePath = profileImage;
+    }
+
+    // ── EDIT / UPDATE MODE ──
+    if (influencerId) {
+      const existingInfluencer = await User.findById(influencerId);
+      if (!existingInfluencer) {
+        return res.status(404).json({ success: false, message: "Influencer not found" });
+      }
+
+      if (cleanEmail && cleanEmail !== existingInfluencer.email) {
+        const emailConflict = await User.findOne({ email: cleanEmail, _id: { $ne: influencerId } });
+        if (emailConflict) {
+          return res.status(400).json({ success: false, message: "An account with this email already exists" });
+        }
+        existingInfluencer.email = cleanEmail;
+      }
+
+      if (name) existingInfluencer.name = name.trim();
+      if (cleanPhone) existingInfluencer.phone = cleanPhone.trim();
+      if (influencerCode) existingInfluencer.influencerCode = influencerCode.trim().toUpperCase();
+      if (instagram !== undefined) existingInfluencer.instagram = instagram;
+      if (youtube !== undefined) existingInfluencer.youtube = youtube;
+      if (linkedin !== undefined) existingInfluencer.linkedin = linkedin;
+      if (twitter !== undefined) existingInfluencer.twitter = twitter;
+      if (profileImagePath) existingInfluencer.profileImage = profileImagePath;
+
+      await existingInfluencer.save();
+
+      return res.status(200).json({
+        success: true,
+        message: "Influencer account updated successfully",
+        data: existingInfluencer,
+      });
+    }
+
+    // ── CREATE MODE ──
+    const existingEmail = await User.findOne({ email: cleanEmail });
+    if (existingEmail) {
+      return res.status(400).json({
+        success: false,
+        message: "An account with this email already exists",
+      });
+    }
+
+    const finalPhone = cleanPhone ? cleanPhone.trim() : `INF_${Date.now()}`;
+    const existingPhone = await User.findOne({ phone: finalPhone });
+    if (existingPhone) {
+      return res.status(400).json({
+        success: false,
+        message: "An account with this phone number already exists",
+      });
+    }
+
+    // Auto-generate unique influencer code if not provided
+    let finalCode = influencerCode ? influencerCode.trim().toUpperCase() : null;
+    if (!finalCode) {
+      const sanitizedName = name.replace(/[^a-zA-Z]/g, "").toUpperCase().slice(0, 5) || "INF";
+      finalCode = `INF_${sanitizedName}${Math.floor(1000 + Math.random() * 9000)}`;
+    }
+
+    const existingCode = await User.findOne({ influencerCode: finalCode });
+    if (existingCode) {
+      finalCode = `INF_${Math.floor(100000 + Math.random() * 900000)}`;
+    }
+
+    const influencer = await User.create({
+      name: name.trim(),
+      email: cleanEmail,
+      phone: finalPhone,
+      password: password || null,
+      role: "influencer",
+      influencerCode: finalCode,
+      profileImage: profileImagePath,
+      instagram: instagram || "",
+      youtube: youtube || "",
+      linkedin: linkedin || "",
+      twitter: twitter || "",
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Influencer account created successfully",
+      data: {
+        id: influencer._id,
+        name: influencer.name,
+        email: influencer.email,
+        phone: influencer.phone,
+        role: influencer.role,
+        influencerCode: influencer.influencerCode,
+        profileImage: influencer.profileImage,
+        instagram: influencer.instagram,
+        youtube: influencer.youtube,
+        linkedin: influencer.linkedin,
+        twitter: influencer.twitter,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Admin gets list of all registered influencers
+ */
+export const getAllInfluencers = async (req, res, next) => {
+  try {
+    const influencers = await User.find({ role: "influencer" })
+      .select("name email phone influencerCode profileImage instagram youtube linkedin twitter createdAt is_active")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return res.status(200).json({
+      success: true,
+      data: influencers,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Admin sets password for an influencer account
+ */
+export const setInfluencerPassword = async (req, res, next) => {
+  try {
+    const { id, password, confirmPassword } = req.body;
+
+    if (!id) {
+      return res.status(400).json({ success: false, message: "Influencer ID is required" });
+    }
+    if (!password) {
+      return res.status(400).json({ success: false, message: "Password is required" });
+    }
+    if (password !== confirmPassword) {
+      return res.status(400).json({ success: false, message: "Passwords do not match" });
+    }
+
+    const user = await User.findOne({ _id: id, role: "influencer" });
+    if (!user) {
+      return res.status(404).json({ success: false, message: "Influencer not found" });
+    }
+
+    user.password = password; // pre-save hook automatically hashes password
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Password set successfully for influencer",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Admin gets single influencer details by ID
+ */
+export const getInfluencerById = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const influencer = await User.findOne({ _id: id, role: "influencer" }).select(
+      "name email phone influencerCode profileImage instagram youtube linkedin twitter createdAt is_active"
+    );
+
+    if (!influencer) {
+      return res.status(404).json({ success: false, message: "Influencer not found" });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: influencer,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Admin toggles activate/deactivate status for an influencer
+ */
+export const toggleInfluencerStatus = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const user = await User.findOne({ _id: id, role: "influencer" });
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: "Influencer not found" });
+    }
+
+    user.is_active = user.is_active === false ? true : false;
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: `Influencer ${user.is_active ? "activated" : "deactivated"} successfully`,
+      data: { is_active: user.is_active },
     });
   } catch (error) {
     next(error);

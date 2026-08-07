@@ -29,7 +29,7 @@ const userSchema = new mongoose.Schema(
     // 🔹 ROLE / TYPE
     role: {
       type: String,
-      enum: ["user", "admin", "college", "company"],
+      enum: ["user", "admin", "college", "company", "influencer"],
       default: "user",
     },
     // 🔹 DEVICE INFO
@@ -116,6 +116,53 @@ const userSchema = new mongoose.Schema(
       type: Number,
       default: 1,
     },
+
+    // 🔹 DAILY ACTIVE TIME TRACKING
+    dailyActiveMinutes: {
+      type: Number,
+      default: 0,
+    },
+
+    lastActiveDate: {
+      type: Date,
+      default: Date.now,
+    },
+
+    // 🔹 REFERRAL SYSTEM
+    referralCode: {
+      type: String,
+      unique: true,
+      sparse: true,
+      uppercase: true,
+      trim: true,
+      index: true,
+    },
+
+    // 🔹 INFLUENCER SYSTEM
+    influencerCode: {
+      type: String,
+      unique: true,
+      sparse: true,
+      uppercase: true,
+      trim: true,
+      index: true,
+    },
+    influencerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+      index: true,
+    },
+
+    // 🔹 PROFILE PHOTO & SOCIAL LINKS
+    profileImage: {
+      type: String,
+      default: null,
+    },
+    instagram: { type: String, default: "" },
+    youtube: { type: String, default: "" },
+    linkedin: { type: String, default: "" },
+    twitter: { type: String, default: "" },
 
     // 🔹 SUBSCRIPTION / PLAN INFO
     subscription: {

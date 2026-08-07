@@ -53,7 +53,8 @@ import {
   getMySuggestions,
   getJobMetaPage,
   getEventMetaPage,
-  getCompanyMetaPage
+  getCompanyMetaPage,
+  activePing,
 } from "../controller/user/userController.js";
 import fileUploader from "../middleware/fileUploader.js";
 import { getNotifications, getUserResumes, markAsRead, updateProfilePic, updateUserDetails, uploadResume } from "../controller/user/profileController.js";
@@ -104,7 +105,8 @@ router.post("/change-password", uploader.none(),isAuthenticated,changePassword);
 router.post("/apply-job",uploader.none(), isAuthenticated, applyJob);
 router.get("/my-applied-job", isAuthenticated, getAppliedJobs);
 
-router.get("/dashboard", isAuthenticated, userDashboard)
+router.get("/dashboard", isAuthenticated, userDashboard);
+router.post("/active-ping", isAuthenticated, activePing);
 router.get("/jobs", isAuthenticated, getJobs)
 router.get("/internships", isAuthenticated, getAllInternships)
 router.get("/freelances", isAuthenticated, getAllFreelances)
@@ -255,6 +257,6 @@ router.get("/export/college-dashboard-registrations", isAuthenticated, exportCol
 // ─────────────────────────────────────────────
 // Static AI Tools Route
 // ─────────────────────────────────────────────
-router.get("/ai-tools", getAiTools);
+router.get("/ai-tools", isAuthenticated, getAiTools);
 
 export default router;

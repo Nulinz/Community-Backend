@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.grad.envy",
+      "sha256_cert_fingerprints": [
+        "8E:D2:33:3C:5C:C5:9D:59:FE:2C:F4:6F:58:79:A0:F6:65:26:34:BC:D1:FC:99:62:05:2A:F1:74:BA:C1:30:C0"
+      ]
+    }
+  }
+]

@@ -28,8 +28,8 @@ const xpLogSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Prevent duplicate XP claiming for the same action and reference ID
-xpLogSchema.index({ userId: 1, action: 1, referenceId: 1 }, { unique: true, sparse: true });
+// Audit log index for query optimization
+xpLogSchema.index({ userId: 1, action: 1, referenceId: 1 });
 
 const XPLog = mongoose.models.XPLog || mongoose.model("XPLog", xpLogSchema);
 export default XPLog;

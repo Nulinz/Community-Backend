@@ -4,6 +4,7 @@ import fs from "fs";
 
 // Folder mapping
 const folderMap = {
+  profileImage: "uploads/profile",
   profile_pic: "uploads/profile",
   resume: "uploads/resume",
   documents: "uploads/documents",
