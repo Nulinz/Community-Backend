@@ -9,6 +9,7 @@ import Conference from "../models/conferenceModel.js";
 import Event from "../models/eventModel.js";
 import Seminar from "../models/seminarModel.js";
 import Internship from "../models/internshipModel.js";
+import Job from "../models/jobModel.js";
 import Freelance from "../models/freelanceModel.js";
 
 export const adminDashBoard = async (req, res) => {
@@ -200,6 +201,7 @@ export const updateJobStatus = async (req, res, next) => {
     }
 
     const modelMap = {
+      job: Job,
       internship: Internship,
       freelance:  Freelance,
     };

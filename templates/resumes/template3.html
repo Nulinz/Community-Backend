@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Resume Template 3 - Minimalist Classic</title>
+  <style>
+    @page { size: A4; margin: 0; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Times New Roman', Times, serif; background: #fff; color: #111; padding: 40px; font-size: 13px; line-height: 1.5; }
+    .name { font-size: 28px; font-weight: bold; text-transform: uppercase; text-align: center; letter-spacing: 2px; }
+    .job-title { text-align: center; font-style: italic; color: #555; margin-bottom: 8px; }
+    .contact { text-align: center; font-size: 11px; color: #444; border-bottom: 1px solid #111; padding-bottom: 12px; margin-bottom: 20px; }
+    .section-title { font-size: 13px; font-weight: bold; text-transform: uppercase; letter-spacing: 1.5px; border-bottom: 1px solid #ccc; padding-bottom: 2px; margin-top: 18px; margin-bottom: 10px; }
+    .item { margin-bottom: 12px; }
+    .item-header { display: flex; justify-content: space-between; font-weight: bold; }
+    .bullet-list { padding-left: 18px; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <div class="name">{{personalInfo.fullName}}</div>
+  <div class="job-title">{{personalInfo.jobTitle}}</div>
+  <div class="contact">
+    {{personalInfo.email}} | {{personalInfo.phone}} | {{personalInfo.location}} | {{personalInfo.linkedin}}
+  </div>
+
+  {{#if personalInfo.summary}}
+  <div class="section-title">Summary</div>
+  <p>{{personalInfo.summary}}</p>
+  {{/if}}
+
+  {{#if experience.length}}
+  <div class="section-title">Experience</div>
+  {{#each experience}}
+  <div class="item">
+    <div class="item-header">
+      <span>{{jobTitle}} — {{companyName}}</span>
+      <span>{{startDate}} - {{endDate}}</span>
+    </div>
+    {{#if description}}<p>{{description}}</p>{{/if}}
+    {{#if highlights.length}}
+    <ul class="bullet-list">
+      {{#each highlights}}<li>{{this}}</li>{{/each}}
+    </ul>
+    {{/if}}
+  </div>
+  {{/each}}
+  {{/if}}
+
+  {{#if education.length}}
+  <div class="section-title">Education</div>
+  {{#each education}}
+  <div class="item">
+    <div class="item-header">
+      <span>{{degree}} — {{institution}}</span>
+      <span>{{startDate}} - {{endDate}}</span>
+    </div>
+  </div>
+  {{/each}}
+  {{/if}}
+
+  {{#if skills.length}}
+  <div class="section-title">Skills</div>
+  {{#each skills}}
+    <p><strong>{{category}}:</strong> {{joinArray items}}</p>
+  {{/each}}
+  {{/if}}
+</body>
+</html>

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Resume Template 5 - Executive Serif</title>
+  <style>
+    @page { size: A4; margin: 0; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Georgia', serif; background: #fff; color: #2d3748; padding: 40px; font-size: 13px; line-height: 1.6; }
+    .header { border-bottom: 2px double #742a2a; padding-bottom: 16px; margin-bottom: 20px; }
+    .name { font-size: 32px; color: #742a2a; font-weight: normal; }
+    .job-title { font-size: 16px; font-style: italic; color: #4a5568; }
+    .section-title { font-size: 14px; font-weight: bold; color: #742a2a; text-transform: uppercase; border-bottom: 1px solid #e2e8f0; margin-top: 20px; margin-bottom: 10px; }
+    .item-header { display: flex; justify-content: space-between; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="name">{{personalInfo.fullName}}</div>
+    <div class="job-title">{{personalInfo.jobTitle}}</div>
+    <div style="font-size: 11px; color: #718096; margin-top: 6px;">
+      {{personalInfo.email}} | {{personalInfo.phone}} | {{personalInfo.location}}
+    </div>
+  </div>
+  {{#if personalInfo.summary}}
+  <div class="section-title">Executive Summary</div>
+  <p>{{personalInfo.summary}}</p>
+  {{/if}}
+  {{#if experience.length}}
+  <div class="section-title">Leadership Experience</div>
+  {{#each experience}}
+  <div style="margin-bottom: 14px;">
+    <div class="item-header">
+      <span>{{jobTitle}}, {{companyName}}</span>
+      <span>{{startDate}} - {{endDate}}</span>
+    </div>
+    <p>{{description}}</p>
+  </div>
+  {{/each}}
+  {{/if}}
+</body>
+</html>

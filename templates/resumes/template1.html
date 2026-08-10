@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Resume Template 1 - Dark Sleek Modern</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 0;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    html, body {
+      width: 100%;
+      min-height: 100vh;
+      background-color: #0c0e14 !important;
+      color: #cbd5e1;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-size: 12.5px;
+      line-height: 1.5;
+    }
+    body {
+      padding: 36px 40px;
+    }
+    .header {
+      margin-bottom: 22px;
+      border-bottom: 1px solid #1e293b;
+      padding-bottom: 16px;
+    }
+    .name {
+      font-size: 32px;
+      font-weight: 800;
+      color: #ffffff;
+      letter-spacing: -0.5px;
+      line-height: 1.1;
+    }
+    .job-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: #d97706;
+      margin-top: 4px;
+      margin-bottom: 10px;
+    }
+    .contact-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      font-size: 11.5px;
+      color: #94a3b8;
+    }
+    .section {
+      margin-bottom: 18px;
+    }
+    .section-title {
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: #d97706;
+      margin-bottom: 8px;
+    }
+    .card {
+      background-color: #141822 !important;
+      border: 1px solid #1e293b !important;
+      border-radius: 10px;
+      padding: 14px 18px;
+      margin-bottom: 10px;
+    }
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 3px;
+    }
+    .card-title {
+      font-size: 14.5px;
+      font-weight: 700;
+      color: #ffffff;
+    }
+    .card-subtitle {
+      font-size: 13px;
+      font-weight: 600;
+      color: #d97706;
+    }
+    .card-date {
+      font-size: 11.5px;
+      color: #94a3b8;
+      font-weight: 500;
+    }
+    .bullet-list {
+      list-style-type: disc;
+      padding-left: 18px;
+      margin-top: 6px;
+      color: #cbd5e1;
+    }
+    .bullet-list li {
+      margin-bottom: 4px;
+    }
+    .pill-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 6px;
+    }
+    .pill {
+      background-color: #1e293b !important;
+      border: 1px solid #334155 !important;
+      color: #f1f5f9;
+      padding: 3px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .skill-group {
+      margin-bottom: 8px;
+    }
+    .skill-group-title {
+      font-size: 12.5px;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 3px;
+    }
+    .language-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+      max-width: 300px;
+    }
+    .dots {
+      color: #d97706;
+      letter-spacing: 3px;
+      font-size: 14px;
+    }
+    .dots .empty {
+      color: #334155;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="name">{{personalInfo.fullName}}</div>
+    <div class="job-title">{{personalInfo.jobTitle}}</div>
+    <div class="contact-row">
+      {{#if personalInfo.email}}<span>{{personalInfo.email}}</span>{{/if}}
+      {{#if personalInfo.phone}}<span>{{personalInfo.phone}}</span>{{/if}}
+      {{#if personalInfo.location}}<span>{{personalInfo.location}}</span>{{/if}}
+      {{#if personalInfo.website}}<span>{{personalInfo.website}}</span>{{/if}}
+      {{#if personalInfo.linkedin}}<span>{{personalInfo.linkedin}}</span>{{/if}}
+      {{#if personalInfo.github}}<span>{{personalInfo.github}}</span>{{/if}}
+    </div>
+  </div>
+
+  <!-- SUMMARY -->
+  {{#if personalInfo.summary}}
+  <div class="section">
+    <div class="section-title">Summary</div>
+    <div class="card">
+      <p style="color: #cbd5e1;">{{personalInfo.summary}}</p>
+    </div>
+  </div>
+  {{/if}}
+
+  <!-- EXPERIENCE -->
+  {{#if experience.length}}
+  <div class="section">
+    <div class="section-title">Experience</div>
+    {{#each experience}}
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <span class="card-title">{{jobTitle}}</span>
+        </div>
+        <div class="card-date">{{startDate}} — {{#if endDate}}{{endDate}}{{else}}Present{{/if}}</div>
+      </div>
+      <div style="margin-bottom: 4px;">
+        {{#if companyName}}<span class="card-subtitle">{{companyName}}</span>{{/if}}
+        {{#if location}}<span style="color: #94a3b8; font-size: 12px;"> {{location}}</span>{{/if}}
+      </div>
+      {{#if description}}
+        <p style="color: #cbd5e1; margin-top: 4px;">{{description}}</p>
+      {{/if}}
+      {{#if highlights.length}}
+        <ul class="bullet-list">
+          {{#each highlights}}
+            <li>{{this}}</li>
+          {{/each}}
+        </ul>
+      {{/if}}
+    </div>
+    {{/each}}
+  </div>
+  {{/if}}
+
+  <!-- EDUCATION -->
+  {{#if education.length}}
+  <div class="section">
+    <div class="section-title">Education</div>
+    {{#each education}}
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <span class="card-title">{{degree}}</span>
+        </div>
+        <div class="card-date">{{startDate}}{{#if endDate}} — {{endDate}}{{/if}}</div>
+      </div>
+      <div style="margin-bottom: 2px;">
+        {{#if institution}}<span class="card-subtitle">{{institution}}</span>{{/if}}
+        {{#if location}}<span style="color: #94a3b8; font-size: 12px;"> {{location}}</span>{{/if}}
+        {{#if grade}}<span style="color: #94a3b8; font-size: 12px; margin-left: 8px;"> {{grade}}</span>{{/if}}
+      </div>
+      {{#if details}}<p style="color: #cbd5e1; margin-top: 4px;">{{details}}</p>{{/if}}
+    </div>
+    {{/each}}
+  </div>
+  {{/if}}
+
+  <!-- PROJECTS -->
+  {{#if projects.length}}
+  <div class="section">
+    <div class="section-title">Projects</div>
+    {{#each projects}}
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <span class="card-title">{{title}}</span>
+        </div>
+        <div class="card-date">{{year}}</div>
+      </div>
+      {{#if link}}<div style="color: #d97706; font-size: 11.5px; margin-bottom: 4px;">{{link}}</div>{{/if}}
+      {{#if description}}<p style="color: #cbd5e1;">{{description}}</p>{{/if}}
+      {{#if technologies.length}}
+        <div class="pill-container">
+          {{#each technologies}}
+            <span class="pill">{{this}}</span>
+          {{/each}}
+        </div>
+      {{/if}}
+    </div>
+    {{/each}}
+  </div>
+  {{/if}}
+
+  <!-- SKILLS -->
+  {{#if skills.length}}
+  <div class="section">
+    <div class="section-title">Skills</div>
+    <div class="card">
+      {{#each skills}}
+      <div class="skill-group">
+        <div class="skill-group-title">{{category}}</div>
+        <div class="pill-container">
+          {{#each items}}
+            <span class="pill">{{this}}</span>
+          {{/each}}
+        </div>
+      </div>
+      {{/each}}
+    </div>
+  </div>
+  {{/if}}
+
+  <!-- LANGUAGES -->
+  {{#if languages.length}}
+  <div class="section">
+    <div class="section-title">Languages</div>
+    <div class="card">
+      {{#each languages}}
+      <div class="language-row">
+        <span style="font-weight: 600; color: #ffffff;">{{name}}</span>
+        <span class="dots">{{{renderDots rating}}}</span>
+      </div>
+      {{/each}}
+    </div>
+  </div>
+  {{/if}}
+
+  <!-- CERTIFICATIONS -->
+  {{#if certifications.length}}
+  <div class="section">
+    <div class="section-title">Certifications</div>
+    <div class="card">
+      {{#each certifications}}
+      <div class="card-header">
+        <div>
+          <strong style="color: #ffffff;">{{title}}</strong>
+        </div>
+        <div class="card-date">{{year}}</div>
+      </div>
+      {{#if issuer}}<div style="color: #94a3b8; font-size: 12px; margin-top: 2px;">{{issuer}}</div>{{/if}}
+      {{#if description}}<p style="color: #cbd5e1; font-size: 12px; margin-top: 4px;">{{description}}</p>{{/if}}
+      {{/each}}
+    </div>
+  </div>
+  {{/if}}
+
+  <!-- AWARDS -->
+  {{#if awards.length}}
+  <div class="section">
+    <div class="section-title">Awards</div>
+    <div class="card">
+      {{#each awards}}
+      <div class="card-header">
+        <div>
+          <strong style="color: #ffffff;">{{title}}</strong>
+        </div>
+        <div class="card-date">{{year}}</div>
+      </div>
+      {{#if issuer}}<div class="card-subtitle" style="font-size: 12px; margin-top: 2px;">{{issuer}}</div>{{/if}}
+      {{#if description}}<p style="color: #cbd5e1; font-size: 12px; margin-top: 4px;">{{description}}</p>{{/if}}
+      {{/each}}
+    </div>
+  </div>
+  {{/if}}
+
+</body>
+</html>

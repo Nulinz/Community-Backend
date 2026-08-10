@@ -1,0 +1,51 @@
+export const RESUME_TEMPLATES = [
+  {
+    id: 1,
+    name: "Dark Sleek Modern",
+    category: "Developer / Tech",
+    description: "Sleek dark theme with card containers, custom tag pills, and dot ratings.",
+    previewUrl: "/resume/preview-template1.pdf",
+  },
+  {
+    id: 2,
+    name: "Clean Two-Column Blue",
+    category: "Professional / Corporate",
+    description: "Two-column clean layout with blue accent headers and sidebar skill sections.",
+    previewUrl: "/resume/preview-template2.pdf",
+  },
+  {
+    id: 3,
+    name: "Minimalist Classic",
+    category: "Executive",
+    description: "Clean single-column monochrome design with clear typography.",
+    previewUrl: "/resume/preview-template3.pdf",
+  },
+  {
+    id: 4,
+    name: "Creative Emerald",
+    category: "Design / Creative",
+    description: "Vibrant emerald accents with stylish section highlights.",
+    previewUrl: "/resume/preview-template4.pdf",
+  },
+  {
+    id: 5,
+    name: "Executive Serif",
+    category: "Management",
+    description: "Classic typography tailored for leadership and management roles.",
+    previewUrl: "/resume/preview-template5.pdf",
+  },
+  {
+    id: 6,
+    name: "Compact Grid",
+    category: "Technical",
+    description: "Dense single-page layout designed to fit extensive experience.",
+    previewUrl: "/resume/preview-template6.pdf",
+  },
+  {
+    id: 7,
+    name: "Modern Coral",
+    category: "General",
+    description: "Warm coral theme with elegant section dividers and modern badges.",
+    previewUrl: "/resume/preview-template7.pdf",
+  },
+];

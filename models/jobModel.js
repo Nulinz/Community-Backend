@@ -1,0 +1,51 @@
+import mongoose from "mongoose";
+
+const jobSchema = new mongoose.Schema(
+  {
+    c_by: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true,
+    },
+    rejected_reason: { type: String },
+    status: {
+      type: String,
+      required: true,
+      enum: ["pending", "approved", "rejected"],
+      default: "pending",
+    },
+    jobCategory: { type: String },
+    jobType: { type: String },
+    jobTitle: { type: String, required: true, trim: true },
+    organizer: { type: String, required: true, trim: true },
+    companyName: { type: String, required: true, trim: true },
+    location: { type: String, required: true, trim: true },
+    mode: { type: String, required: true },
+    totalOpenings: { type: Number, default: 0 },
+    duration: { type: String },
+    jobStartDate: { type: Date },
+    applicationDeadline: { type: Date },
+    salary: { type: Number, default: 0 },
+    responsibilities: [{ type: String, trim: true }],
+    skill_set: [{ type: String, trim: true }],
+    benefits: [{ type: String, trim: true }],
+    learning_outcomes: [{ type: String, trim: true }],
+    development_benefits: [{ type: String, trim: true }],
+    development_resources: [{ type: String, trim: true }],
+    eligibility: [{ type: String, trim: true }],
+    description: { type: String, trim: true },
+    certificateAvailability: { type: String, trim: true },
+    isActive: {
+      type: Boolean,
+      default: true,
+      index: true,
+    },
+  },
+  {
+    timestamps: true,
+  }
+);
+
+const Job = mongoose.models.Job || mongoose.model("Job", jobSchema);
+export default Job;

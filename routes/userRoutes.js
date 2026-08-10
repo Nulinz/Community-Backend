@@ -1,6 +1,7 @@
 import express from "express";
 import multer from "multer";
 import { getAiTools } from "../controller/user/aiToolsController.js";
+import { getMissions, claimMission, getUserXpSummary } from "../controller/user/xpController.js";
 
 import {
   // createNewPassword,
@@ -253,6 +254,13 @@ router.get("/export/event-registrations/:eventId", isAuthenticated, exportEventR
 router.get("/export/event-attendance/:eventId", isAuthenticated, exportEventAttendanceCSV);
 router.get("/export/job-candidates/:jobId", isAuthenticated, exportJobCandidatesCSV);
 router.get("/export/college-dashboard-registrations", isAuthenticated, exportCollegeDashboardRegistrationsCSV);
+
+// ─────────────────────────────────────────────
+// XP Missions & Claim Routes
+// ─────────────────────────────────────────────
+router.get("/xp/summary", isAuthenticated, getUserXpSummary);
+router.get("/xp/missions", isAuthenticated, getMissions);
+router.post("/xp/claim", uploader.none(), isAuthenticated, claimMission);
 
 // ─────────────────────────────────────────────
 // Static AI Tools Route

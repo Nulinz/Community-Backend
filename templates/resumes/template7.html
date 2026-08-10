@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Resume Template 7 - Modern Coral</title>
+  <style>
+    @page { size: A4; margin: 0; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Open Sans', Arial, sans-serif; background: #fff; color: #27272a; padding: 36px; font-size: 12.5px; line-height: 1.5; }
+    .header { border-left: 4px solid #f43f5e; padding-left: 16px; margin-bottom: 20px; }
+    .name { font-size: 28px; font-weight: bold; color: #18181b; }
+    .job-title { font-size: 15px; font-weight: 600; color: #f43f5e; }
+    .contact { font-size: 11.5px; color: #71717a; margin-top: 4px; }
+    .section-title { font-size: 12px; font-weight: 700; text-transform: uppercase; color: #f43f5e; border-bottom: 1px solid #f43f5e; padding-bottom: 3px; margin-top: 16px; margin-bottom: 10px; }
+    .card { background: #fff1f2; border: 1px solid #fecdd3; border-radius: 8px; padding: 12px 16px; margin-bottom: 10px; }
+    .item-header { display: flex; justify-content: space-between; font-weight: bold; }
+    .pill { background: #ffe4e6; color: #9f1239; border: 1px solid #fecdd3; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; display: inline-block; margin: 2px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="name">{{personalInfo.fullName}}</div>
+    <div class="job-title">{{personalInfo.jobTitle}}</div>
+    <div class="contact">{{personalInfo.email}} • {{personalInfo.phone}} • {{personalInfo.location}} • {{personalInfo.linkedin}}</div>
+  </div>
+  {{#if personalInfo.summary}}
+  <div class="section-title">Summary</div>
+  <div class="card"><p>{{personalInfo.summary}}</p></div>
+  {{/if}}
+  {{#if experience.length}}
+  <div class="section-title">Experience</div>
+  {{#each experience}}
+  <div class="card">
+    <div class="item-header">
+      <span>{{jobTitle}} — {{companyName}}</span>
+      <span style="color:#9f1239; font-size:11px;">{{startDate}} - {{endDate}}</span>
+    </div>
+    {{#if description}}<p style="margin-top:4px;">{{description}}</p>{{/if}}
+  </div>
+  {{/each}}
+  {{/if}}
+  {{#if skills.length}}
+  <div class="section-title">Skills</div>
+  <div class="card">
+    {{#each skills}}
+      <strong style="display:block; margin-top:4px;">{{category}}</strong>
+      {{#each items}}<span class="pill">{{this}}</span>{{/each}}
+    {{/each}}
+  </div>
+  {{/if}}
+</body>
+</html>

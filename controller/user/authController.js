@@ -561,6 +561,8 @@ export const getCurrentUser = async (req, res) => {
       }
     }
 
+    const levelInfo = calculateLevelInfo(user.xp || 0);
+
     return res.status(200).json({
       status: true,
       message: "User fetched successfully",
@@ -574,6 +576,16 @@ export const getCurrentUser = async (req, res) => {
           role: user.role,
           referralCode: userReferralCode,
           register_status: user.register_status,
+          xp: levelInfo.totalXP,
+          level: levelInfo.currentLevel,
+          levelInfo: {
+            currentLevel: levelInfo.currentLevel,
+            totalXP: levelInfo.totalXP,
+            xpForCurrentLevel: levelInfo.xpForCurrentLevel,
+            xpForNextLevel: levelInfo.xpForNextLevel,
+            xpNeededForNextLevel: levelInfo.xpNeeded,
+            progressPercentage: levelInfo.progressPercentage,
+          },
         },
         userDetails: userDetails || null,
       },

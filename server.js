@@ -19,12 +19,14 @@ import competitionRoutes from "./routes/competitionRoutes.js"
 import conferenceRoutes from "./routes/conferenceRoutes.js"
 import seminarRoutes from "./routes/seminarRoutes.js"
 import internshipRoutes from "./routes/internshipRoutes.js"
+import jobRoutes from "./routes/jobRoutes.js"
 import freelanceRoutes from "./routes/freelanceRoutes.js"
 import adminRoutes from "./routes/adminRoutes.js"
 import certificateRoutes from "./routes/certificateRoutes.js";
 import feedbackRoutes from "./routes/feedbackRoutes.js";
 import subscriptionRoutes from "./routes/subscriptionRoutes.js";
 import influencerRoutes from "./routes/influencerRoutes.js";
+import resumeRoutes from "./routes/resumeRoutes.js";
 import { seedTamilNaduLocations } from "./services/uploadLocation.js";
 import { startEventReminderCron } from "./jobs/eventRemainder.js";
 import { startJobSuggestionCron } from "./jobs/jobSuggested.js";
@@ -61,6 +63,7 @@ app.use(
 
 app.use(express.json());
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+app.use("/resume", express.static(path.join(process.cwd(), "resume")));
 
 // Serve .well-known & .wellknown static files for Android App Links & iOS Universal Links
 app.use(
@@ -107,12 +110,14 @@ app.use("/api/competition", competitionRoutes)
 app.use("/api/conference", conferenceRoutes)
 app.use("/api/seminar", seminarRoutes)
 app.use("/api/internship", internshipRoutes)
+app.use("/api/job", jobRoutes)
 app.use("/api/freelance", freelanceRoutes)
 app.use("/api/admin", adminRoutes)
 app.use("/api/certificates", certificateRoutes)
 app.use("/api/feedback", feedbackRoutes)
 app.use("/api/subscriptions", subscriptionRoutes)
 app.use("/api/influencer", influencerRoutes)
+app.use("/api/resume", resumeRoutes)
 
 
 //  migrateStatusField()

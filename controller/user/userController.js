@@ -1,5 +1,6 @@
 import Event from "../../models/eventModel.js";
 import Internship from "../../models/internshipModel.js";
+import Job from "../../models/jobModel.js";
 import Company from "../../models/companyModel.js";
 
 import Freelance from "../../models/freelanceModel.js";
@@ -530,20 +531,25 @@ const getJobs = async (req, res) => {
     ];
 
     // ── Step 2: Fetch jobs (excluding saved + applied) ────────────
-    const [internships, freelances] = await Promise.all([
-      Internship.find({
-        _id: { $nin: excludedIds },isActive:true,status:"approved"
+    const [jobsList, internships, freelances] = await Promise.all([
+      Job.find({
+        _id: { $nin: excludedIds }, isActive: true, status: "approved"
       })
         .sort({ createdAt: -1 })
-        
+        .select("jobTitle jobType location c_by companyName duration salary eligibility createdAt description mode totalOpenings")
+        .populate("c_by", "role"),
+
+      Internship.find({
+        _id: { $nin: excludedIds }, isActive: true, status: "approved"
+      })
+        .sort({ createdAt: -1 })
         .select("jobTitle internshipType location c_by companyName duration salary eligibility createdAt")
         .populate("c_by", "role"),
 
       Freelance.find({
-        _id: { $nin: excludedIds }, isActive:true,status:"approved"
+        _id: { $nin: excludedIds }, isActive: true, status: "approved"
       })
         .sort({ createdAt: -1 })
-      
         .select("eligibility c_by description companyName jobTitle jobStartDate jobEndDate totalOpenings mode salary createdAt")
         .populate("c_by", "role"),
     ]);
@@ -571,15 +577,14 @@ const getJobs = async (req, res) => {
       return {
         ...obj,
         companyImage,
-
-        // ✅ Always false (because filtered)
         is_saved: await checkIsSaved(userId, item._id),
         is_applied: false,
       };
     };
 
     // ── Step 4: Process results ───────────────────────────────────
-    const [internshipsData, freelancesData] = await Promise.all([
+    const [jobsData, internshipsData, freelancesData] = await Promise.all([
+      Promise.all(jobsList.map(enrichJob)),
       Promise.all(internships.map(enrichJob)),
       Promise.all(freelances.map(enrichJob)),
     ]);
@@ -588,6 +593,7 @@ const getJobs = async (req, res) => {
     return res.status(200).json({
       status: true,
       data: {
+        jobs: jobsData,
         internships: internshipsData,
         freelance: freelancesData,
       },
@@ -734,10 +740,10 @@ const toggleSavedJob = async (req, res) => {
     }
 
     // Validate jobType
-    if (!["Internship", "Freelance"].includes(jobType)) {
+    if (!["Job", "Internship", "Freelance"].includes(jobType)) {
       return res.status(400).json({
         success: false,
-        message: "jobType must be 'internship' or 'freelance'",
+        message: "jobType must be 'Job', 'Internship', or 'Freelance'",
       });
     }
 
@@ -849,16 +855,18 @@ const applyJob = async (req, res) => {
     }
  
     // Validate jobType
-    if (!["Internship", "Freelance"].includes(jobType)) {
+    if (!["Job", "Internship", "Freelance"].includes(jobType)) {
       return res.status(400).json({
         status: false,
-        message: "jobType must be 'Internship' or 'Freelance'",
+        message: "jobType must be 'Job', 'Internship', or 'Freelance'",
       });
     }
  
     // Fetch job to get c_by
     let job = null;
-    if (jobType === "Internship") {
+    if (jobType === "Job") {
+      job = await Job.findById(jobId).select("c_by");
+    } else if (jobType === "Internship") {
       job = await Internship.findById(jobId).select("c_by");
     } else {
       job = await Freelance.findById(jobId).select("c_by");
@@ -3778,28 +3786,9 @@ const activePing = async (req, res, next) => {
     user.lastActiveDate = now;
     await user.save();
 
-    let xpResult = null;
-
-    // Trigger 10 XP reward when user reaches 30 active minutes ONLY if user is Level 1
-    if (user.dailyActiveMinutes >= 30 && user.level === 1) {
-      xpResult = await awardXP({ userId: user._id, actionKey: "ACTIVE_30_MIN" });
-    }
-
-    // Trigger 15 XP reward when user reaches 60 active minutes ONLY if user is Level 2
-    if (user.dailyActiveMinutes >= 60 && user.level === 2) {
-      xpResult = await awardXP({ userId: user._id, actionKey: "ACTIVE_60_MIN" });
-    }
-
-    // Trigger 20 XP reward when user reaches 180 active minutes ONLY if user is Level 3
-    if (user.dailyActiveMinutes >= 180 && user.level === 3) {
-      xpResult = await awardXP({ userId: user._id, actionKey: "ACTIVE_180_MIN" });
-    }
-
     return res.status(200).json({
       status: true,
       dailyActiveMinutes: user.dailyActiveMinutes,
-      xpAwarded: xpResult?.success || false,
-      xpResult,
     });
   } catch (error) {
     next(error);

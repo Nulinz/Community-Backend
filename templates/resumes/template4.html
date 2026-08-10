@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Resume Template 4 - Creative Emerald</title>
+  <style>
+    @page { size: A4; margin: 0; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', Arial, sans-serif; background: #fafafa; color: #1f2937; padding: 36px; font-size: 13px; line-height: 1.5; }
+    .header { background: #059669; color: #fff; padding: 24px; border-radius: 12px; margin-bottom: 24px; }
+    .name { font-size: 30px; font-weight: bold; }
+    .job-title { font-size: 16px; color: #a7f3d0; margin-bottom: 8px; }
+    .contact { font-size: 12px; color: #ecfdf5; display: flex; flex-wrap: wrap; gap: 12px; }
+    .section-title { font-size: 14px; font-weight: bold; color: #059669; text-transform: uppercase; border-bottom: 2px solid #059669; padding-bottom: 4px; margin-top: 18px; margin-bottom: 12px; }
+    .card { background: #fff; border-radius: 8px; padding: 14px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); border: 1px solid #e5e7eb; }
+    .card-header { display: flex; justify-content: space-between; font-weight: bold; }
+    .pill { background: #d1fae5; color: #065f46; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; display: inline-block; margin: 2px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="name">{{personalInfo.fullName}}</div>
+    <div class="job-title">{{personalInfo.jobTitle}}</div>
+    <div class="contact">
+      <span>{{personalInfo.email}}</span>
+      <span>{{personalInfo.phone}}</span>
+      <span>{{personalInfo.location}}</span>
+      <span>{{personalInfo.linkedin}}</span>
+    </div>
+  </div>
+
+  {{#if personalInfo.summary}}
+  <div class="section-title">Summary</div>
+  <div class="card"><p>{{personalInfo.summary}}</p></div>
+  {{/if}}
+
+  {{#if experience.length}}
+  <div class="section-title">Experience</div>
+  {{#each experience}}
+  <div class="card">
+    <div class="card-header">
+      <span style="color:#059669;">{{jobTitle}} @ {{companyName}}</span>
+      <span style="color:#6b7280; font-size:12px;">{{startDate}} - {{endDate}}</span>
+    </div>
+    {{#if description}}<p style="margin-top:6px;">{{description}}</p>{{/if}}
+  </div>
+  {{/each}}
+  {{/if}}
+
+  {{#if skills.length}}
+  <div class="section-title">Skills</div>
+  <div class="card">
+    {{#each skills}}
+      <strong style="display:block; margin-top:4px;">{{category}}</strong>
+      {{#each items}}<span class="pill">{{this}}</span>{{/each}}
+    {{/each}}
+  </div>
+  {{/if}}
+</body>
+</html>

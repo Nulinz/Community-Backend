@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Resume Template 2 - Clean Two-Column Blue</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 0;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      background-color: #ffffff;
+      color: #334155;
+      padding: 32px 36px;
+      font-size: 12.5px;
+      line-height: 1.5;
+    }
+    .layout {
+      display: flex;
+      gap: 28px;
+    }
+    .main-col {
+      flex: 1;
+      min-width: 0;
+    }
+    .sidebar-col {
+      width: 240px;
+      flex-shrink: 0;
+      border-left: 1px solid #e2e8f0;
+      padding-left: 20px;
+    }
+    .name {
+      font-size: 32px;
+      font-weight: 800;
+      color: #0f172a;
+      letter-spacing: -0.5px;
+    }
+    .job-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #1d4ed8;
+      margin-top: 2px;
+      margin-bottom: 8px;
+    }
+    .contact-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      font-size: 11.5px;
+      color: #64748b;
+      margin-bottom: 20px;
+    }
+    .section-title {
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #1d4ed8;
+      margin-top: 16px;
+      margin-bottom: 8px;
+      border-bottom: 1.5px solid #1d4ed8;
+      padding-bottom: 4px;
+    }
+    .sidebar-title {
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #0f172a;
+      margin-top: 16px;
+      margin-bottom: 8px;
+      border-bottom: 1.5px solid #0f172a;
+      padding-bottom: 4px;
+    }
+    .item {
+      margin-bottom: 14px;
+    }
+    .item-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+    .item-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #0f172a;
+    }
+    .item-subtitle {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: #1d4ed8;
+    }
+    .item-date {
+      font-size: 11px;
+      color: #64748b;
+      font-weight: 500;
+    }
+    .bullet-list {
+      list-style-type: disc;
+      padding-left: 16px;
+      margin-top: 4px;
+      color: #334155;
+    }
+    .bullet-list li {
+      margin-bottom: 3px;
+    }
+    .pill-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 4px;
+      margin-bottom: 10px;
+    }
+    .pill {
+      background-color: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      color: #0f172a;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .language-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+    .dots {
+      color: #0f172a;
+      letter-spacing: 2px;
+      font-size: 13px;
+    }
+    .dots .empty {
+      color: #cbd5e1;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- TOP HEADER -->
+  <div>
+    <div class="name">{{personalInfo.fullName}}</div>
+    <div class="job-title">{{personalInfo.jobTitle}}</div>
+    <div class="contact-row">
+      {{#if personalInfo.email}}<span>✉ {{personalInfo.email}}</span>{{/if}}
+      {{#if personalInfo.phone}}<span>📞 {{personalInfo.phone}}</span>{{/if}}
+      {{#if personalInfo.location}}<span>📍 {{personalInfo.location}}</span>{{/if}}
+      {{#if personalInfo.website}}<span>🌐 {{personalInfo.website}}</span>{{/if}}
+      {{#if personalInfo.linkedin}}<span>🔗 {{personalInfo.linkedin}}</span>{{/if}}
+      {{#if personalInfo.github}}<span>💻 {{personalInfo.github}}</span>{{/if}}
+    </div>
+  </div>
+
+  <div class="layout">
+    <!-- LEFT MAIN COLUMN -->
+    <div class="main-col">
+
+      <!-- SUMMARY -->
+      {{#if personalInfo.summary}}
+      <div>
+        <div class="section-title">Summary</div>
+        <p style="color: #334155;">{{personalInfo.summary}}</p>
+      </div>
+      {{/if}}
+
+      <!-- EXPERIENCE -->
+      {{#if experience.length}}
+      <div>
+        <div class="section-title">Experience</div>
+        {{#each experience}}
+        <div class="item">
+          <div class="item-header">
+            <div>
+              <span class="item-title">{{jobTitle}}</span>
+            </div>
+            <div class="item-date">{{startDate}} — {{#if endDate}}{{endDate}}{{else}}Present{{/if}}</div>
+          </div>
+          <div class="item-subtitle">{{companyName}}{{#if location}} | {{location}}{{/if}}</div>
+          {{#if description}}
+            <p style="margin-top: 3px;">{{description}}</p>
+          {{/if}}
+          {{#if highlights.length}}
+            <ul class="bullet-list">
+              {{#each highlights}}
+                <li>{{this}}</li>
+              {{/each}}
+            </ul>
+          {{/if}}
+        </div>
+        {{/each}}
+      </div>
+      {{/if}}
+
+      <!-- PROJECTS -->
+      {{#if projects.length}}
+      <div>
+        <div class="section-title">Projects</div>
+        {{#each projects}}
+        <div class="item">
+          <div class="item-header">
+            <div>
+              <span class="item-title">{{title}}</span>
+              {{#if link}}<span style="color: #1d4ed8; font-size: 11px;"> — {{link}}</span>{{/if}}
+            </div>
+            <div class="item-date">{{year}}</div>
+          </div>
+          {{#if description}}<p style="margin-top: 3px;">{{description}}</p>{{/if}}
+          {{#if technologies.length}}
+            <div class="pill-container">
+              {{#each technologies}}
+                <span class="pill">{{this}}</span>
+              {{/each}}
+            </div>
+          {{/if}}
+        </div>
+        {{/each}}
+      </div>
+      {{/if}}
+
+      <!-- EDUCATION -->
+      {{#if education.length}}
+      <div>
+        <div class="section-title">Education</div>
+        {{#each education}}
+        <div class="item">
+          <div class="item-header">
+            <div>
+              <span class="item-title">{{degree}}</span>
+            </div>
+            <div class="item-date">{{startDate}} — {{endDate}}</div>
+          </div>
+          <div class="item-subtitle">{{institution}}{{#if location}} | {{location}}{{/if}}{{#if grade}} ({{grade}}){{/if}}</div>
+          {{#if details}}<p style="margin-top: 3px;">{{details}}</p>{{/if}}
+        </div>
+        {{/each}}
+      </div>
+      {{/if}}
+
+    </div>
+
+    <!-- RIGHT SIDEBAR COLUMN -->
+    <div class="sidebar-col">
+
+      <!-- SKILLS -->
+      {{#if skills.length}}
+      <div>
+        <div class="sidebar-title">Skills</div>
+        {{#each skills}}
+        <div style="margin-bottom: 8px;">
+          <div style="font-weight: 700; color: #0f172a; font-size: 12px; margin-bottom: 3px;">{{category}}</div>
+          <div class="pill-container">
+            {{#each items}}
+              <span class="pill">{{this}}</span>
+            {{/each}}
+          </div>
+        </div>
+        {{/each}}
+      </div>
+      {{/if}}
+
+      <!-- LANGUAGES -->
+      {{#if languages.length}}
+      <div>
+        <div class="sidebar-title">Languages</div>
+        {{#each languages}}
+        <div class="language-row">
+          <span style="font-weight: 600; color: #0f172a;">{{name}}</span>
+          <span class="dots">{{{renderDots rating}}}</span>
+        </div>
+        {{/each}}
+      </div>
+      {{/if}}
+
+      <!-- CERTIFICATIONS -->
+      {{#if certifications.length}}
+      <div>
+        <div class="sidebar-title">Certifications</div>
+        {{#each certifications}}
+        <div style="margin-bottom: 10px;">
+          <div style="font-weight: 700; color: #0f172a;">{{title}}</div>
+          <div style="color: #64748b; font-size: 11px;">{{issuer}} • {{year}}</div>
+        </div>
+        {{/each}}
+      </div>
+      {{/if}}
+
+      <!-- AWARDS -->
+      {{#if awards.length}}
+      <div>
+        <div class="sidebar-title">Awards</div>
+        {{#each awards}}
+        <div style="margin-bottom: 10px;">
+          <div style="font-weight: 700; color: #0f172a;">{{title}}</div>
+          <div style="color: #64748b; font-size: 11px;">{{issuer}} • {{year}}</div>
+          {{#if description}}<p style="font-size: 11px; color: #334155; margin-top: 2px;">{{description}}</p>{{/if}}
+        </div>
+        {{/each}}
+      </div>
+      {{/if}}
+
+    </div>
+  </div>
+
+</body>
+</html>

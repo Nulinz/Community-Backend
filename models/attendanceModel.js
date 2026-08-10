@@ -9,8 +9,8 @@ const attendanceSchema = new mongoose.Schema(
     },
     jobType: {
       type: String,
-      enum: ["Internship", "Freelance"],
-      default: "Internship",
+      enum: ["Job", "Internship", "Freelance"],
+      default: "Job",
       required: true,
     },
     userId: {
