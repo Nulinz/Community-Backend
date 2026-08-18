@@ -1,5 +1,5 @@
 import { aiToolsData } from "../../data/aiToolsData.js";
-import { awardXP } from "../../services/xpService.js";
+import User from "../../models/userModel.js";
 
 /**
  * GET /api/users/ai-tools
@@ -9,9 +9,9 @@ export const getAiTools = async (req, res) => {
   try {
     const { category } = req.query;
 
-    // Award AI_STATION XP once per calendar day if user is authenticated
+    // Track AI_STATION activity timestamp for user
     if (req.user?._id) {
-      await awardXP({ userId: req.user._id, actionKey: "AI_STATION" });
+      await User.findByIdAndUpdate(req.user._id, { lastAiStationDate: new Date() });
     }
 
     let tools = aiToolsData;

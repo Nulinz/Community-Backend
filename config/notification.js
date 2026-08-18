@@ -11,7 +11,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const serviceAccountPath = path.join(
   __dirname,
-  "grad-envy-4a740eca4576.json"
+  "grad-envy-95e6254955fe.json"
 );
 
 const getFirebaseApp = () => {
@@ -34,7 +34,7 @@ return admin.initializeApp({
 
 const sendNotification = async (data) => {
   if (!data.token) {
-    logger.warn("No device token provided");
+    console.warn("No device token provided");
     return null;
   }
 
@@ -86,9 +86,9 @@ const sendNotification = async (data) => {
   } catch (error) {
     // ⭐ Log specific FCM errors like "MismatchSenderId"
     if (error.code === 'messaging/invalid-argument' || error.message.includes('MismatchSenderId')) {
-      console.error(`Sender ID mismatch for token ${token.slice(-10)}...: Verify client/server project match`);
+      console.error(`Sender ID mismatch for token ${data.token?.slice(-10)}...: Verify client/server project match`);
     } else {
-      console.error("Notification error", error);
+      console.error("FCM Notification error:", error.message || error);
     }
     return null;
   }
@@ -98,7 +98,7 @@ const sendNotification = async (data) => {
 
 const sendCallInvite = async (patientFcmToken, callData) => {
   if (!patientFcmToken) {
-    logger.warn("No patient FCM token provided");
+    console.warn("No patient FCM token provided");
     return null;
   }
 

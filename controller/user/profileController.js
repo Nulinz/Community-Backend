@@ -43,12 +43,24 @@ const getUserResumes = async (req, res) => {
 
     const resumes = await Resume.find({ userId })
       .sort({ createdAt: -1 })
-      .select("fileName fileUrl fileSize mimeType createdAt");
+      .select("fileName fileUrl pdfUrl fileSize mimeType createdAt")
+      .lean();
+
+    const formattedResumes = resumes.map((resume) => {
+      const cleanUrl = resume.fileUrl ? resume.fileUrl.replace(/\\/g, "/") : "";
+
+      return {
+        ...resume,
+        fileUrl: cleanUrl,
+        pdfUrl: cleanUrl,
+        downloadUrl: cleanUrl,
+      };
+    });
 
     return res.status(200).json({
       status: true,
-      count: resumes.length,
-      data: resumes,
+      count: formattedResumes.length,
+      data: formattedResumes,
     });
   } catch (error) {
     console.error("Get Resumes Error:", error.message);

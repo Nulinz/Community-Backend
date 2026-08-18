@@ -44,16 +44,7 @@ export const markEventAttendance = async (req, res) => {
 
     const targetAttendeeId = registration.userId || userId;
 
-    // Award standard event attendance XP & one-time first event attendance XP
-    await awardXP({
-      userId: targetAttendeeId,
-      actionKey: "EVENT_ATTENDANCE",
-      referenceId: registration._id,
-    });
-    await awardXP({
-      userId: targetAttendeeId,
-      actionKey: "FIRST_EVENT_ATTENDANCE",
-    });
+    // Attendance status recorded. Missions can be manually claimed from XP missions screen.
 
     return res.status(200).json({
       success: true,

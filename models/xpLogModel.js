@@ -29,7 +29,25 @@ const xpLogSchema = new mongoose.Schema(
 );
 
 // Audit log index for query optimization
-xpLogSchema.index({ userId: 1, action: 1, referenceId: 1 });
+xpLogSchema.index({ userId: 1, action: 1, createdAt: -1 });
 
 const XPLog = mongoose.models.XPLog || mongoose.model("XPLog", xpLogSchema);
+
+/**
+ * Drops legacy unique indexes that block daily recurring mission claims.
+ */
+export const dropStaleXPLogUniqueIndexes = async () => {
+  try {
+    const indexes = await XPLog.collection.indexes();
+    for (const index of indexes) {
+      if (index.name !== "_id_" && index.unique) {
+        await XPLog.collection.dropIndex(index.name);
+        console.log(`[XPLog] Dropped stale unique index: ${index.name}`);
+      }
+    }
+  } catch (err) {
+    // Collection or index might not exist yet; safe to ignore
+  }
+};
+
 export default XPLog;

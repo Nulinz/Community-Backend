@@ -31,6 +31,7 @@ import User from "../../models/userModel.js";
 import JobSuggested from "../../models/jobSuggestedModel.js"
 import { getCollegeByEventId } from "../../helper/collegeDetails.js";
 import Payment from "../../models/paymentModel.js";
+import XPLog from "../../models/xpLogModel.js";
 
 // const userDashboard = async (req, res) => {
 //   try {
@@ -401,12 +402,35 @@ const userDashboard = async (req, res) => {
 
     preferredInternshipsData = preferredInternshipsData.slice(0, 3);
 
-    // ── Step 5: Award Daily Login XP & Fetch User XP & Level Details ──
-    if (req.user?.role === "user") {
-      await awardXP({ userId, actionKey: "DAILY_LOGIN" });
+    // ── Step 5: Record lastActiveDate & Fetch User XP & Level Details ──
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const userDoc = await User.findById(userId).select("xp level lastActiveDate fcm_token");
+    if (userDoc && (!userDoc.lastActiveDate || new Date(userDoc.lastActiveDate) < startOfToday)) {
+      userDoc.lastActiveDate = new Date();
+      await User.findByIdAndUpdate(userId, { lastActiveDate: userDoc.lastActiveDate });
     }
 
-    const userDoc = await User.findById(userId).select("xp level");
+    // 🔔 Trigger FCM on dashboard if DAILY_LOGIN is unclaimed today
+    const isDailyLoginClaimed = await XPLog.exists({
+      userId,
+      action: "DAILY_LOGIN",
+      createdAt: { $gte: startOfToday },
+    });
+
+    if (!isDailyLoginClaimed && userDoc?.fcm_token) {
+      sendAndSaveNotification({
+        senderId: userId,
+        receiverId: userId,
+        title: "Daily Login Ready to Claim! 🎁",
+        message: "You've unlocked your Daily Login mission! Claim +5 XP now.",
+        body: "Your +5 XP daily reward is ready to claim in Missions!",
+        type: "reminder",
+        metadata: { action: "DAILY_LOGIN", status: "READY_TO_CLAIM", xpReward: "5" },
+      }).catch((err) => console.error("FCM Daily Login dashboard error:", err.message));
+    }
+
     const levelInfo = calculateLevelInfo(userDoc?.xp || 0);
 
     return res.status(200).json({
@@ -521,82 +545,42 @@ const getJobs = async (req, res) => {
   try {
     const userId = req.user._id;
 
-    // ── Step 1: Get excluded jobIds (saved + applied) ─────────────
-    const [applied] = await Promise.all([
-      AppliedJob.find({ userId }).select("jobId"),
-    ]);
-
-    const excludedIds = [
-      ...applied.map((a) => new mongoose.Types.ObjectId(a.jobId)),
-    ];
-
-    // ── Step 2: Fetch jobs (excluding saved + applied) ────────────
-    const [jobsList, internships, freelances] = await Promise.all([
-      Job.find({
-        _id: { $nin: excludedIds }, isActive: true, status: "approved"
-      })
-        .sort({ createdAt: -1 })
-        .select("jobTitle jobType location c_by companyName duration salary eligibility createdAt description mode totalOpenings")
-        .populate("c_by", "role"),
-
-      Internship.find({
-        _id: { $nin: excludedIds }, isActive: true, status: "approved"
-      })
-        .sort({ createdAt: -1 })
-        .select("jobTitle internshipType location c_by companyName duration salary eligibility createdAt")
-        .populate("c_by", "role"),
-
-      Freelance.find({
-        _id: { $nin: excludedIds }, isActive: true, status: "approved"
-      })
-        .sort({ createdAt: -1 })
-        .select("eligibility c_by description companyName jobTitle jobStartDate jobEndDate totalOpenings mode salary createdAt")
-        .populate("c_by", "role"),
-    ]);
+    const jobs = await Job.find({ isActive: true, status: "approved" })
+      .sort({ createdAt: -1 })
+      .select("jobTitle jobType location companyName duration salary eligibility createdAt description mode totalOpenings c_by")
+      .populate("c_by", "role");
 
     const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
 
-    // ── Step 3: Enrich function ───────────────────────────────────
-    const enrichJob = async (item) => {
-      const obj = item.toObject();
+    const data = await Promise.all(
+      jobs.map(async (item) => {
+        const obj = item.toObject();
+        let companyImage = null;
+        if (item.c_by?.role === "admin") {
+          companyImage = STATIC_ADMIN_IMAGE;
+        } else if (item.c_by?.role === "company") {
+          const company = await Company.findOne({
+            userId: item.c_by._id,
+          })
+            .select("companyLogo")
+            .lean();
 
-      let companyImage = null;
+          companyImage = company?.companyLogo || null;
+        }
 
-      if (item.c_by?.role === "admin") {
-        companyImage = STATIC_ADMIN_IMAGE;
-      } else if (item.c_by?.role === "company") {
-        const company = await Company.findOne({
-          userId: item.c_by._id,
-        })
-          .select("companyLogo")
-          .lean();
+        return {
+          ...obj,
+          companyImage,
+          is_saved: await checkIsSaved(userId, item._id, "Job"),
+          is_applied: await checkIsApplied(userId, item._id),
+        };
+      })
+    );
 
-        companyImage = company?.companyLogo || null;
-      }
-
-      return {
-        ...obj,
-        companyImage,
-        is_saved: await checkIsSaved(userId, item._id),
-        is_applied: false,
-      };
-    };
-
-    // ── Step 4: Process results ───────────────────────────────────
-    const [jobsData, internshipsData, freelancesData] = await Promise.all([
-      Promise.all(jobsList.map(enrichJob)),
-      Promise.all(internships.map(enrichJob)),
-      Promise.all(freelances.map(enrichJob)),
-    ]);
-
-    // ── Response ──────────────────────────────────────────────────
     return res.status(200).json({
       status: true,
-      data: {
-        jobs: jobsData,
-        internships: internshipsData,
-        freelance: freelancesData,
-      },
+      count: data.length,
+      data,
     });
   } catch (error) {
     console.error("Jobs API Error:", error.message);
@@ -610,8 +594,8 @@ const getJobs = async (req, res) => {
 const getAllInternships = async (req, res) => {
   try {
     const userId = req.user._id;
-   
-    const internships = await Internship.find({isActive:true,status:"approved"})
+
+    const internships = await Internship.find({ isActive: true, status: "approved" })
       .sort({ createdAt: -1 })
       .select("jobTitle location companyName duration salary eligibility createdAt c_by")
       .populate("c_by", "role");
@@ -671,8 +655,8 @@ const getAllFreelances = async (req, res) => {
     // ── Step 2: Fetch freelances (exclude applied) ─────────────
     const freelances = await Freelance.find({
       _id: { $nin: appliedIds },
-      isActive:true,
-      status:"approved"
+      isActive: true,
+      status: "approved"
     })
       .sort({ createdAt: -1 })
       .select("eligibility description companyName jobTitle jobStartDate jobEndDate totalOpenings mode salary createdAt c_by")
@@ -730,7 +714,7 @@ const toggleSavedJob = async (req, res) => {
   try {
     const userId = req.user._id;
     const { jobId, jobType } = req.body;
-    console.log(jobId, jobType,userId)
+    console.log(jobId, jobType, userId)
     // Validate required fields
     if (!jobId || !jobType) {
       return res.status(400).json({
@@ -781,17 +765,17 @@ const getSavedJobs = async (req, res) => {
     const userId = req.user._id;
 
     const savedJobs = await SavedJob.find({ userId })
-  .populate({
-    path: "jobId",
-      match: { isActive: true }, 
-    select:
-      "jobTitle location c_by companyName duration salary eligibility createdAt description jobStartDate jobEndDate totalOpenings mode",
-    populate: {
-      path: "c_by",
-      select: "role",
-    },
-  })
-  .sort({ createdAt: -1 });
+      .populate({
+        path: "jobId",
+        match: { isActive: true },
+        select:
+          "jobTitle location c_by companyName duration salary eligibility createdAt description jobStartDate jobEndDate totalOpenings mode",
+        populate: {
+          path: "c_by",
+          select: "role",
+        },
+      })
+      .sort({ createdAt: -1 });
 
     const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
 
@@ -844,8 +828,8 @@ const getSavedJobs = async (req, res) => {
 const applyJob = async (req, res) => {
   try {
     const userId = req.user._id;
-    const { jobId, jobType,resumeId } = req.body;
- 
+    const { jobId, jobType, resumeId } = req.body;
+
     // Validate required fields
     if (!jobId || !jobType) {
       return res.status(400).json({
@@ -853,7 +837,7 @@ const applyJob = async (req, res) => {
         message: "jobId and jobType are required",
       });
     }
- 
+
     // Validate jobType
     if (!["Job", "Internship", "Freelance"].includes(jobType)) {
       return res.status(400).json({
@@ -861,7 +845,7 @@ const applyJob = async (req, res) => {
         message: "jobType must be 'Job', 'Internship', or 'Freelance'",
       });
     }
- 
+
     // Fetch job to get c_by
     let job = null;
     if (jobType === "Job") {
@@ -871,14 +855,14 @@ const applyJob = async (req, res) => {
     } else {
       job = await Freelance.findById(jobId).select("c_by");
     }
- 
+
     if (!job) {
       return res.status(404).json({
         status: false,
         message: "Job not found",
       });
     }
- 
+
     // Check if already applied
     const existing = await AppliedJob.findOne({ userId, jobId });
     if (existing) {
@@ -887,7 +871,7 @@ const applyJob = async (req, res) => {
         message: "You have already applied to this job",
       });
     }
- 
+
     // Apply with c_by from job
     await AppliedJob.create({
       userId,
@@ -896,7 +880,7 @@ const applyJob = async (req, res) => {
       resumeId,
       c_by: job.c_by,
     });
- 
+
     return res.status(201).json({
       status: true,
       is_applied: true,
@@ -911,23 +895,23 @@ const applyJob = async (req, res) => {
     });
   }
 };
- 
+
 const getAppliedJobs = async (req, res) => {
   try {
     const userId = req.user._id;
 
     const appliedJobs = await AppliedJob.find({ userId })
-  .populate({
-    path: "jobId",
-    match: { isActive: true }, 
-    select:
-      "jobTitle location c_by companyName duration salary eligibility createdAt description jobStartDate jobEndDate totalOpenings mode",
-    populate: {
-      path: "c_by",
-      select: "role",
-    },
-  })
-  .sort({ createdAt: -1 });
+      .populate({
+        path: "jobId",
+        match: { isActive: true },
+        select:
+          "jobTitle location c_by companyName duration salary eligibility createdAt description jobStartDate jobEndDate totalOpenings mode",
+        populate: {
+          path: "c_by",
+          select: "role",
+        },
+      })
+      .sort({ createdAt: -1 });
 
     const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
 
@@ -1109,8 +1093,8 @@ const getJobProfile = async (req, res) => {
       companyLogo: null,
       email: job?.c_by?.email || null,
       phone: job?.c_by?.phone || null,
-      aboutUs:null,
-      websiteLink:null
+      aboutUs: null,
+      websiteLink: null
     };
 
     if (job.c_by?.role === "admin") {
@@ -1121,11 +1105,11 @@ const getJobProfile = async (req, res) => {
       })
         .select("companyLogo aboutUs websiteLink")
         .lean();
-        companyDetails = {
-          companyLogo: company?.companyLogo || null,
-          aboutUs:company?.aboutUs|| null,
-          website:company?.websiteLink|| null
-        };
+      companyDetails = {
+        companyLogo: company?.companyLogo || null,
+        aboutUs: company?.aboutUs || null,
+        website: company?.websiteLink || null
+      };
     }
 
     // ── Parallel Checks ─────────────────────────────
@@ -1170,7 +1154,7 @@ const getAllCompetitions = async (req, res) => {
   try {
     const userId = req.user._id;
 
-    const competitions = await Competition.find({isActive:true,status:"approved"})
+    const competitions = await Competition.find({ isActive: true, status: "approved" })
       .sort({ createdAt: -1 })
       .select("eventName registrationType coverImage organizer eventDate eligibilityDetails city  totalSeats individualFees teamFees lateFees mode registrationStartDate createdAt");
 
@@ -1216,19 +1200,19 @@ const getCompetitionProfile = async (req, res) => {
       });
     }
 
-    const [is_registered,college,availability] = await Promise.all([
+    const [is_registered, college, availability] = await Promise.all([
       checkIsRegistered(userId, id),
-      getCollegeByEventId({eventType:"competition",eventId:id}),
-      getSeatAvailability({eventType:"competition",eventId:id})
+      getCollegeByEventId({ eventType: "competition", eventId: id }),
+      getSeatAvailability({ eventType: "competition", eventId: id })
     ]);
-   console.log(college)
+    console.log(college)
     return res.status(200).json({
       status: true,
       data: {
         ...competition.toObject(),
         is_registered,
-        college:college,
-        availableSeats:availability?.availableSeats
+        college: college,
+        availableSeats: availability?.availableSeats
       },
     });
   } catch (error) {
@@ -2157,7 +2141,7 @@ const createEventRegistration = async (req, res) => {
       accommodationType,
       type,
       teamMembersCount,
-      transaction_id="3478rfbrbub487",
+      transaction_id = "3478rfbrbub487",
       amount,
     } = req.body;
 
@@ -2428,20 +2412,20 @@ const createEventRegistration = async (req, res) => {
     // ==============================
 
     if (eventDoc.registrationType === "Paid") {
-        if (!transaction_id) {
-          return res.status(400).json({
-            status: false,
-            message:
-              "transaction_id is required",
-          });
-        }
+      if (!transaction_id) {
+        return res.status(400).json({
+          status: false,
+          message:
+            "transaction_id is required",
+        });
+      }
 
-        if (!amount) {
-          return res.status(400).json({
-            status: false,
-            message: "amount is required",
-          });
-        } 
+      if (!amount) {
+        return res.status(400).json({
+          status: false,
+          message: "amount is required",
+        });
+      }
     }
 
     // ==============================
@@ -2482,7 +2466,7 @@ const createEventRegistration = async (req, res) => {
     let paymentData = null;
 
     if (
-      eventDoc.registrationType === "Paid" 
+      eventDoc.registrationType === "Paid"
     ) {
 
       paymentData = await Payment.create({
@@ -2493,7 +2477,7 @@ const createEventRegistration = async (req, res) => {
         eventId,
         eventType,
         c_by: eventDoc.c_by,
-        amount:  amount,
+        amount: amount,
         paymentMethod: "UPI",
         paymentStatus: "Success",
         paymentGateway: "Offline",
@@ -2543,25 +2527,7 @@ const createEventRegistration = async (req, res) => {
     };
     const regActionKey = regActionMap[eventType] || "EVENT_REGISTRATION";
 
-    const xpResult = await awardXP({
-      userId,
-      actionKey: regActionKey,
-      referenceId: registration._id,
-    });
 
-    if (eventType === "Event") {
-      await awardXP({
-        userId,
-        actionKey: "FIRST_EVENT_REGISTRATION",
-      });
-    }
-
-    if (eventType === "Competition") {
-      await awardXP({
-        userId,
-        actionKey: "FIRST_COMPETITION_REGISTRATION",
-      });
-    }
 
     // ==============================
     // RESPONSE
@@ -2574,7 +2540,7 @@ const createEventRegistration = async (req, res) => {
       data: {
         registration,
         payment: paymentData,
-        payableAmount:amount,
+        payableAmount: amount,
         registrationType:
           eventDoc.registrationType,
         xpGained: xpResult.xpAwarded || 0,
@@ -2602,7 +2568,7 @@ const getAllConferences = async (req, res) => {
   try {
     const userId = req.user._id;
 
-    const conferences = await Conference.find({isActive:true,status:"approved"})
+    const conferences = await Conference.find({ isActive: true, status: "approved" })
       .sort({ createdAt: -1 })
       .select(
         "eventName organizer registrationType mode eventDate registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees city  eligibilityDetails teamOrIndividualEvent createdAt"
@@ -2650,10 +2616,10 @@ const getConferenceProfile = async (req, res) => {
       });
     }
 
-    const [is_registered,college,availability] = await Promise.all([
+    const [is_registered, college, availability] = await Promise.all([
       checkIsRegistered(userId, id),
-      getCollegeByEventId({eventType:"conference",eventId:id}),
-      getSeatAvailability({eventType:"conference",eventId:id})
+      getCollegeByEventId({ eventType: "conference", eventId: id }),
+      getSeatAvailability({ eventType: "conference", eventId: id })
     ]);
 
     return res.status(200).json({
@@ -2662,7 +2628,7 @@ const getConferenceProfile = async (req, res) => {
         college,
         ...conference.toObject(),
         is_registered,
-        availableSeats:availability?.availableSeats
+        availableSeats: availability?.availableSeats
       },
     });
   } catch (error) {
@@ -2758,10 +2724,10 @@ const getEventProfile = async (req, res) => {
         message: "Event not found",
       });
     }
-    const [is_registered,college,availability] = await Promise.all([
+    const [is_registered, college, availability] = await Promise.all([
       checkIsRegistered(userId, id),
-      getCollegeByEventId({eventType:"event",eventId:id}),
-      getSeatAvailability({eventType:"event",eventId:id})
+      getCollegeByEventId({ eventType: "event", eventId: id }),
+      getSeatAvailability({ eventType: "event", eventId: id })
     ]);
 
     return res.status(200).json({
@@ -2770,7 +2736,7 @@ const getEventProfile = async (req, res) => {
         ...event.toObject(),
         is_registered,
         college,
-        availableSeats:availability?.availableSeats
+        availableSeats: availability?.availableSeats
       },
     });
   } catch (error) {
@@ -2786,7 +2752,7 @@ const getAllTechnicalSeminars = async (req, res) => {
   try {
     const userId = req.user._id;
 
-    const seminars = await Seminar.find({ isActive:true,status:"approved", eventType: "Technical" })
+    const seminars = await Seminar.find({ isActive: true, status: "approved", eventType: "Technical" })
       .sort({ createdAt: -1 })
       .select(
         "eventName eventType organizer mode eventDate registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees city  eligibilityDetails teamOrIndividualEvent createdAt"
@@ -2817,7 +2783,7 @@ const getAllNonTechnicalSeminars = async (req, res) => {
   try {
     const userId = req.user._id;
 
-    const seminars = await Seminar.find({isActive:true,status:"approved", eventType: "Non Technical" })
+    const seminars = await Seminar.find({ isActive: true, status: "approved", eventType: "Non Technical" })
       .sort({ createdAt: -1 })
       .select(
         "eventName eventType organizer mode eventDate registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees city  eligibilityDetails teamOrIndividualEvent createdAt"
@@ -2866,18 +2832,18 @@ const getSeminarProfile = async (req, res) => {
       });
     }
 
-    const [is_registered,college,availability] = await Promise.all([
+    const [is_registered, college, availability] = await Promise.all([
       checkIsRegistered(userId, id),
-      getCollegeByEventId({eventType:"seminar",eventId:id}),
-      getSeatAvailability({eventType:"seminar",eventId:id})
+      getCollegeByEventId({ eventType: "seminar", eventId: id }),
+      getSeatAvailability({ eventType: "seminar", eventId: id })
     ]);
 
     return res.status(200).json({
       status: true,
       data: {
         ...seminar.toObject(),
-          college,
-        availableSeats:availability?.availableSeats,
+        college,
+        availableSeats: availability?.availableSeats,
         is_registered,
       },
     });
@@ -2896,7 +2862,7 @@ const getMyRegistrations = async (req, res) => {
     const userId = req.user._id;
 
     const registrations = await EventRegistration.find({ userId })
-       .select("eventId eventType")
+      .select("eventId eventType")
       .sort({ createdAt: -1 })
       .populate({
         path: "eventId",
@@ -2981,8 +2947,7 @@ const toggleFollow = async (req, res) => {
       await CompanyFollow.create({ userId, companyId });
       const followCount = await CompanyFollow.countDocuments({ companyId });
 
-      // Award FIRST_COMPANY_FOLLOW XP (+10 XP) on first company follow
-      await awardXP({ userId, actionKey: "FIRST_COMPANY_FOLLOW" });
+
 
       return res.status(200).json({
         status: true,
@@ -3103,7 +3068,7 @@ const getCompanyProfile = async (req, res) => {
     // ── Fetch all in parallel ───────────────────────────────────
     const [followCount, isFollowing, internshipsRaw, freelancesRaw] = await Promise.all([
       CompanyFollow.countDocuments({ companyId: companyUserId }),
-      CompanyFollow.findOne({ userId, companyId:company.userId }),
+      CompanyFollow.findOne({ userId, companyId: company.userId }),
 
       // ✅ Internships posted by this company
       Internship.find({ isActive: true, c_by: companyUserId })
@@ -3194,7 +3159,7 @@ const attachFlags = async (items, type) =>
       ...item.toObject(),
       is_registered: await checkIsRegistered(item._id),
     }))
-);
+  );
 const getEventsPage = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -3258,7 +3223,7 @@ const getSeminarsPage = async (req, res) => {
     const userId = req.user._id;
     const now = new Date();
 
-    const upcomingRaw = await Seminar.find({isActive: true,status:"approved", eventDate: { $gte: now } })
+    const upcomingRaw = await Seminar.find({ isActive: true, status: "approved", eventDate: { $gte: now } })
       .sort({ eventDate: 1 })
       .limit(2)
       .select("eventName eventType registrationType organizer mode eventDate coverImage city totalSeats individualFees teamFees registrationEndDate createdAt");
@@ -3266,12 +3231,12 @@ const getSeminarsPage = async (req, res) => {
     const upcomingIds = upcomingRaw.map((s) => s._id);
 
     const [technicalRaw, nonTechnicalRaw] = await Promise.all([
-      Seminar.find({isActive: true, status:"approved", eventType: "Technical", _id: { $nin: upcomingIds } })
+      Seminar.find({ isActive: true, status: "approved", eventType: "Technical", _id: { $nin: upcomingIds } })
         .sort({ createdAt: -1 })
-  
+
         .select("eventName eventType registrationType city organizer mode eventDate coverImage venueAddress totalSeats individualFees teamFees registrationEndDate createdAt"),
 
-      Seminar.find({ isActive: true, status:"approved",  eventType: "Non Technical", _id: { $nin: upcomingIds } })
+      Seminar.find({ isActive: true, status: "approved", eventType: "Non Technical", _id: { $nin: upcomingIds } })
         .sort({ createdAt: -1 })
 
         .select("eventName eventType registrationType city organizer mode eventDate coverImage venueAddress totalSeats individualFees teamFees registrationEndDate createdAt"),
@@ -3317,7 +3282,7 @@ const getSeminarsPage = async (req, res) => {
 
 const getLocations = async (req, res) => {
   try {
-    const { state="Tamil Nadu" } = req.query;
+    const { state = "Tamil Nadu" } = req.query;
 
     const filter = { isActive: true };
     if (state) filter.state = state;
@@ -3359,22 +3324,22 @@ const getJobMetaPage = async (req, res) => {
 
     const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
 
-    let job        = null;
-    let jobType    = null;
-    let emoji      = "💼";
+    let job = null;
+    let jobType = null;
+    let emoji = "💼";
 
     // ── Step 1: Detect job type ─────────────────────────────────
     job = await Internship.findById(job_id).populate("c_by", "role").lean();
     if (job) {
       jobType = "Internship";
-      emoji   = "🎓";
+      emoji = "🎓";
     }
 
     if (!job) {
       job = await Freelance.findById(job_id).populate("c_by", "role").lean();
       if (job) {
         jobType = "Freelance";
-        emoji   = "🧑‍💻";
+        emoji = "🧑‍💻";
       }
     }
 
@@ -3397,12 +3362,12 @@ const getJobMetaPage = async (req, res) => {
     }
 
     // ── Step 3: Build meta fields ───────────────────────────────
-    const title    = job.jobTitle     || "Job Opportunity";
-    const company  = job.companyName  || job.organizer || "Company";
-    const location = job.location     || "";
-    const mode     = job.mode         || "";
-    const duration = job.duration     || "";
-    const salary   = job.salary
+    const title = job.jobTitle || "Job Opportunity";
+    const company = job.companyName || job.organizer || "Company";
+    const location = job.location || "";
+    const mode = job.mode || "";
+    const duration = job.duration || "";
+    const salary = job.salary
       ? `₹${job.salary}${jobType === "Internship" ? "/month" : ""}`
       : "Negotiable";
 
@@ -3485,9 +3450,9 @@ const getEventMetaPage = async (req, res) => {
       return res.status(400).send("<h1>Invalid Event ID</h1>");
     }
 
-    let event     = null;
+    let event = null;
     let eventType = null;
-    let emoji     = "📅";
+    let emoji = "📅";
 
     // ── Step 1: Detect which event model ────────────────────────
     event = await Event.findById(event_id).lean();
@@ -3518,12 +3483,12 @@ const getEventMetaPage = async (req, res) => {
       : `${process.env.BASE_URL}/default-event.png`;
 
     // ── Step 3: Build meta fields ───────────────────────────────
-    const name        = event.eventName   || "Event";
-    const organizer   = event.organizer   || "";
-    const city        = event.city        || "";
-    const state       = event.state       || "";
-    const mode        = event.mode        || "";
-    const eventDate   = event.eventDate
+    const name = event.eventName || "Event";
+    const organizer = event.organizer || "";
+    const city = event.city || "";
+    const state = event.state || "";
+    const mode = event.mode || "";
+    const eventDate = event.eventDate
       ? new Date(event.eventDate).toDateString()
       : "";
 
@@ -3617,17 +3582,17 @@ const getCompanyMetaPage = async (req, res) => {
 
     const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
 
-    let companyName  = "Nulinz";
-    let tagLine      = "Connecting Talent with Opportunity";
-    let aboutUs      = "Explore opportunities and grow your career with us.";
-    let city         = "";
-    let state        = "";
-    let companyType  = "";
-    let employees    = "";
+    let companyName = "Nulinz";
+    let tagLine = "Connecting Talent with Opportunity";
+    let aboutUs = "Explore opportunities and grow your career with us.";
+    let city = "";
+    let state = "";
+    let companyType = "";
+    let employees = "";
     let technologies = [];
-    let companyLogo  = `${process.env.BASE_URL}/${STATIC_ADMIN_IMAGE}`;
-    let coverImage   = `${process.env.BASE_URL}/default-cover.png`;
-    let isAdmin      = false;
+    let companyLogo = `${process.env.BASE_URL}/${STATIC_ADMIN_IMAGE}`;
+    let coverImage = `${process.env.BASE_URL}/default-cover.png`;
+    let isAdmin = false;
 
     // ── Step 1: Check if user is Admin ──────────────────────────
     const user = await User.findById(company_id).select("role").lean();
@@ -3638,25 +3603,25 @@ const getCompanyMetaPage = async (req, res) => {
 
     if (user.role === "admin") {
       // Admin has no company profile → use static branding
-      isAdmin     = true;
+      isAdmin = true;
       companyLogo = `${process.env.BASE_URL}/${STATIC_ADMIN_IMAGE}`;
-      coverImage  = `${process.env.BASE_URL}/default-cover.png`;
+      coverImage = `${process.env.BASE_URL}/default-cover.png`;
     } else {
       // ── Step 2: Find company by userId ────────────────────────
-      const company = await Company.findOne({ userId:company_id, isActive: true }).lean();
+      const company = await Company.findOne({ userId: company_id, isActive: true }).lean();
 
       if (!company) {
         return res.status(404).send("<h1>Company not found</h1>");
       }
 
-      companyName  = company.companyName   || "Company";
-      tagLine      = company.companyTagLine || "";
-      aboutUs      = company.aboutUs        || `${companyName} — ${tagLine}`;
-      city         = company.city           || "";
-      state        = company.state          || "";
-      companyType  = company.companyType    || "";
-      employees    = company.employees      || "";
-      technologies = company.technologies   || [];
+      companyName = company.companyName || "Company";
+      tagLine = company.companyTagLine || "";
+      aboutUs = company.aboutUs || `${companyName} — ${tagLine}`;
+      city = company.city || "";
+      state = company.state || "";
+      companyType = company.companyType || "";
+      employees = company.employees || "";
+      technologies = company.technologies || [];
 
       companyLogo = company.companyLogo
         ? `${process.env.BASE_URL}/${company.companyLogo}`
@@ -3680,7 +3645,7 @@ const getCompanyMetaPage = async (req, res) => {
 
     const description = aboutUs || descriptionParts.join(" | ");
 
-    const ogUrl = `${process.env.BASE_URL}/api/users/share/company?user_id=${ company_id}&web=${isWeb}`;
+    const ogUrl = `${process.env.BASE_URL}/api/users/share/company?user_id=${company_id}&web=${isWeb}`;
 
     const redirectUrl = isWeb
       ? `${process.env.FRONTEND_URL}/company?company_id_id=${encodeURIComponent(company_id)}&web=true`
@@ -3898,8 +3863,8 @@ export {
   getSeminarProfile,
   getMyRegistrations,
   getAllCompanies,
-  toggleFollow, 
-  getFollowingList, 
+  toggleFollow,
+  getFollowingList,
   getCompanyProfile,
   getEventsPage,
   getSeminarsPage,

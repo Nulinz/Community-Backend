@@ -168,8 +168,7 @@ export const verifySubscriptionPayment = async (req, res, next) => {
       { new: true }
     ).select("name email subscription");
 
-    // 3. Award First Subscription XP (+50 XP) if it's the user's first subscription
-    await awardXP({ userId, actionKey: "FIRST_SUBSCRIPTION" });
+    // 3. User can manually claim FIRST_SUBSCRIPTION mission from XP missions screen
 
     return res.status(200).json({
       success: true,

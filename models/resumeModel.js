@@ -18,6 +18,10 @@ const resumeSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    pdfUrl: {
+      type: String,
+      trim: true,
+    },
     fileSize: {
       type: Number,
     },

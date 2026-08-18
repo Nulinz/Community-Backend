@@ -3,6 +3,7 @@ import fs from "fs/promises";
 import { RESUME_TEMPLATES } from "../config/resumeTemplates.js";
 import { generateResumePDFBuffer, renderResumeHTML } from "../services/pdfService.js";
 import UserDetails from "../models/userDetails.js";
+import Resume from "../models/resumeModel.js";
 
 const DUMMY_RESUME_DATA = {
   personalInfo: {
@@ -89,10 +90,11 @@ export const getResumeTemplates = async (req, res, next) => {
     const baseUrl = `${req.protocol}://${req.get("host")}`;
 
     const templatesWithUrls = RESUME_TEMPLATES.map((tmpl) => {
-      const pdfFileName = `preview-template${tmpl.id}.pdf`;
+      const pdfFileName = `${tmpl.id}.pdf`;
 
       return {
         ...tmpl,
+        previewUrl: `/resume/${pdfFileName}`,
         previewPdfUrl: `${baseUrl}/resume/${pdfFileName}`,
         previewHtmlUrl: `${baseUrl}/api/resume/preview/${tmpl.id}`,
       };
@@ -116,7 +118,7 @@ export const getResumeTemplates = async (req, res, next) => {
 export const previewResumeTemplate = async (req, res, next) => {
   try {
     const { templateId = 1 } = req.params;
-    const pdfFilePath = path.resolve(process.cwd(), "resume", `preview-template${templateId}.pdf`);
+    const pdfFilePath = path.resolve(process.cwd(), "resume", `${templateId}.pdf`);
 
     try {
       await fs.access(pdfFilePath);
@@ -187,14 +189,56 @@ export const generateResume = async (req, res, next) => {
 
     await fs.writeFile(filePath, pdfBuffer);
 
-    const downloadUrl = `${req.protocol}://${req.get("host")}/uploads/resumes/${fileName}`;
+    const relativeUrl = `uploads/resumes/${fileName}`;
+    const downloadUrl = `${req.protocol}://${req.get("host")}/${relativeUrl}`;
+
+    const userId = req.user?._id || req.user?.id;
+    let savedResume = null;
+
+    if (userId) {
+      savedResume = await Resume.create({
+        userId,
+        fileName,
+        fileUrl: relativeUrl,
+        pdfUrl: relativeUrl,
+        fileSize: pdfBuffer.length,
+        mimeType: "application/pdf",
+      });
+    } else {
+      console.warn("generateResume: req.user._id is missing, unable to persist resume to database collection.");
+    }
+
+    // If client requested PDF file binary stream directly
+    if (req.query.stream === "true" || req.query.download === "true") {
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+      return res.send(pdfBuffer);
+    }
+
+    const responseData = savedResume
+      ? {
+          ...savedResume.toObject(),
+          fileUrl: relativeUrl,
+          pdfUrl: relativeUrl,
+          downloadUrl,
+        }
+      : {
+          fileName,
+          fileUrl: relativeUrl,
+          pdfUrl: relativeUrl,
+          downloadUrl,
+          fileSize: pdfBuffer.length,
+          mimeType: "application/pdf",
+        };
 
     return res.status(200).json({
       success: true,
       status: true,
       message: "Resume generated successfully",
       fileName,
+      fileUrl: relativeUrl,
       downloadUrl,
+      data: responseData,
     });
   } catch (error) {
     next(error);

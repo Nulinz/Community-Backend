@@ -28,6 +28,20 @@ handlebars.registerHelper("joinArray", (arr) => {
   return arr || "";
 });
 
+handlebars.registerHelper("or", (...args) => {
+  const values = args.slice(0, -1);
+  return values.some(Boolean);
+});
+
+handlebars.registerHelper("and", (...args) => {
+  const values = args.slice(0, -1);
+  return values.every(Boolean);
+});
+
+handlebars.registerHelper("eq", (a, b) => a === b);
+
+handlebars.registerHelper("not", (val) => !val);
+
 /**
  * Normalizes Mobile app & Web payload schemas into unified Handlebars fields.
  * Includes smart bullet splitting and robust field fallback.

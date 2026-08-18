@@ -20,11 +20,32 @@ export const awardXP = async ({ userId, actionKey, referenceId = null }) => {
     return { success: false, reason: "INVALID_ACTION_KEY" };
   }
 
-  // 1A. Daily Guard: Check if XP was already awarded today for daily actions
-  if (["DAILY_LOGIN", "AI_STATION", "ACTIVE_30_MIN", "ACTIVE_60_MIN", "ACTIVE_180_MIN"].includes(actionKey)) {
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
+  // 1. Fetch user FIRST and validate level eligibility before creating log entries
+  const user = await User.findById(userId);
+  if (!user) {
+    return { success: false, reason: "USER_NOT_FOUND" };
+  }
 
+  const userLevel = user.level || 1;
+
+  // Level-based activity guards
+  if (actionKey === "ACTIVE_30_MIN" && userLevel !== 1) {
+    return { success: false, reason: "NOT_ELIGIBLE_LEVEL" };
+  }
+  if (actionKey === "ACTIVE_60_MIN" && userLevel !== 2) {
+    return { success: false, reason: "NOT_ELIGIBLE_LEVEL" };
+  }
+  if (actionKey === "ACTIVE_180_MIN" && userLevel < 3) {
+    return { success: false, reason: "NOT_ELIGIBLE_LEVEL" };
+  }
+
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+
+  const isDaily = actionConfig.isDaily !== false;
+
+  // 2A. Daily Guard: Check if XP was already awarded today for daily actions
+  if (isDaily || ["DAILY_LOGIN", "AI_STATION", "ACTIVE_30_MIN", "ACTIVE_60_MIN", "ACTIVE_180_MIN"].includes(actionKey)) {
     const existingDailyLog = await XPLog.findOne({
       userId,
       action: actionKey,
@@ -35,66 +56,32 @@ export const awardXP = async ({ userId, actionKey, referenceId = null }) => {
       return { success: false, reason: "ALREADY_CLAIMED_TODAY" };
     }
   }
-  // 1B. One-time lifetime action guard
-  else if ([
-    "FIRST_REGISTERATION",
-    "FIRST_SUBSCRIPTION",
-    "FIRST_COMPANY_FOLLOW",
-    "FIRST_EVENT_REGISTRATION",
-    "FIRST_EVENT_ATTENDANCE",
-    "FIRST_FREELANCE_APPLICATION",
-    "FIRST_COMPETITION_REGISTRATION",
-    "LEVEL_1_BONUS",
-    "LEVEL_2_BONUS"
-  ].includes(actionKey)) {
+  // 2B. One-time lifetime action guard
+  else if (!referenceId) {
     const existingLog = await XPLog.findOne({ userId, action: actionKey });
     if (existingLog) {
       return { success: false, reason: "ALREADY_CLAIMED" };
     }
   }
-  // 1C. Reference ID Guard for non-daily actions with reference ID
-  else if (referenceId) {
+  // 2C. Reference ID Guard for non-daily actions with reference ID
+  else {
     const existingLog = await XPLog.findOne({ userId, action: actionKey, referenceId });
     if (existingLog) {
       return { success: false, reason: "ALREADY_CLAIMED" };
     }
   }
 
-  // 2. Log XP transaction defensively
-  try {
-    await XPLog.create({
-      userId,
-      action: actionKey,
-      xpEarned: actionConfig.xp,
-      referenceId,
-    });
-  } catch (err) {
-    if (err.code === 11000) {
-      return { success: false, reason: "ALREADY_CLAIMED" };
-    }
-    throw err;
-  }
+  // 3. Log XP transaction
+  await XPLog.create({
+    userId,
+    action: actionKey,
+    xpEarned: actionConfig.xp,
+    referenceId,
+  });
 
-  // 3. Atomically update User total XP and recalculate Level
-  const user = await User.findById(userId);
-  if (!user) {
-    return { success: false, reason: "USER_NOT_FOUND" };
-  }
-
-  // Level-based activity guards
-  if (actionKey === "ACTIVE_30_MIN" && user.level !== 1) {
-    return { success: false, reason: "NOT_ELIGIBLE_LEVEL" };
-  }
-  if (actionKey === "ACTIVE_60_MIN" && user.level !== 2) {
-    return { success: false, reason: "NOT_ELIGIBLE_LEVEL" };
-  }
-  if (actionKey === "ACTIVE_180_MIN" && user.level !== 3) {
-    return { success: false, reason: "NOT_ELIGIBLE_LEVEL" };
-  }
-
-  // Calculate sum of ALL XP earned from XPLog for 100% data integrity
-  const xpLogs = await XPLog.find({ userId }).select("xpEarned").lean();
-  let totalXP = xpLogs.reduce((sum, log) => sum + (log.xpEarned || 0), 0);
+  // 4. Atomically recalculate User total XP and Level from all audit logs
+  const updatedLogs = await XPLog.find({ userId }).select("xpEarned").lean();
+  let totalXP = updatedLogs.reduce((sum, log) => sum + (log.xpEarned || 0), 0);
 
   let levelInfo = calculateLevelInfo(totalXP);
   const isLevelUp = levelInfo.currentLevel > (user.level || 0);
@@ -141,8 +128,8 @@ export const awardXP = async ({ userId, actionKey, referenceId = null }) => {
   return {
     success: true,
     xpAwarded: actionConfig.xp,
-    totalXP: updatedUser?.xp || totalXP,
-    level: updatedUser?.level || levelInfo.currentLevel,
+    totalXP: updatedUser?.xp ?? totalXP,
+    level: updatedUser?.level ?? levelInfo.currentLevel,
     isLevelUp,
     levelInfo,
   };

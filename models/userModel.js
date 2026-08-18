@@ -128,6 +128,11 @@ const userSchema = new mongoose.Schema(
       default: Date.now,
     },
 
+    lastAiStationDate: {
+      type: Date,
+      default: null,
+    },
+
     // 🔹 REFERRAL SYSTEM
     referralCode: {
       type: String,

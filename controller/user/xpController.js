@@ -1,7 +1,12 @@
 import User from "../../models/userModel.js";
 import XPLog from "../../models/xpLogModel.js";
+import CompanyFollow from "../../models/companyFollowModel.js";
+import EventRegistration from "../../models/eventRegistrationModel.js";
+import AppliedJob from "../../models/appliedJobModel.js";
+import Notification from "../../models/notificationModel.js";
 import { XP_ACTIONS, calculateLevelInfo } from "../../config/xpConfig.js";
 import { awardXP } from "../../services/xpService.js";
+import { sendAndSaveNotification } from "../../helper/sendAndSaveNotification.js";
 
 /**
  * Get simple user XP summary (current XP, current level, XP needed for next level).
@@ -56,8 +61,12 @@ export const getMissions = async (req, res, next) => {
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
 
-    // Calculate today's active minutes based on calendar day boundary
+    // Calculate today's active minutes based on calendar day boundary & record activity if new day
     const isNewDay = !user.lastActiveDate || new Date(user.lastActiveDate) < startOfToday;
+    if (isNewDay) {
+      user.lastActiveDate = new Date();
+      await User.findByIdAndUpdate(userId, { lastActiveDate: user.lastActiveDate });
+    }
     const dailyMins = isNewDay ? 0 : user.dailyActiveMinutes || 0;
 
     // Fetch XP logs for today and lifetime
@@ -71,6 +80,19 @@ export const getMissions = async (req, res, next) => {
     const todayClaimedKeys = new Set(todayLogs.map((log) => log.action));
     const lifetimeClaimedKeys = new Set(lifetimeLogs.map((log) => log.action));
 
+    // 🔔 Trigger FCM when DAILY_LOGIN is in READY_TO_CLAIM status
+    if (!todayClaimedKeys.has("DAILY_LOGIN") && user.fcm_token) {
+      sendAndSaveNotification({
+        senderId: userId,
+        receiverId: userId,
+        title: "Daily Login Ready to Claim! 🎁",
+        message: "You've unlocked your Daily Login mission! Claim +5 XP now.",
+        body: "Your +5 XP daily reward is ready to claim in Missions!",
+        type: "reminder",
+        metadata: { action: "DAILY_LOGIN", status: "READY_TO_CLAIM", xpReward: "5" },
+      }).catch((err) => console.error("FCM Daily Login error:", err.message));
+    }
+
     // Select the single active time mission matching the user's current level
     let activeTimeMissionKey = "ACTIVE_30_MIN";
     if (userLevel === 2) {
@@ -78,6 +100,14 @@ export const getMissions = async (req, res, next) => {
     } else if (userLevel >= 3) {
       activeTimeMissionKey = "ACTIVE_180_MIN";
     }
+
+    // Pre-query database for real user activity completion status
+    const [hasFollowedCompany, hasEventRegistration, hasCompetitionRegistration, hasFreelanceApp] = await Promise.all([
+      CompanyFollow.exists({ userId }),
+      EventRegistration.exists({ userId }),
+      EventRegistration.exists({ userId, eventType: "Competition" }),
+      AppliedJob.exists({ userId, jobType: "Freelance" }),
+    ]);
 
     // Build missions list
     const missionKeys = [
@@ -101,15 +131,29 @@ export const getMissions = async (req, res, next) => {
         ? todayClaimedKeys.has(key)
         : lifetimeClaimedKeys.has(key);
 
-      // Compute current numerical progress
+      // Compute current numerical progress dynamically based on user activity
       let currentProgress = 0;
 
-      if (key === "DAILY_LOGIN") {
-        currentProgress = user.last_login && new Date(user.last_login) >= startOfToday ? 1 : 0;
+      if (isClaimed) {
+        currentProgress = config.target;
+      } else if (key === "DAILY_LOGIN") {
+        currentProgress = user.lastActiveDate && new Date(user.lastActiveDate) >= startOfToday ? 1 : 0;
+      } else if (key === "AI_STATION") {
+        currentProgress = user.lastAiStationDate && new Date(user.lastAiStationDate) >= startOfToday ? 1 : 0;
       } else if (key.startsWith("ACTIVE_")) {
         currentProgress = Math.min(dailyMins, config.target);
-      } else if (isClaimed) {
-        currentProgress = config.target;
+      } else if (key === "FIRST_REGISTERATION") {
+        currentProgress = 1;
+      } else if (key === "FIRST_COMPANY_FOLLOW") {
+        currentProgress = hasFollowedCompany ? 1 : 0;
+      } else if (key === "FIRST_EVENT_REGISTRATION") {
+        currentProgress = hasEventRegistration ? 1 : 0;
+      } else if (key === "FIRST_COMPETITION_REGISTRATION") {
+        currentProgress = hasCompetitionRegistration ? 1 : 0;
+      } else if (key === "FIRST_FREELANCE_APPLICATION") {
+        currentProgress = hasFreelanceApp ? 1 : 0;
+      } else if (key === "FIRST_SUBSCRIPTION") {
+        currentProgress = user.subscription?.status === "active" ? 1 : 0;
       } else {
         currentProgress = 0;
       }
@@ -162,7 +206,8 @@ export const getMissions = async (req, res, next) => {
 export const claimMission = async (req, res, next) => {
   try {
     const userId = req.user._id;
-    const { actionKey } = req.body;
+    const body = req.body || {};
+    const actionKey = body.actionKey || req.query?.actionKey;
 
     if (!actionKey || !XP_ACTIONS[actionKey]) {
       return res.status(400).json({
@@ -184,7 +229,7 @@ export const claimMission = async (req, res, next) => {
     const isNewDay = !user.lastActiveDate || new Date(user.lastActiveDate) < startOfToday;
     const dailyMins = isNewDay ? 0 : user.dailyActiveMinutes || 0;
 
-    // Check level eligibility for active minute missions
+    // Level guards for active minute missions
     if (actionKey === "ACTIVE_30_MIN" && userLevel !== 1) {
       return res.status(400).json({
         status: false,
@@ -204,24 +249,48 @@ export const claimMission = async (req, res, next) => {
       });
     }
 
-    // Check if target is satisfied for active minute missions
-    if (actionKey === "ACTIVE_30_MIN" && dailyMins < 30) {
-      return res.status(400).json({
-        status: false,
-        message: "Target of 30 active minutes not reached yet",
-      });
-    }
-    if (actionKey === "ACTIVE_60_MIN" && dailyMins < 60) {
-      return res.status(400).json({
-        status: false,
-        message: "Target of 60 active minutes not reached yet",
-      });
-    }
-    if (actionKey === "ACTIVE_180_MIN" && dailyMins < 180) {
-      return res.status(400).json({
-        status: false,
-        message: "Target of 180 active minutes not reached yet",
-      });
+    // Validate mission criteria completion before manual claim
+    if (actionKey === "DAILY_LOGIN") {
+      const hasBeenActiveToday = user.lastActiveDate && new Date(user.lastActiveDate) >= startOfToday;
+      if (!hasBeenActiveToday) {
+        return res.status(400).json({ status: false, message: "Daily login mission not completed today" });
+      }
+    } else if (actionKey === "AI_STATION") {
+      const hasUsedAiToday = user.lastAiStationDate && new Date(user.lastAiStationDate) >= startOfToday;
+      if (!hasUsedAiToday) {
+        return res.status(400).json({ status: false, message: "AI Station mission not completed today yet" });
+      }
+    } else if (actionKey === "ACTIVE_30_MIN" && dailyMins < 30) {
+      return res.status(400).json({ status: false, message: "Target of 30 active minutes not reached yet" });
+    } else if (actionKey === "ACTIVE_60_MIN" && dailyMins < 60) {
+      return res.status(400).json({ status: false, message: "Target of 60 active minutes not reached yet" });
+    } else if (actionKey === "ACTIVE_180_MIN" && dailyMins < 180) {
+      return res.status(400).json({ status: false, message: "Target of 180 active minutes not reached yet" });
+    } else if (actionKey === "FIRST_COMPANY_FOLLOW") {
+      const hasFollowed = await CompanyFollow.exists({ userId });
+      if (!hasFollowed) {
+        return res.status(400).json({ status: false, message: "First company follow mission not completed yet" });
+      }
+    } else if (actionKey === "FIRST_EVENT_REGISTRATION") {
+      const hasReg = await EventRegistration.exists({ userId });
+      if (!hasReg) {
+        return res.status(400).json({ status: false, message: "First event registration mission not completed yet" });
+      }
+    } else if (actionKey === "FIRST_COMPETITION_REGISTRATION") {
+      const hasCompReg = await EventRegistration.exists({ userId, eventType: "Competition" });
+      if (!hasCompReg) {
+        return res.status(400).json({ status: false, message: "First competition registration mission not completed yet" });
+      }
+    } else if (actionKey === "FIRST_FREELANCE_APPLICATION") {
+      const hasFreelanceApp = await AppliedJob.exists({ userId, jobType: "Freelance" });
+      if (!hasFreelanceApp) {
+        return res.status(400).json({ status: false, message: "First freelance application mission not completed yet" });
+      }
+    } else if (actionKey === "FIRST_SUBSCRIPTION") {
+      const isSubscribed = user.subscription?.status === "active";
+      if (!isSubscribed) {
+        return res.status(400).json({ status: false, message: "First subscription mission not completed yet" });
+      }
     }
 
     // Award XP using defensive service

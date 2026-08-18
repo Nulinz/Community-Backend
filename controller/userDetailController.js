@@ -1,4 +1,6 @@
 import UserDetails from "../models/userDetails.js";
+import User from "../models/userModel.js";
+import { calculateLevelInfo } from "../config/xpConfig.js";
 
 const sanitizeInput = (value) =>
     typeof value === "string" ? value.trim() : value;
@@ -56,13 +58,13 @@ export const createUserDetails = async (req, res, next) => {
         const hearAboutUs = sanitizeInput(req.body.hearAboutUs);
         const city = sanitizeInput(req.body.city);
         const others = sanitizeInput(req.body.others) || null;
-      
+
         if (!dob) {
             const error = new Error("Date of birth is required");
             error.status = 400;
             throw error;
         }
-         if (!city) {
+        if (!city) {
             const error = new Error("City is required");
             error.status = 400;
             throw error;
@@ -172,7 +174,7 @@ export const createUserDetails = async (req, res, next) => {
 
         const detailsData = {
             userId: req.user._id,
-            name:req.user.name,
+            name: req.user.name,
             dob,
             gender,
             city,
@@ -212,21 +214,37 @@ export const createUserDetails = async (req, res, next) => {
 // get user detail by middlewat=re return user id
 export const getUserDetails = async (req, res, next) => {
     try {
-        const userDetails = await UserDetails.findOne({ userId: req?.user?._id });
-     
+        const userId = req?.user?._id;
+        const [userDetails, user] = await Promise.all([
+            UserDetails.findOne({ userId }),
+            User.findById(userId).select("name email phone xp level").lean(),
+        ]);
+
         if (!userDetails) {
             const error = new Error("User details not found");
             error.status = 404;
             throw error;
         }
 
+        const levelInfo = calculateLevelInfo(user?.xp || 0);
+
         res.status(200).json({
             success: true,
             userDetails: {
                 ...userDetails.toObject(),
-                name: req?.user?.name,
-                email: req?.user?.email,
-                phone: req?.user?.phone,
+                name: user?.name || req?.user?.name,
+                email: user?.email || req?.user?.email,
+                phone: user?.phone || req?.user?.phone,
+                xp: levelInfo.totalXP,
+                level: levelInfo.currentLevel,
+                levelInfo: {
+                    currentLevel: levelInfo.currentLevel,
+                    totalXP: levelInfo.totalXP,
+                    xpForCurrentLevel: levelInfo.xpForCurrentLevel,
+                    xpForNextLevel: levelInfo.xpForNextLevel,
+                    xpNeededForNextLevel: levelInfo.xpNeeded,
+                    progressPercentage: levelInfo.progressPercentage,
+                },
             },
         });
     } catch (error) {
@@ -254,7 +272,7 @@ export const updateUserDetails = async (req, res, next) => {
         const yearOfExperience = req.body.yearOfExperience ?? null;
         const hearAboutUs = sanitizeInput(req.body.hearAboutUs);
         const others = sanitizeInput(req.body.others) || null;
-        
+
         if (!dob) {
             const error = new Error("Date of birth is required");
             error.status = 400;

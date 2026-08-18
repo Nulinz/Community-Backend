@@ -83,7 +83,7 @@ const uploader = multer();
 // router.post("/logout", isAuthenticated, logoutUser);
 
 router.post("/register", uploader.none(), registerUser);
-router.get("/logout",isAuthenticated,logout)
+router.get("/logout", isAuthenticated, logout)
 // App login
 router.post("/login", uploader.none(), loginUser)
 // Web login
@@ -102,8 +102,8 @@ router.post("/forgot-password", uploader.none(), forgotPassword);
 // 🔹 RESET PASSWORD (OTP + new password OR phone + new_password based on your flow)
 router.post("/reset-password", uploader.none(), resetPassword);
 router.post("/forgot-otp-verify", uploader.none(), forgotOtpVerify);
-router.post("/change-password", uploader.none(),isAuthenticated,changePassword);
-router.post("/apply-job",uploader.none(), isAuthenticated, applyJob);
+router.post("/change-password", uploader.none(), isAuthenticated, changePassword);
+router.post("/apply-job", uploader.none(), isAuthenticated, applyJob);
 router.get("/my-applied-job", isAuthenticated, getAppliedJobs);
 
 router.get("/dashboard", isAuthenticated, userDashboard);
@@ -111,24 +111,24 @@ router.post("/active-ping", isAuthenticated, activePing);
 router.get("/jobs", isAuthenticated, getJobs)
 router.get("/internships", isAuthenticated, getAllInternships)
 router.get("/freelances", isAuthenticated, getAllFreelances)
-router.post("/job-toggle", uploader.none(),isAuthenticated, toggleSavedJob);
-router.post("/job-profile",uploader.none(), isAuthenticated, getJobProfile);
+router.post("/job-toggle", uploader.none(), isAuthenticated, toggleSavedJob);
+router.post("/job-profile", uploader.none(), isAuthenticated, getJobProfile);
 // GET /api/saved-jobs          → get all saved jobs (auth required)
-router.get("/my-saved-job", uploader.none(),isAuthenticated, getSavedJobs);
+router.get("/my-saved-job", uploader.none(), isAuthenticated, getSavedJobs);
 
-router.get("/competitions",uploader.none(), isAuthenticated, getAllCompetitions);
+router.get("/competitions", uploader.none(), isAuthenticated, getAllCompetitions);
 
 // GET /api/competitions/:id    → single competition profile
-router.post("/Competition-profile",uploader.none(), isAuthenticated, getCompetitionProfile);
-router.post("/event-profile",uploader.none(), isAuthenticated, getEventProfile);
+router.post("/Competition-profile", uploader.none(), isAuthenticated, getCompetitionProfile);
+router.post("/event-profile", uploader.none(), isAuthenticated, getEventProfile);
 
 // GET  /api/conferences          → all conferences list
-router.get("/conferences",uploader.none(), isAuthenticated, getAllConferences);
+router.get("/conferences", uploader.none(), isAuthenticated, getAllConferences);
 
 // POST /api/conferences/profile  → single conference profile (id in body)
-router.post("/conference-profile", uploader.none(),isAuthenticated, getConferenceProfile);
+router.post("/conference-profile", uploader.none(), isAuthenticated, getConferenceProfile);
 
-router.post("/seminar-profile", uploader.none(),isAuthenticated, getSeminarProfile);
+router.post("/seminar-profile", uploader.none(), isAuthenticated, getSeminarProfile);
 
 
 router.get("/events", isAuthenticated, getEventsPage);
@@ -160,10 +160,10 @@ router.post(
 // Seminars landing page
 router.get("/seminars", isAuthenticated, getSeminarsPage);
 router.get("/locations", getLocations);
-router.post("/event-register", uploader.none(),isAuthenticated, createEventRegistration);
+router.post("/event-register", uploader.none(), isAuthenticated, createEventRegistration);
 router.get(
   "/event-technical",
-   isAuthenticated,
+  isAuthenticated,
   getAllTechnicalEvents
 );
 
@@ -178,7 +178,7 @@ router.get(
 
 router.get(
   "/seminar-technical",
-   isAuthenticated,
+  isAuthenticated,
   getAllTechnicalSeminars
 );
 
@@ -226,10 +226,10 @@ router.get("/share/job", getJobMetaPage);
 router.get("/share/event", getEventMetaPage);
 router.get("/share/company", getCompanyMetaPage);
 // Mark notification(s) as read
-router.post("/notifications/read",uploader.none(), isAuthenticated, markAsRead);
-router.get("/user-details",isAuthenticated,getUserDetails)
+router.post("/notifications/read", uploader.none(), isAuthenticated, markAsRead);
+router.get("/user-details", isAuthenticated, getUserDetails)
 // admin
-router.post("/create-admin",uploader.none(), isAuthenticated, authorizeRoles("admin"), uploader.none(), createAdmin);
+router.post("/create-admin", uploader.none(), isAuthenticated, authorizeRoles("admin"), uploader.none(), createAdmin);
 router.post("/adminlogin", uploader.none(), adminLogin);
 router.post("/adminforgot", uploader.none(), adminForgotPassword);
 router.post("/adminverify", uploader.none(), adminVerifyOtp);
