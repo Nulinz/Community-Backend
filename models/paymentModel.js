@@ -63,17 +63,11 @@ const paymentSchema = new mongoose.Schema(
       default: "INR",
     },
 
-    // Payment Method
+    // Payment Method (Optional)
     paymentMethod: {
       type: String,
-      enum: [
-        "UPI",
-        "Card",
-        "NetBanking",
-        "Wallet",
-        "Cash",
-      ],
-      required: true,
+      default: null,
+      trim: true,
     },
 
     // Status

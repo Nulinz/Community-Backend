@@ -1,28 +1,23 @@
 import crypto from "crypto";
+import Razorpay from "razorpay";
 import User from "../../models/userModel.js";
 import Payment from "../../models/paymentModel.js";
 import SubscriptionPlan from "../../models/subscriptionPlanModel.js";
 import { awardXP } from "../../services/xpService.js";
 
-// Helper to safely get Razorpay instance if key is configured
-const getRazorpayInstance = async () => {
+/**
+ * Initializes and returns a Razorpay client instance.
+ * Returns null if API credentials are not set in environment variables.
+ */
+const getRazorpayInstance = () => {
   const keyId = process.env.RAZORPAY_KEY_ID;
   const keySecret = process.env.RAZORPAY_KEY_SECRET;
 
   if (!keyId || !keySecret) {
-    throw new Error(
-      "Razorpay API keys (RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET) are missing in environment variables."
-    );
+    return null;
   }
 
-  try {
-    const { default: Razorpay } = await import("razorpay");
-    return new Razorpay({ key_id: keyId, key_secret: keySecret });
-  } catch (err) {
-    throw new Error(
-      "Razorpay package is not installed. Please run 'npm install razorpay'."
-    );
-  }
+  return new Razorpay({ key_id: keyId, key_secret: keySecret });
 };
 
 /**
@@ -41,22 +36,22 @@ export const getSubscriptionPlans = async (req, res, next) => {
           tier: "pro",
           billingCycle: "monthly",
           durationDays: 30,
-          price: 299,
+          price: 499,
           currency: "INR",
           features: ["Access all events & courses", "Priority support", "Pro badge"],
           isActive: true,
         },
-        {
-          planKey: "pro_yearly",
-          name: "Pro Annual",
-          tier: "pro",
-          billingCycle: "yearly",
-          durationDays: 365,
-          price: 2999,
-          currency: "INR",
-          features: ["All Monthly features", "Save 16%", "Exclusive webinars"],
-          isActive: true,
-        },
+        // {
+        //   planKey: "pro_yearly",
+        //   name: "Pro Annual",
+        //   tier: "pro",
+        //   billingCycle: "yearly",
+        //   durationDays: 365,
+        //   price: 2999,
+        //   currency: "INR",
+        //   features: ["All Monthly features", "Save 16%", "Exclusive webinars"],
+        //   isActive: true,
+        // },
       ];
     }
 
@@ -69,9 +64,9 @@ export const getSubscriptionPlans = async (req, res, next) => {
   }
 };
 
-
 /**
- * Verify Payment and Activate User Subscription in a single API call
+ * Store payment details sent from the client and activate the user subscription.
+ * Saves whatever is passed from the client directly into MongoDB without backend validation.
  */
 export const verifySubscriptionPayment = async (req, res, next) => {
   try {
@@ -81,60 +76,35 @@ export const verifySubscriptionPayment = async (req, res, next) => {
       razorpay_signature,
       paymentId,
       transactionId,
-      paymentMethod = "UPI",
+      orderId,
+      signature,
       paymentGateway = "Razorpay",
       planKey = "pro_monthly",
-      durationDays = 30,
+      planName,
+      durationDays,
       amount,
     } = req.body;
 
     const userId = req.user?._id;
-
     if (!userId) {
-      return res.status(401).json({ success: false, message: "Unauthorized user" });
+      return res.status(401).json({ success: false, message: "Unauthorized user." });
     }
 
-    const actualPaymentId = razorpay_payment_id || paymentId || transactionId;
+    const actualPaymentId = razorpay_payment_id || paymentId || transactionId || `PAY_${Date.now()}`;
+    const actualOrderId = razorpay_order_id || orderId || null;
+    const actualSignature = razorpay_signature || signature || null;
 
-    if (!actualPaymentId) {
-      return res.status(400).json({
-        success: false,
-        message: "Payment transaction ID or payment ID is required.",
-      });
-    }
-
-    // Cryptographic signature check if Razorpay signature is supplied
-    if (razorpay_signature && razorpay_order_id) {
-      const keySecret = process.env.RAZORPAY_KEY_SECRET;
-      if (keySecret) {
-        const body = `${razorpay_order_id}|${razorpay_payment_id}`;
-        const expectedSignature = crypto
-          .createHmac("sha256", keySecret)
-          .update(body.toString())
-          .digest("hex");
-
-        if (expectedSignature !== razorpay_signature) {
-          return res.status(400).json({
-            success: false,
-            message: "Invalid payment signature. Verification failed.",
-          });
-        }
-      }
-    }
-
-    // Calculate plan duration and pricing
-    let activeDays = Number(durationDays) || 30;
-    const planDoc = await SubscriptionPlan.findOne({ planKey });
-    if (planDoc?.durationDays) {
-      activeDays = planDoc.durationDays;
-    }
+    // Calculate duration, amount, and plan name from client request with fallbacks
+    const activeDays = Number(durationDays) || (planKey === "pro_yearly" ? 365 : 30);
+    const finalAmount = Number(amount) || (planKey === "pro_yearly" ? 2999 : 499);
+    const finalPlanName =
+      planName ||
+      (planKey === "pro_yearly" ? "Pro Annual" : "Pro Monthly");
 
     const startDate = new Date();
     const expiryDate = new Date(Date.now() + activeDays * 24 * 60 * 60 * 1000);
-    const planName = planDoc?.name || (planKey === "pro_yearly" ? "Pro Annual" : "Pro");
-    const finalAmount = amount || planDoc?.price || 299;
 
-    // 1. Log Payment Entry
+    // 1. Save Payment record directly to DB
     const paymentRecord = await Payment.create({
       userId,
       referenceId: userId,
@@ -142,23 +112,22 @@ export const verifySubscriptionPayment = async (req, res, next) => {
       c_by: userId,
       amount: finalAmount,
       currency: "INR",
-      paymentMethod,
       paymentStatus: "Success",
       paymentGateway,
-      orderId: razorpay_order_id || null,
+      orderId: actualOrderId,
       paymentId: actualPaymentId,
-      signature: razorpay_signature || null,
+      signature: actualSignature,
       transactionId: actualPaymentId,
-      remarks: `Subscription activated: ${planName}`,
+      remarks: `Subscription activated: ${finalPlanName}`,
     });
 
-    // 2. Update User Subscription in MongoDB
+    // 2. Update User's active subscription status in DB
     const updatedUser = await User.findByIdAndUpdate(
       userId,
       {
         $set: {
           subscription: {
-            planName,
+            planName: finalPlanName,
             isPlanActive: true,
             startDate,
             expiryDate,
@@ -168,14 +137,12 @@ export const verifySubscriptionPayment = async (req, res, next) => {
       { new: true }
     ).select("name email subscription");
 
-    // 3. User can manually claim FIRST_SUBSCRIPTION mission from XP missions screen
-
     return res.status(200).json({
       success: true,
       message: "Subscription activated successfully!",
       data: {
         paymentId: paymentRecord._id,
-        subscription: updatedUser.subscription,
+        subscription: updatedUser?.subscription,
       },
     });
   } catch (error) {
