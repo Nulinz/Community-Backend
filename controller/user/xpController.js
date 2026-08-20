@@ -3,9 +3,8 @@ import XPLog from "../../models/xpLogModel.js";
 import CompanyFollow from "../../models/companyFollowModel.js";
 import EventRegistration from "../../models/eventRegistrationModel.js";
 import AppliedJob from "../../models/appliedJobModel.js";
-import Notification from "../../models/notificationModel.js";
 import { XP_ACTIONS, calculateLevelInfo } from "../../config/xpConfig.js";
-import { awardXP } from "../../services/xpService.js";
+import { awardXP, triggerMissionNotification } from "../../services/xpService.js";
 import { sendAndSaveNotification } from "../../helper/sendAndSaveNotification.js";
 
 /**
@@ -79,19 +78,6 @@ export const getMissions = async (req, res, next) => {
 
     const todayClaimedKeys = new Set(todayLogs.map((log) => log.action));
     const lifetimeClaimedKeys = new Set(lifetimeLogs.map((log) => log.action));
-
-    // 🔔 Trigger FCM when DAILY_LOGIN is in READY_TO_CLAIM status
-    if (!todayClaimedKeys.has("DAILY_LOGIN") && user.fcm_token) {
-      sendAndSaveNotification({
-        senderId: userId,
-        receiverId: userId,
-        title: "Daily Login Ready to Claim! 🎁",
-        message: "You've unlocked your Daily Login mission! Claim +5 XP now.",
-        body: "Your +5 XP daily reward is ready to claim in Missions!",
-        type: "reminder",
-        metadata: { action: "DAILY_LOGIN", status: "READY_TO_CLAIM", xpReward: "5" },
-      }).catch((err) => console.error("FCM Daily Login error:", err.message));
-    }
 
     // Select the single active time mission matching the user's current level
     let activeTimeMissionKey = "ACTIVE_30_MIN";
@@ -185,6 +171,14 @@ export const getMissions = async (req, res, next) => {
         status, // "IN_PROGRESS" | "READY_TO_CLAIM" | "CLAIMED" | "LOCKED"
       };
     }).filter(Boolean);
+
+    // 🔔 Safety catch-all: Trigger FCM & save to notification list for any READY_TO_CLAIM mission
+    const readyMissions = missions.filter((m) => m.status === "READY_TO_CLAIM");
+    for (const mission of readyMissions) {
+      triggerMissionNotification(userId, mission.key).catch((err) =>
+        console.error(`FCM error for mission ${mission.key}:`, err.message)
+      );
+    }
 
     return res.status(200).json({
       status: true,

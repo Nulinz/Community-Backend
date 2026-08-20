@@ -2,7 +2,7 @@ import User from "../../models/userModel.js"
 import jwt from "jsonwebtoken";
 import UserDetails from "../../models/userDetails.js";
 import otpService from "../../config/sendSMS.js";
-import { awardXP } from "../../services/xpService.js";
+import { awardXP, triggerMissionNotification } from "../../services/xpService.js";
 import { calculateLevelInfo } from "../../config/xpConfig.js";
 
 
@@ -269,7 +269,10 @@ export const verifyOtp = async (req, res) => {
 
     await user.save();
 
-    // 🔹 First Registration completed. User can claim mission manually.
+    // 🔹 First Registration completed. Trigger mission notification.
+    triggerMissionNotification(user._id, "FIRST_REGISTERATION").catch((err) =>
+      console.error("FIRST_REGISTERATION notification error:", err.message)
+    );
 
     // 🔹 6. Generate JWT token
     const token = jwt.sign(

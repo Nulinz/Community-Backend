@@ -1,5 +1,6 @@
 import { aiToolsData } from "../../data/aiToolsData.js";
 import User from "../../models/userModel.js";
+import { triggerMissionNotification } from "../../services/xpService.js";
 
 /**
  * GET /api/users/ai-tools
@@ -9,9 +10,12 @@ export const getAiTools = async (req, res) => {
   try {
     const { category } = req.query;
 
-    // Track AI_STATION activity timestamp for user
+    // Track AI_STATION activity timestamp for user & trigger claim notification
     if (req.user?._id) {
       await User.findByIdAndUpdate(req.user._id, { lastAiStationDate: new Date() });
+      triggerMissionNotification(req.user._id, "AI_STATION").catch((err) =>
+        console.error("AI_STATION notification error:", err.message)
+      );
     }
 
     let tools = aiToolsData;

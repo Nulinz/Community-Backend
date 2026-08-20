@@ -41,6 +41,7 @@ const notificationSchema = new mongoose.Schema(
         "resume_uploaded",
         "system",
         "reminder",
+        "Claim XP",
       ],
     },
     reference_id: {

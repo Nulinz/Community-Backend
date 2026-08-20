@@ -1,6 +1,8 @@
 import User from "../models/userModel.js";
 import XPLog from "../models/xpLogModel.js";
+import Notification from "../models/notificationModel.js";
 import { XP_ACTIONS, calculateLevelInfo } from "../config/xpConfig.js";
+import { sendAndSaveNotification } from "../helper/sendAndSaveNotification.js";
 
 /**
  * Awards XP to a user defensively, updates total level atomically, and prevents duplicates.
@@ -133,4 +135,77 @@ export const awardXP = async ({ userId, actionKey, referenceId = null }) => {
     isLevelUp,
     levelInfo,
   };
+};
+
+/**
+ * Triggers an FCM notification and saves a Notification record immediately when
+ * a mission action is completed and becomes ready to claim.
+ * Performs strict deduplication to ensure notifications are only sent once per day
+ * (for daily missions) or once ever (for lifetime missions), and only if unclaimed.
+ * 
+ * @param {string|mongoose.Types.ObjectId} userId - Target user ObjectId
+ * @param {string} actionKey - Key from XP_ACTIONS (e.g. "AI_STATION", "DAILY_LOGIN", "ACTIVE_30_MIN", etc.)
+ */
+export const triggerMissionNotification = async (userId, actionKey) => {
+  try {
+    if (!userId || !actionKey) return;
+    const config = XP_ACTIONS[actionKey];
+    if (!config) return;
+
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const isDaily = config.isDaily !== false;
+
+    // 1. Check if already claimed in XPLog
+    if (isDaily) {
+      const alreadyClaimed = await XPLog.exists({
+        userId,
+        action: actionKey,
+        createdAt: { $gte: startOfToday },
+      });
+      if (alreadyClaimed) return;
+    } else {
+      const alreadyClaimed = await XPLog.exists({
+        userId,
+        action: actionKey,
+      });
+      if (alreadyClaimed) return;
+    }
+
+    // 2. Check if notification was already sent/saved
+    if (isDaily) {
+      const alreadyNotified = await Notification.exists({
+        receiver: userId,
+        type: "Claim XP",
+        "metadata.action": actionKey,
+        createdAt: { $gte: startOfToday },
+      });
+      if (alreadyNotified) return;
+    } else {
+      const alreadyNotified = await Notification.exists({
+        receiver: userId,
+        type: "Claim XP",
+        "metadata.action": actionKey,
+      });
+      if (alreadyNotified) return;
+    }
+
+    // 3. Send FCM push notification & save to Notification collection in DB
+    await sendAndSaveNotification({
+      senderId: userId,
+      receiverId: userId,
+      title: `${config.label} Ready to Claim! 🎁`,
+      message: `You've completed "${config.label}"! Claim +${config.xp} XP now.`,
+      body: `Your +${config.xp} XP reward is ready to claim in Missions!`,
+      type: "Claim XP",
+      metadata: {
+        action: actionKey,
+        status: "READY_TO_CLAIM",
+        xpReward: String(config.xp),
+      },
+    });
+  } catch (error) {
+    console.error(`triggerMissionNotification error for ${actionKey}:`, error.message);
+  }
 };

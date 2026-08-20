@@ -25,13 +25,14 @@ import CompanyFollow from "../../models/companyFollowModel.js";
 import Location from "../../models/locationModel.js";
 import { saveNotification } from "../../helper/saveNotification.js";
 import { sendAndSaveNotification } from "../../helper/sendAndSaveNotification.js";
-import { awardXP } from "../../services/xpService.js";
+import { awardXP, triggerMissionNotification } from "../../services/xpService.js";
 import { calculateLevelInfo } from "../../config/xpConfig.js";
 import User from "../../models/userModel.js";
 import JobSuggested from "../../models/jobSuggestedModel.js"
 import { getCollegeByEventId } from "../../helper/collegeDetails.js";
 import Payment from "../../models/paymentModel.js";
 import XPLog from "../../models/xpLogModel.js";
+import Notification from "../../models/notificationModel.js";
 
 // const userDashboard = async (req, res) => {
 //   try {
@@ -412,24 +413,10 @@ const userDashboard = async (req, res) => {
       await User.findByIdAndUpdate(userId, { lastActiveDate: userDoc.lastActiveDate });
     }
 
-    // 🔔 Trigger FCM on dashboard if DAILY_LOGIN is unclaimed today
-    const isDailyLoginClaimed = await XPLog.exists({
-      userId,
-      action: "DAILY_LOGIN",
-      createdAt: { $gte: startOfToday },
-    });
-
-    if (!isDailyLoginClaimed && userDoc?.fcm_token) {
-      sendAndSaveNotification({
-        senderId: userId,
-        receiverId: userId,
-        title: "Daily Login Ready to Claim! 🎁",
-        message: "You've unlocked your Daily Login mission! Claim +5 XP now.",
-        body: "Your +5 XP daily reward is ready to claim in Missions!",
-        type: "reminder",
-        metadata: { action: "DAILY_LOGIN", status: "READY_TO_CLAIM", xpReward: "5" },
-      }).catch((err) => console.error("FCM Daily Login dashboard error:", err.message));
-    }
+    // 🔔 Trigger FCM & save notification if DAILY_LOGIN is unclaimed today (deduplicated)
+    triggerMissionNotification(userId, "DAILY_LOGIN").catch((err) =>
+      console.error("FCM Daily Login dashboard error:", err.message)
+    );
 
     const levelInfo = calculateLevelInfo(userDoc?.xp || 0);
 
@@ -880,6 +867,12 @@ const applyJob = async (req, res) => {
       resumeId,
       c_by: job.c_by,
     });
+
+    if (jobType === "Freelance") {
+      triggerMissionNotification(userId, "FIRST_FREELANCE_APPLICATION").catch((err) =>
+        console.error("FIRST_FREELANCE_APPLICATION notification error:", err.message)
+      );
+    }
 
     return res.status(201).json({
       status: true,
@@ -2516,8 +2509,18 @@ const createEventRegistration = async (req, res) => {
     });
 
     // ==============================
-    // AWARD XP FOR REGISTRATION
+    // AWARD XP FOR REGISTRATION & TRIGGER MISSION NOTIFICATIONS
     // ==============================
+
+    triggerMissionNotification(userId, "FIRST_EVENT_REGISTRATION").catch((err) =>
+      console.error("FIRST_EVENT_REGISTRATION notification error:", err.message)
+    );
+
+    if (eventType === "Competition") {
+      triggerMissionNotification(userId, "FIRST_COMPETITION_REGISTRATION").catch((err) =>
+        console.error("FIRST_COMPETITION_REGISTRATION notification error:", err.message)
+      );
+    }
 
     const regActionMap = {
       Event: "EVENT_REGISTRATION",
@@ -2947,7 +2950,10 @@ const toggleFollow = async (req, res) => {
       await CompanyFollow.create({ userId, companyId });
       const followCount = await CompanyFollow.countDocuments({ companyId });
 
-
+      // Trigger first company follow mission claim notification
+      triggerMissionNotification(userId, "FIRST_COMPANY_FOLLOW").catch((err) =>
+        console.error("FIRST_COMPANY_FOLLOW notification error:", err.message)
+      );
 
       return res.status(200).json({
         status: true,
@@ -3750,6 +3756,24 @@ const activePing = async (req, res, next) => {
 
     user.lastActiveDate = now;
     await user.save();
+
+    // Trigger active time mission claim notification if threshold is reached
+    const userLevel = user.level || 1;
+    let activeTimeMissionKey = "ACTIVE_30_MIN";
+    let targetMins = 30;
+    if (userLevel === 2) {
+      activeTimeMissionKey = "ACTIVE_60_MIN";
+      targetMins = 60;
+    } else if (userLevel >= 3) {
+      activeTimeMissionKey = "ACTIVE_180_MIN";
+      targetMins = 180;
+    }
+
+    if (user.dailyActiveMinutes >= targetMins) {
+      triggerMissionNotification(userId, activeTimeMissionKey).catch((err) =>
+        console.error("Active time mission notification error:", err.message)
+      );
+    }
 
     return res.status(200).json({
       status: true,
