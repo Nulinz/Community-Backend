@@ -51,7 +51,8 @@ const allowedOrigins = [
 app.set("trust proxy", true);
 app.use(
   cors({
-    origin: allowedOrigins,
+    //origin: allowedOrigins,
+    origin: "https://icy-tree-067e50e10.7.azurestaticapps.net",
     credentials: true
   })
 );
