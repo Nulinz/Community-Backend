@@ -37,8 +37,12 @@ const competitionSchema = new mongoose.Schema(
 },
     eventName: { type: String, required: true, trim: true },
     organizer: { type: String, required: true, trim: true },
-    mode: { type: String, required: true },
+    mode: { type: String, required: true, enum: ["Online", "Offline", "Hybrid"] },
     eventDate: { type: Date, required: true },
+    eventStartTime: { type: String, trim: true },
+    eventEndDate: { type: Date },
+    eventEndTime: { type: String, trim: true },
+    onlinePlatformLink: { type: String, trim: true },
     registrationType: {
   type: String,
   enum: ["Free", "Paid"],
@@ -49,7 +53,6 @@ const competitionSchema = new mongoose.Schema(
     registrationEndDate: { type: Date },
     totalSeats: { type: Number },
     coverImage: { type: String, required: true },
-    eventStartTime: { type: String, trim: true },
     // Advanced Details
     rounds: [roundSchema],
     schedule: [scheduleSchema],
@@ -61,11 +64,19 @@ const competitionSchema = new mongoose.Schema(
 
     // Opportunities
     internshipOpportunity: { type: String },
+    internshipOpportunityDetails: { type: String, trim: true },
     placementOpportunity: { type: String },
+    placementOpportunityDetails: { type: String, trim: true },
     industryExposure: { type: String },
+    industryExposureDetails: { type: String, trim: true },
     industryPartners: { type: String },
- certificateAvailability: { type: String, trim: true },
+    certificateAvailability: { type: String, trim: true, default: "No" },
+    signatoryName: { type: String, trim: true, default: "" },
+    signatoryDesignation: { type: String, trim: true, default: "" },
+    signatureUrl: { type: String, trim: true, default: "" },
+    certificateContentBody: { type: String, trim: true, default: "" },
     // Prizes
+    prizesAvailable: { type: String, trim: true, default: "No" },
     firstPrize: { type: String, trim: true },
     secondPrize: { type: String, trim: true },
     thirdPrize: { type: String, trim: true },

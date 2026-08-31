@@ -27,6 +27,9 @@ export const createJobForm = async (req, res, next) => {
       jobStartDate,
       applicationDeadline,
       salary,
+      salaryType,
+      salaryMin,
+      salaryMax,
       responsibilities,
       eligibility,
       description,
@@ -41,8 +44,11 @@ export const createJobForm = async (req, res, next) => {
     if (!jobTitle) throw Object.assign(new Error("Job Title is required"), { status: 400 });
     const resolvedOrganizer = toCleanString(organizer || companyName);
     if (!resolvedOrganizer) throw Object.assign(new Error("Organizer / Company Name is required"), { status: 400 });
-    if (!location) throw Object.assign(new Error("Location is required"), { status: 400 });
-    if (!mode) throw Object.assign(new Error("Mode is required"), { status: 400 });
+    const cleanMode = toCleanString(mode);
+    if (!cleanMode) throw Object.assign(new Error("Mode is required"), { status: 400 });
+    if ((cleanMode === "Offline" || cleanMode === "Hybrid" || cleanMode === "On-site") && !location) {
+      throw Object.assign(new Error("Location is required for Offline or Hybrid mode"), { status: 400 });
+    }
 
     let job;
 
@@ -59,19 +65,24 @@ export const createJobForm = async (req, res, next) => {
       job.status = status;
     }
 
+    const cleanSalaryType = toCleanString(salaryType) || "Fixed amount";
+
     job.status = status;
-    job.jobCategory = toCleanString(jobCategory || jobType || "Job");
+    job.jobCategory = toCleanString(jobCategory);
     job.jobType = toCleanString(jobType || "Job");
     job.jobTitle = toCleanString(jobTitle);
     job.organizer = resolvedOrganizer;
     job.companyName = resolvedOrganizer;
-    job.location = toCleanString(location);
-    job.mode = toCleanString(mode);
+    job.location = toCleanString(location) || (cleanMode === "Online" || cleanMode === "Remote" ? cleanMode : "");
+    job.mode = cleanMode;
     job.totalOpenings = Number(totalOpenings) || 0;
-    job.duration = toCleanString(duration);
+    job.duration = toCleanString(jobType) === "Contract" ? toCleanString(duration) : "";
     job.jobStartDate = jobStartDate || undefined;
     job.applicationDeadline = applicationDeadline || undefined;
-    job.salary = Number(salary) || 0;
+    job.salaryType = cleanSalaryType;
+    job.salaryMin = cleanSalaryType === "Range" ? (Number(salaryMin) || 0) : 0;
+    job.salaryMax = cleanSalaryType === "Range" ? (Number(salaryMax) || 0) : 0;
+    job.salary = cleanSalaryType === "Fixed amount" ? (Number(salary) || 0) : (cleanSalaryType === "Range" ? (Number(salaryMin) || 0) : 0);
     job.description = toCleanString(description);
     job.certificateAvailability = toCleanString(certificateAvailability);
 

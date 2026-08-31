@@ -14,6 +14,7 @@ const eventUpload = createUpload("event");
 
 const uploader = eventUpload.fields([
   { name: "coverImage", maxCount: 1 },
+  { name: "signatureUrl", maxCount: 1 },
 ]);
 
 router.post("/create", isAuthenticated, uploader, createEventForm);

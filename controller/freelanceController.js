@@ -4,106 +4,122 @@ import UserDetails from "../models/userDetails.js";
 import { notifyJobAudience } from "../helper/jobNotification.js";
 
 const toCleanString = (value) =>
-    typeof value === "string" ? value.trim() : "";
+  typeof value === "string" ? value.trim() : "";
 
 const parseArray = (val) => {
-    if (Array.isArray(val)) return val;
-    if (typeof val === "string") {
-        try { return JSON.parse(val); } catch (e) { return [val]; }
-    }
-    return [];
+  if (Array.isArray(val)) return val;
+  if (typeof val === "string") {
+    try { return JSON.parse(val); } catch (e) { return [val]; }
+  }
+  return [];
 };
 
 export const createFreelanceForm = async (req, res, next) => {
-    try {
-        const { id, _id, ...rest } = req.body;
-        const targetId = id || _id;
-        const isUpdate = !!targetId;
-        const status=req?.user?.role==="admin"?"approved":"pending"
-        const {
-            jobTitle,
-            companyName,
-            mode,
-            totalOpenings,
-            duration,
-            applicationDeadline,
-            jobStartDate,
-            jobEndDate,
-            salary,
-            projectNeeds,
-            eligibility,
-            security,
-            referenceWebsite,
-            learning,
-            certificateAvailability,
-            description,
-            supporting_files,
-            payment_structure,
-            rules,
-            skill_set,
-            eligibility_criteria,
-             location
-        } = rest;
+  try {
+    const { id, _id, ...rest } = req.body;
+    const targetId = id || _id;
+    const isUpdate = !!targetId;
+    const status = req?.user?.role === "admin" ? "approved" : "pending"
+    const {
+      jobTitle,
+      companyName,
+      mode,
+      totalOpenings,
+      duration,
+      applicationDeadline,
+      jobStartDate,
+      jobEndDate,
+      salary,
+      budgetType,
+      budget,
+      paymentMethod,
+      paymentStructure,
+      milestones,
+      projectNeeds,
+      eligibility,
+      security,
+      referenceWebsite,
+      learning,
+      certificateAvailability,
+      description,
+      supporting_files,
+      payment_structure,
+      rules,
+      skill_set,
+      eligibility_criteria,
+      location
+    } = rest;
 
-        // Validation
-        if (!jobTitle) throw Object.assign(new Error("Job Title is required"), { status: 400 });
-        if (!companyName) throw Object.assign(new Error("Company Name is required"), { status: 400 });
-        if (!mode) throw Object.assign(new Error("Mode is required"), { status: 400 });
+    // Validation
+    if (!jobTitle) throw Object.assign(new Error("Job Title is required"), { status: 400 });
+    if (!companyName) throw Object.assign(new Error("Company Name is required"), { status: 400 });
+    if (!mode) throw Object.assign(new Error("Mode is required"), { status: 400 });
 
-        let freelance;
+    let freelance;
 
-        if (isUpdate) {
-            freelance = await Freelance.findById(targetId);
-            if (!freelance) {
-                throw Object.assign(new Error("Freelance not found"), { status: 404 });
-            }
-            if (req.user?.role === "company" && freelance.c_by?.toString() !== req.user._id?.toString()) {
-                throw Object.assign(new Error("Not authorized to update this freelance"), { status: 403 });
-            }
-        } else {
-            freelance = new Freelance({ c_by: req.user._id });
-            freelance.status=status
-        }
-freelance.status=status
-        // Update fields
-        freelance.jobTitle = toCleanString(jobTitle);
-        freelance.companyName = toCleanString(companyName);
-        freelance.mode = toCleanString(mode);
-        freelance.totalOpenings = Number(totalOpenings) || 0;
-        freelance.duration = toCleanString(duration);
-        freelance.applicationDeadline = applicationDeadline || undefined;
-        freelance.jobStartDate = jobStartDate || undefined;
-        freelance.jobEndDate = jobEndDate || undefined;
-        freelance.salary = Number(salary) || 0;
-        freelance.location = toCleanString(location)
-        freelance.learning = toCleanString(learning);
-        freelance.certificateAvailability = toCleanString(certificateAvailability);
-        freelance.description = toCleanString(description);
-
-        freelance.projectNeeds = parseArray(projectNeeds);
-        freelance.eligibility = parseArray(eligibility);
-        freelance.security = parseArray(security);
-        freelance.referenceWebsite = parseArray(referenceWebsite);
-        freelance.rules = parseArray(rules);
-        freelance.skill_set = parseArray(skill_set);
-        freelance.payment_structure = parseArray(payment_structure);
-        freelance.supporting_files = parseArray(supporting_files);
-        freelance. eligibility_criteria = parseArray( eligibility_criteria);
-        await freelance.save();
-// if(!isUpdate){
-//           notifyJobAudience(freelance, req.user._id, isUpdate, "Freelance").catch((e) =>
-//     console.error("Freelance notification error:", e.message)
-//   );
-        // }
-        res.status(isUpdate ? 200 : 201).json({
-            success: true,
-            message: `Freelance ${isUpdate ? "updated" : "created"} successfully`,
-            data: freelance,
-        });
-
-    } catch (error) {
-        next(error);
+    if (isUpdate) {
+      freelance = await Freelance.findById(targetId);
+      if (!freelance) {
+        throw Object.assign(new Error("Freelance not found"), { status: 404 });
+      }
+      if (req.user?.role === "company" && freelance.c_by?.toString() !== req.user._id?.toString()) {
+        throw Object.assign(new Error("Not authorized to update this freelance"), { status: 403 });
+      }
+    } else {
+      freelance = new Freelance({ c_by: req.user._id });
+      freelance.status = status
     }
+    freelance.status = status
+    // Update fields
+    freelance.jobTitle = toCleanString(jobTitle);
+    freelance.companyName = toCleanString(companyName);
+    freelance.mode = toCleanString(mode);
+    freelance.totalOpenings = Number(totalOpenings) || 0;
+    freelance.duration = toCleanString(duration);
+    freelance.applicationDeadline = applicationDeadline || undefined;
+    freelance.jobStartDate = jobStartDate || undefined;
+    freelance.jobEndDate = jobEndDate || undefined;
+    freelance.salary = Number(salary) || 0;
+    freelance.budgetType = toCleanString(budgetType) || "Fixed";
+    freelance.budget = toCleanString(budget);
+    freelance.paymentMethod = toCleanString(paymentMethod);
+    freelance.paymentStructure = toCleanString(paymentStructure) || toCleanString(rest.paymentstructure) || "Full Payment";
+    freelance.milestones = parseArray(milestones)
+      .map((m) => ({
+        milestoneName: toCleanString(m?.milestoneName),
+        amount: Number(m?.amount) || 0,
+        dueDate: m?.dueDate ? new Date(m.dueDate) : undefined,
+      }))
+      .filter((m) => m.milestoneName || m.amount > 0 || m.dueDate);
+    freelance.location = toCleanString(location);
+    freelance.learning = toCleanString(learning);
+    freelance.certificateAvailability = toCleanString(certificateAvailability);
+    freelance.description = toCleanString(description);
+
+    freelance.projectNeeds = parseArray(projectNeeds);
+    freelance.eligibility = parseArray(eligibility);
+    freelance.security = parseArray(security);
+    freelance.referenceWebsite = parseArray(referenceWebsite);
+    freelance.rules = parseArray(rules);
+    freelance.skill_set = parseArray(skill_set);
+    freelance.payment_structure = parseArray(payment_structure);
+    freelance.supporting_files = parseArray(supporting_files);
+    freelance.eligibility_criteria = parseArray(eligibility_criteria);
+    await freelance.save();
+    // if(!isUpdate){
+    //           notifyJobAudience(freelance, req.user._id, isUpdate, "Freelance").catch((e) =>
+    //     console.error("Freelance notification error:", e.message)
+    //   );
+    // }
+    res.status(isUpdate ? 200 : 201).json({
+      success: true,
+      message: `Freelance ${isUpdate ? "updated" : "created"} successfully`,
+      data: freelance,
+    });
+
+  } catch (error) {
+    next(error);
+  }
 };
 
 
@@ -192,11 +208,11 @@ export const getFreelanceById = async (req, res, next) => {
           sNo: index + 1,
           applicationId: app._id,
           userId: app.userId?._id,
-          name:app.userId?.name,
+          name: app.userId?.name,
           mail: app.userId?.email || "",
           contact: app.userId?.phone || "",
           appliedAt: app.createdAt,
-          location:app.location,
+          location: app.location,
           // UserDetails
           profile_pic: userDetails?.profile_pic || null,
           gender: userDetails?.gender || "",
@@ -229,26 +245,26 @@ export const getFreelanceById = async (req, res, next) => {
 };
 
 export const toggleFreelanceStatus = async (req, res, next) => {
-    try {
-        const { id } = req.params;
-        const freelance = await Freelance.findById(id);
+  try {
+    const { id } = req.params;
+    const freelance = await Freelance.findById(id);
 
-        if (!freelance) {
-            throw Object.assign(new Error("Freelance not found"), { status: 404 });
-        }
-        if (req.user?.role === "company" && freelance.c_by?.toString() !== req.user._id?.toString()) {
-            throw Object.assign(new Error("Not authorized to update this freelance"), { status: 403 });
-        }
-
-        freelance.isActive = !freelance.isActive;
-        await freelance.save();
-
-        res.status(200).json({
-            success: true,
-            message: `Freelance ${freelance.isActive ? "activated" : "deactivated"} successfully`,
-            data: freelance,
-        });
-    } catch (error) {
-        next(error);
+    if (!freelance) {
+      throw Object.assign(new Error("Freelance not found"), { status: 404 });
     }
+    if (req.user?.role === "company" && freelance.c_by?.toString() !== req.user._id?.toString()) {
+      throw Object.assign(new Error("Not authorized to update this freelance"), { status: 403 });
+    }
+
+    freelance.isActive = !freelance.isActive;
+    await freelance.save();
+
+    res.status(200).json({
+      success: true,
+      message: `Freelance ${freelance.isActive ? "activated" : "deactivated"} successfully`,
+      data: freelance,
+    });
+  } catch (error) {
+    next(error);
+  }
 };

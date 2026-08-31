@@ -46,13 +46,14 @@ const allowedOrigins = [
   "http://192.168.1.2:5173",
   "http://192.168.29.221:5173",
   "http://192.168.29.74:5173",
+  "https://icy-tree-067e50e10.7.azurestaticapps.net",
 ].filter(Boolean);
 
 app.set("trust proxy", true);
 app.use(
   cors({
-    //origin: allowedOrigins,
-    origin: "https://icy-tree-067e50e10.7.azurestaticapps.net",
+    origin: allowedOrigins,
+    // origin: "https://icy-tree-067e50e10.7.azurestaticapps.net",
     credentials: true
   })
 );
@@ -105,7 +106,7 @@ startJobSuggestionCron()
 app.use("/api/users", userRoutes);
 app.use("/api/userDetails", userDetailsRoutes);
 app.use("/api/company", companyRoutes);
-app.use("/api/college",collegeRoutes)
+app.use("/api/college", collegeRoutes)
 app.use("/api/event", eventRoutes)
 app.use("/api/competition", competitionRoutes)
 app.use("/api/conference", conferenceRoutes)
@@ -138,22 +139,22 @@ app.use(errorMiddleware);
 const startServer = async () => {
   if (process.env.MONGO_URI) {
     await connectDB();
-//     const result = await  seedCompanyByUserId({
-//   userId: "69feac1bc9dc4dd0ca5d5f10",
-//   companyData: {
-//     companyName: "Nulinz",
-//     companyType: "IT Services",
-//     contactPersonName: "admin",
-//     address: "Salem",
-//     city: "Salem",
-//     state: "Tamil Nadu",
-//     pincode: "636001",
-//     companyLogo: "uploads/Nulinz LOGO 3.png",
-//   },
-// });
+    //     const result = await  seedCompanyByUserId({
+    //   userId: "69feac1bc9dc4dd0ca5d5f10",
+    //   companyData: {
+    //     companyName: "Nulinz",
+    //     companyType: "IT Services",
+    //     contactPersonName: "admin",
+    //     address: "Salem",
+    //     city: "Salem",
+    //     state: "Tamil Nadu",
+    //     pincode: "636001",
+    //     companyLogo: "uploads/Nulinz LOGO 3.png",
+    //   },
+    // });
 
 
-// console.log(result);
+    // console.log(result);
   } else {
     console.warn("MONGO_URI not found. Starting server without database connection.");
   }

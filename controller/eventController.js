@@ -41,7 +41,7 @@ export const createEventForm = async (req, res, next) => {
         const { id, _id, ...rest } = req.body;
         const targetId = id || _id;
         const isUpdate = !!targetId;
-        const status=req?.user?.role==="admin"?"approved":"pending"
+        const status = req?.user?.role === "admin" ? "approved" : "pending"
         const {
             eventType,
             eventCategory,
@@ -56,6 +56,7 @@ export const createEventForm = async (req, res, next) => {
             individualFees,
             teamFees,
             lateFees,
+            prizesAvailable,
             firstPrize,
             secondPrize,
             thirdPrize,
@@ -86,7 +87,12 @@ export const createEventForm = async (req, res, next) => {
             incharges,
             description,
             certificateAvailability,
-            eventStartTime
+            signatoryName,
+            signatoryDesignation,
+            certificateContentBody,
+            eventStartTime,
+            eventEndTime,
+            onlinePlatformLink
         } = rest;
 
         if (!eventType) throw Object.assign(new Error("Event Type is required"), { status: 400 });
@@ -97,13 +103,17 @@ export const createEventForm = async (req, res, next) => {
         if (!registrationType) throw Object.assign(new Error("Registration Type is required"), { status: 400 });
 
         const coverImageFile = req.files?.coverImage?.[0];
+        const signatureUrlFile = req.files?.signatureUrl?.[0];
         if (!isUpdate && !coverImageFile) {
             throw Object.assign(new Error("Cover Image is required"), { status: 400 });
         }
 
         const coverImagePath = coverImageFile ? getUploadedFilePath(coverImageFile) : undefined;
+        const signatureUrlPath = signatureUrlFile ? getUploadedFilePath(signatureUrlFile) : undefined;
 
         let event;
+        let oldCoverImagePath;
+        let oldSignatureUrlPath;
 
         if (isUpdate) {
             if (!mongoose.Types.ObjectId.isValid(targetId)) {
@@ -114,11 +124,12 @@ export const createEventForm = async (req, res, next) => {
                 throw Object.assign(new Error("Event not found"), { status: 404 });
             }
             oldCoverImagePath = event.coverImage;
+            oldSignatureUrlPath = event.signatureUrl;
         } else {
             event = new Event({ c_by: req.user._id });
-             event.status=status
+            event.status = status
         }
-event.status=status
+        event.status = status
         event.eventType = toCleanString(eventType);
         event.eventCategory = toCleanString(eventCategory);
         event.eventName = toCleanString(eventName);
@@ -126,17 +137,24 @@ event.status=status
         event.mode = toCleanString(mode);
         event.eventDate = eventDate;
         event.eventStartTime = toCleanString(eventStartTime);
+        event.eventEndTime = toCleanString(eventEndTime);
+        event.onlinePlatformLink = toCleanString(onlinePlatformLink);
         event.registrationType = toCleanString(registrationType);
         event.registrationStartDate = registrationStartDate || undefined;
         event.registrationEndDate = registrationEndDate || undefined;
         event.totalSeats = Number(totalSeats) || 0;
-        event.certificateAvailability = toCleanString(certificateAvailability);
+        event.certificateAvailability = toCleanString(certificateAvailability) || "No";
+        event.signatoryName = toCleanString(signatoryName);
+        event.signatoryDesignation = toCleanString(signatoryDesignation);
+        event.certificateContentBody = toCleanString(certificateContentBody);
         if (coverImagePath) event.coverImage = coverImagePath;
+        if (signatureUrlPath) event.signatureUrl = signatureUrlPath;
 
         event.individualFees = Number(individualFees) || 0;
         event.teamFees = Number(teamFees) || 0;
         event.lateFees = Number(lateFees) || 0;
 
+        event.prizesAvailable = toCleanString(prizesAvailable) || "No";
         event.firstPrize = toCleanString(firstPrize);
         event.secondPrize = toCleanString(secondPrize);
         event.thirdPrize = toCleanString(thirdPrize);
@@ -174,8 +192,13 @@ event.status=status
 
         await event.save();
 
-        if (isUpdate && coverImagePath && oldCoverImagePath) {
-            fs.unlink(path.join(process.cwd(), oldCoverImagePath), () => { });
+        if (isUpdate) {
+            if (coverImagePath && oldCoverImagePath) {
+                fs.unlink(path.join(process.cwd(), oldCoverImagePath), () => { });
+            }
+            if (signatureUrlPath && oldSignatureUrlPath) {
+                fs.unlink(path.join(process.cwd(), oldSignatureUrlPath), () => { });
+            }
         }
 
         res.status(isUpdate ? 200 : 201).json({
@@ -185,7 +208,10 @@ event.status=status
         });
 
     } catch (error) {
-        cleanupUploadedFiles([...(req.files?.coverImage || [])]);
+        cleanupUploadedFiles([
+            ...(req.files?.coverImage || []),
+            ...(req.files?.signatureUrl || [])
+        ]);
         next(error);
     }
 };
@@ -223,63 +249,63 @@ export const getAllEvents = async (req, res, next) => {
 
 
 export const getEventById = async (req, res, next) => {
-  try {
-    const { id } = req.params;
+    try {
+        const { id } = req.params;
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      throw Object.assign(new Error("Invalid Event ID format"), { status: 400 });
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            throw Object.assign(new Error("Invalid Event ID format"), { status: 400 });
+        }
+
+        // ── 1. Get Event ────────────────────────────────────────
+        const event = await Event.findById(id).lean();
+
+        if (!event) {
+            throw Object.assign(new Error("Event not found"), { status: 404 });
+        }
+        const revenue = await getEventFinancials(id)
+        // ── 2. Get Registered List ──────────────────────────────
+        const registrations = await EventRegistration.find({
+            eventId: id,
+            eventType: "Event",
+        })
+            .populate("userId", "email phone name ")
+            .sort({ createdAt: -1 })
+            .lean();
+
+        const registeredList = registrations.map((reg, index) => ({
+            sNo: index + 1,
+            registrationId: reg._id,
+            userId: reg.userId?._id,
+            name: reg.userId?.name,
+            email: reg.userId?.email || reg.mailId,
+            phone: reg.userId?.phone || reg.phoneNumber,
+            fullName: reg.fullName,
+            department: reg.department,
+            college: reg.collegeName,
+            year: reg.year,
+            phoneNumber: reg.phoneNumber,
+            mailId: reg.mailId,
+            food: reg.food,
+            foodType: reg.foodType,
+            accommodation: reg.accommodation,
+            accommodationType: reg.accommodationType,
+            registeredAt: reg.createdAt,
+        }));
+
+        return res.status(200).json({
+            success: true,
+            data: {
+                event,
+                registrations: {
+                    count: registeredList.length,
+                    list: registeredList,
+                    revenue
+                },
+            },
+        });
+    } catch (error) {
+        next(error);
     }
-
-    // ── 1. Get Event ────────────────────────────────────────
-    const event = await Event.findById(id).lean();
-
-    if (!event) {
-      throw Object.assign(new Error("Event not found"), { status: 404 });
-    }
- const revenue=await getEventFinancials(id)
-    // ── 2. Get Registered List ──────────────────────────────
-    const registrations = await EventRegistration.find({
-      eventId: id,
-      eventType: "Event",
-    })
-      .populate("userId", "email phone name ")
-      .sort({ createdAt: -1 })
-      .lean();
-
-    const registeredList = registrations.map((reg, index) => ({
-      sNo: index + 1,
-      registrationId: reg._id,
-      userId: reg.userId?._id,
-      name: reg.userId?.name,
-      email: reg.userId?.email || reg.mailId,
-      phone: reg.userId?.phone || reg.phoneNumber,
-      fullName: reg.fullName,
-      department: reg.department,
-      college: reg.collegeName,
-      year: reg.year,
-      phoneNumber: reg.phoneNumber,
-      mailId: reg.mailId,
-      food: reg.food,
-      foodType: reg.foodType,
-      accommodation: reg.accommodation,
-      accommodationType: reg.accommodationType,
-      registeredAt: reg.createdAt,
-    }));
-
-    return res.status(200).json({
-      success: true,
-      data: {
-        event,
-        registrations: {
-          count: registeredList.length,
-          list: registeredList,
-          revenue
-        },
-      },
-    });
-  } catch (error) {
-    next(error);
-  }
 };
 
 export const toggleEventStatus = async (req, res, next) => {

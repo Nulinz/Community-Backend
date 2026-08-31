@@ -15,6 +15,7 @@ const competitionUpload = createUpload("competition");
 const uploader = competitionUpload.fields([
   { name: "coverImage", maxCount: 1 },
   { name: "ruleBook", maxCount: 1 },
+  { name: "signatureUrl", maxCount: 1 },
 ]);
 
 router.post("/create", isAuthenticated, uploader, createCompetitionForm);

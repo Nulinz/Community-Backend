@@ -21,31 +21,31 @@ const collegeSchema = new mongoose.Schema(
         },
         accountHolderName: {
             type: String,
-            required: true,
+            default: "",
             trim: true,
         },
 
         bankName: {
             type: String,
-            required: true,
+            default: "",
             trim: true,
         },
 
         branchName: {
             type: String,
-            required: true,
+            default: "",
             trim: true,
         },
 
         accountNumber: {
             type: String,
-            required: true,
+            default: "",
             trim: true,
         },
 
         ifscCode: {
             type: String,
-            required: true,
+            default: "",
             trim: true,
         },
 
@@ -55,6 +55,16 @@ const collegeSchema = new mongoose.Schema(
             trim: true,
         },
         establishedYear: {
+            type: String,
+            default: "",
+            trim: true,
+        },
+        officialWebsite: {
+            type: String,
+            default: "",
+            trim: true,
+        },
+        aisheCode: {
             type: String,
             default: "",
             trim: true,
@@ -76,6 +86,11 @@ const collegeSchema = new mongoose.Schema(
         contactPersonName: {
             type: String,
             required: true,
+            trim: true,
+        },
+        designation: {
+            type: String,
+            default: "",
             trim: true,
         },
         address: {
@@ -103,6 +118,10 @@ const collegeSchema = new mongoose.Schema(
             default: [],
         },
         coursesAvailable: {
+            type: [String],
+            default: [],
+        },
+        accreditation: {
             type: [String],
             default: [],
         },

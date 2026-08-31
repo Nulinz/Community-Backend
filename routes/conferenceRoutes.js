@@ -14,6 +14,7 @@ const conferenceUpload = createUpload("conference");
 
 const uploader = conferenceUpload.fields([
   { name: "coverImage", maxCount: 1 },
+  { name: "signatureUrl", maxCount: 1 },
 ]);
 
 router.post("/create", isAuthenticated, uploader, createConferenceForm);

@@ -18,33 +18,39 @@ const companySchema = new mongoose.Schema(
       required: true,
       index: true,
     },
-accountHolderName: {
+    accountHolderName: {
   type: String,
-  required: true,
+  default: "",
   trim: true,
 },
 
 bankName: {
   type: String,
-  required: true,
+  default: "",
   trim: true,
 },
 
 branchName: {
   type: String,
-  required: true,
+  default: "",
   trim: true,
 },
 
 accountNumber: {
   type: String,
-  required: true,
+  default: "",
   trim: true,
 },
 
 ifscCode: {
   type: String,
-  required: true,
+  default: "",
+  trim: true,
+},
+
+verificationStatus: {
+  type: String,
+  default: "Pending",
   trim: true,
 },
 
@@ -57,6 +63,11 @@ ifscCode: {
     companyType: {
       type: String,
       required: true,
+      trim: true,
+    },
+    industry: {
+      type: String,
+      default: "",
       trim: true,
     },
     companyTagLine: {
@@ -74,6 +85,11 @@ ifscCode: {
       trim: true,
     },
     websiteLink: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    linkedinUrl: {
       type: String,
       default: "",
       trim: true,

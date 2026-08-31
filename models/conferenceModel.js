@@ -30,21 +30,24 @@ const conferenceSchema = new mongoose.Schema(
     // Basic Details
     rejected_reason: { type: String },
     status: {
-  type: String,
-  required: true,
-  enum: ["pending", "approved", "rejected"],
-  default: "pending"
-},
+      type: String,
+      required: true,
+      enum: ["pending", "approved", "rejected"],
+      default: "pending"
+    },
     eventName: { type: String, required: true, trim: true },
     organizer: { type: String, required: true, trim: true },
     mode: { type: String, required: true },
     eventDate: { type: Date, required: true },
+    eventStartTime: { type: String, trim: true },
+    eventEndTime: { type: String, trim: true },
+    onlinePlatformLink: { type: String, trim: true },
     registrationType: {
-  type: String,
-  enum: ["Free", "Paid"],
-  required: true,
-  default: "Free",
-},
+      type: String,
+      enum: ["Free", "Paid"],
+      required: true,
+      default: "Free",
+    },
     registrationStartDate: { type: Date },
     registrationEndDate: { type: Date },
     totalSeats: { type: Number },
@@ -60,6 +63,7 @@ const conferenceSchema = new mongoose.Schema(
     lateFees: { type: Number, default: 0 },
 
     // Prizes
+    prizesAvailable: { type: String, trim: true, default: "No" },
     firstPrize: { type: String, trim: true },
     secondPrize: { type: String, trim: true },
     thirdPrize: { type: String, trim: true },
@@ -73,7 +77,7 @@ const conferenceSchema = new mongoose.Schema(
 
     // Venue
     venueName: { type: String, trim: true },
-     address: { type: String, trim: true },
+    address: { type: String, trim: true },
     city: { type: String, trim: true },
     state: { type: String, trim: true },
     pincode: { type: String, trim: true },
@@ -91,17 +95,21 @@ const conferenceSchema = new mongoose.Schema(
     incharges: [inchargeSchema],
     eligibilityDetails: { type: String, trim: true },
     allowedDepartments: {
-  type: [String],
-},
-   teamOrIndividualEvent: {
-  type: String,
-  enum: ["Team", "Individual", "Both"],
-  required: true,
-  default: "Individual",
-},
+      type: [String],
+    },
+    teamOrIndividualEvent: {
+      type: String,
+      enum: ["Team", "Individual", "Both"],
+      required: true,
+      default: "Individual",
+    },
     teamSizeMinimum: { type: Number },
     teamSizeMaximum: { type: Number },
- certificateAvailability: { type: String, trim: true },
+    certificateAvailability: { type: String, trim: true, default: "No" },
+    signatoryName: { type: String, trim: true, default: "" },
+    signatoryDesignation: { type: String, trim: true, default: "" },
+    signatureUrl: { type: String, trim: true, default: "" },
+    certificateContentBody: { type: String, trim: true, default: "" },
     // Rules & Description
     description: { type: String, trim: true },
 

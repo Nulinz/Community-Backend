@@ -19,6 +19,22 @@ const certificateSchema = new mongoose.Schema(
       ref: "User",
       index: true,
     },
+    eventId: {
+      type: mongoose.Schema.Types.ObjectId,
+      index: true,
+    },
+    eventType: {
+      type: String,
+      trim: true,
+    },
+    signatoryName: {
+      type: String,
+      trim: true,
+    },
+    signatoryDesignation: {
+      type: String,
+      trim: true,
+    },
     name: {
       type: String,
       required: true,

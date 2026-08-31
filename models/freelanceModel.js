@@ -1,5 +1,11 @@
 import mongoose from "mongoose";
 
+const milestoneSchema = new mongoose.Schema({
+  milestoneName: { type: String, trim: true },
+  amount: { type: Number, default: 0 },
+  dueDate: { type: Date },
+});
+
 const freelanceSchema = new mongoose.Schema(
   {
     c_by: {
@@ -18,13 +24,23 @@ const freelanceSchema = new mongoose.Schema(
     jobTitle: { type: String, required: true, trim: true },
     companyName: { type: String, required: true, trim: true },
     mode: { type: String, required: true },
-    totalOpenings: { type: Number, default: 0 },
     duration: { type: String },
-    location: { type: String, required: true, trim: true },
+    location: {
+      type: String,
+      trim: true,
+      required: function () {
+        return this.mode === "Offline" || this.mode === "Hybrid";
+      },
+    },
     applicationDeadline: { type: Date },
     jobStartDate: { type: Date },
     jobEndDate: { type: Date },
     salary: { type: Number, default: 0 },
+    budgetType: { type: String, trim: true, default: "Fixed" },
+    budget: { type: String, trim: true },
+    paymentMethod: { type: String, trim: true },
+    paymentStructure: { type: String, trim: true, default: "Full Payment" },
+    milestones: [milestoneSchema],
     projectNeeds: [{ type: String, trim: true }],
     eligibility: [{ type: String, trim: true }],
     security: [{ type: String, trim: true }],

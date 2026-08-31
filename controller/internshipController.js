@@ -47,8 +47,11 @@ export const createInternshipForm = async (req, res, next) => {
         const resolvedOrganizer = toCleanString(organizer || companyName);
 
         if (!resolvedOrganizer) throw Object.assign(new Error("Organizer is required"), { status: 400 });
-        if (!location) throw Object.assign(new Error("Location is required"), { status: 400 });
         if (!mode) throw Object.assign(new Error("Mode is required"), { status: 400 });
+        const cleanMode = toCleanString(mode);
+        if ((cleanMode === "On-site" || cleanMode === "Hybrid" || cleanMode === "Offline") && !location) {
+            throw Object.assign(new Error("Location is required for On-site or Hybrid mode"), { status: 400 });
+        }
 
         let internship;
 
@@ -70,13 +73,13 @@ internship.status=status
         internship.jobTitle = toCleanString(jobTitle);
         internship.organizer = resolvedOrganizer;
         internship.companyName = resolvedOrganizer;
-        internship.location = toCleanString(location);
-        internship.mode = toCleanString(mode);
+        internship.location = toCleanString(location) || (cleanMode === "Remote" || cleanMode === "Online" ? "Remote" : "");
+        internship.mode = cleanMode;
         internship.totalOpenings = Number(totalOpenings) || 0;
         internship.duration = toCleanString(duration);
         internship.internStartDate = internStartDate || undefined;
         internship.applicationDeadline = applicationDeadline || undefined;
-        internship.salary = Number(salary) || 0;
+        internship.salary = toCleanString(internshipType) === "Unpaid" ? 0 : (Number(salary) || 0);
         internship.description = toCleanString(description);
         internship.certificateAvailability = toCleanString(certificateAvailability);
         

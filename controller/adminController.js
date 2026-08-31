@@ -73,6 +73,7 @@ export const adminDashBoard = async (req, res) => {
       seminars: Seminar,
       internships: Internship,
       freelances: Freelance,
+      jobs: Job,
     };
     
 

@@ -53,6 +53,7 @@ export const createConferenceForm = async (req, res, next) => {
             individualFees,
             teamFees,
             lateFees,
+            prizesAvailable,
             firstPrize,
             secondPrize,
             thirdPrize,
@@ -83,7 +84,12 @@ export const createConferenceForm = async (req, res, next) => {
             incharges,
             description,
             certificateAvailability,
-            eventStartTime
+            signatoryName,
+            signatoryDesignation,
+            certificateContentBody,
+            eventStartTime,
+            eventEndTime,
+            onlinePlatformLink
         } = rest;
 
         // Validation
@@ -93,16 +99,27 @@ export const createConferenceForm = async (req, res, next) => {
         if (!eventDate) throw Object.assign(new Error("Event Date is required"), { status: 400 });
         if (!registrationType) throw Object.assign(new Error("Registration Type is required"), { status: 400 });
 
+        if ((mode === "Online" || mode === "Hybrid") && !onlinePlatformLink) {
+            throw Object.assign(new Error("Online Platform / Meeting Link is required for Online/Hybrid mode"), { status: 400 });
+        }
+        if ((mode === "Offline" || mode === "Hybrid") && (!venueName || !address || !city || !state || !pincode)) {
+            throw Object.assign(new Error("Venue Details (Venue Name, Address, City, State, Pincode) are required for Offline/Hybrid mode"), { status: 400 });
+        }
+
         // Handle Files
         const coverImageFile = req.files?.coverImage?.[0];
+        const signatureUrlFile = req.files?.signatureUrl?.[0];
 
         if (!isUpdate && !coverImageFile) {
             throw Object.assign(new Error("Cover Image is required"), { status: 400 });
         }
 
         const coverImagePath = coverImageFile ? getUploadedFilePath(coverImageFile) : undefined;
+        const signatureUrlPath = signatureUrlFile ? getUploadedFilePath(signatureUrlFile) : undefined;
 
         let conference;
+        let oldCoverImagePath;
+        let oldSignatureUrlPath;
 
         if (isUpdate) {
             conference = await Conference.findById(targetId);
@@ -110,27 +127,32 @@ export const createConferenceForm = async (req, res, next) => {
                 throw Object.assign(new Error("Conference not found"), { status: 404 });
             }
             oldCoverImagePath = conference.coverImage;
+            oldSignatureUrlPath = conference.signatureUrl;
         } else {
             conference = new Conference({ c_by: req.user._id });
-            conference.status=status
+            conference.status = status;
         }
-conference.status=status
+        conference.status = status;
         // Update fields
         conference.eventName = toCleanString(eventName);
         conference.organizer = toCleanString(organizer);
         conference.mode = toCleanString(mode);
+        conference.onlinePlatformLink = toCleanString(onlinePlatformLink);
         conference.eventDate = eventDate;
         conference.registrationType = toCleanString(registrationType);
         conference.registrationStartDate = registrationStartDate || undefined;
         conference.registrationEndDate = registrationEndDate || undefined;
         conference.totalSeats = Number(totalSeats) || 0;
         conference.eventStartTime = toCleanString(eventStartTime);
+        conference.eventEndTime = toCleanString(eventEndTime);
         if (coverImagePath) conference.coverImage = coverImagePath;
+        if (signatureUrlPath) conference.signatureUrl = signatureUrlPath;
 
         conference.individualFees = Number(individualFees) || 0;
         conference.teamFees = Number(teamFees) || 0;
         conference.lateFees = Number(lateFees) || 0;
 
+        conference.prizesAvailable = toCleanString(prizesAvailable) || "No";
         conference.firstPrize = toCleanString(firstPrize);
         conference.secondPrize = toCleanString(secondPrize);
         conference.thirdPrize = toCleanString(thirdPrize);
@@ -140,7 +162,10 @@ conference.status=status
         conference.placementOpportunity = toCleanString(placementOpportunity);
         conference.industryExposure = toCleanString(industryExposure);
         conference.industryPartners = toCleanString(industryPartners);
-        conference.certificateAvailability=toCleanString(certificateAvailability)
+        conference.certificateAvailability = toCleanString(certificateAvailability) || "No";
+        conference.signatoryName = toCleanString(signatoryName);
+        conference.signatoryDesignation = toCleanString(signatoryDesignation);
+        conference.certificateContentBody = toCleanString(certificateContentBody);
         conference.venueName = toCleanString(venueName);
         conference.address = toCleanString(address);
         conference.state = toCleanString(state);
@@ -174,6 +199,9 @@ conference.status=status
             if (coverImagePath && oldCoverImagePath) {
                 fs.unlink(path.join(process.cwd(), oldCoverImagePath), () => { });
             }
+            if (signatureUrlPath && oldSignatureUrlPath) {
+                fs.unlink(path.join(process.cwd(), oldSignatureUrlPath), () => { });
+            }
         }
 
         res.status(isUpdate ? 200 : 201).json({
@@ -184,7 +212,8 @@ conference.status=status
 
     } catch (error) {
         cleanupUploadedFiles([
-            ...(req.files?.coverImage || [])
+            ...(req.files?.coverImage || []),
+            ...(req.files?.signatureUrl || [])
         ]);
         next(error);
     }

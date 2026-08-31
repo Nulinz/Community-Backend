@@ -88,7 +88,12 @@ export const createSeminarForm = async (req, res, next) => {
             schedule,
             incharges,
             certificateAvailability,
-            eventStartTime
+            signatoryName,
+            signatoryDesignation,
+            certificateContentBody,
+            eventStartTime,
+            eventEndTime,
+            onlinePlatformLink
         } = rest;
 
         // Validation
@@ -96,18 +101,25 @@ export const createSeminarForm = async (req, res, next) => {
         if (!eventName) throw Object.assign(new Error("Event Name is required"), { status: 400 });
         if (!organizer) throw Object.assign(new Error("Organizer is required"), { status: 400 });
         if (!mode) throw Object.assign(new Error("Mode is required"), { status: 400 });
+        if ((mode === "Online" || mode === "Hybrid") && !onlinePlatformLink) {
+            throw Object.assign(new Error("Online Platform / Meeting Link is required for Online or Hybrid mode"), { status: 400 });
+        }
         if (!eventDate) throw Object.assign(new Error("Event Date is required"), { status: 400 });
         if (!registrationType) throw Object.assign(new Error("Registration Type is required"), { status: 400 });
 
         // Handle File
         const coverImageFile = req.files?.coverImage?.[0];
+        const signatureUrlFile = req.files?.signatureUrl?.[0];
         if (!isUpdate && !coverImageFile) {
             throw Object.assign(new Error("Cover Image is required"), { status: 400 });
         }
 
         const coverImagePath = coverImageFile ? getUploadedFilePath(coverImageFile) : undefined;
+        const signatureUrlPath = signatureUrlFile ? getUploadedFilePath(signatureUrlFile) : undefined;
 
         let seminar;
+        let oldCoverImagePath;
+        let oldSignatureUrlPath;
 
         if (isUpdate) {
             seminar = await Seminar.findById(targetId);
@@ -115,6 +127,7 @@ export const createSeminarForm = async (req, res, next) => {
                 throw Object.assign(new Error("Seminar not found"), { status: 404 });
             }
             oldCoverImagePath = seminar.coverImage;
+            oldSignatureUrlPath = seminar.signatureUrl;
         } else {
             seminar = new Seminar({ c_by: req.user._id });
             seminar.status=status
@@ -125,14 +138,17 @@ export const createSeminarForm = async (req, res, next) => {
         seminar.eventName = toCleanString(eventName);
         seminar.organizer = toCleanString(organizer);
         seminar.mode = toCleanString(mode);
+        seminar.onlinePlatformLink = toCleanString(onlinePlatformLink);
         seminar.eventDate = eventDate;
         seminar.registrationType = toCleanString(registrationType);
         seminar.eventStartTime = toCleanString(eventStartTime);
+        seminar.eventEndTime = toCleanString(eventEndTime);
         seminar.registrationStartDate = registrationStartDate || undefined;
         seminar.registrationEndDate = registrationEndDate || undefined;
         seminar.totalSeats = Number(totalSeats) || 0;
         
         if (coverImagePath) seminar.coverImage = coverImagePath;
+        if (signatureUrlPath) seminar.signatureUrl = signatureUrlPath;
 
         seminar.individualFees = Number(individualFees) || 0;
         seminar.teamFees = Number(teamFees) || 0;
@@ -142,7 +158,10 @@ export const createSeminarForm = async (req, res, next) => {
         seminar.secondPrize = toCleanString(secondPrize);
         seminar.thirdPrize = toCleanString(thirdPrize);
         seminar.participationPrize = toCleanString(participationPrize);
-        seminar.certificateAvailability = toCleanString(certificateAvailability);
+        seminar.certificateAvailability = toCleanString(certificateAvailability) || "No";
+        seminar.signatoryName = toCleanString(signatoryName);
+        seminar.signatoryDesignation = toCleanString(signatoryDesignation);
+        seminar.certificateContentBody = toCleanString(certificateContentBody);
         seminar.internshipOpportunity = toCleanString(internshipOpportunity);
         seminar.placementOpportunity = toCleanString(placementOpportunity);
         seminar.industryExposure = toCleanString(industryExposure);
@@ -176,8 +195,13 @@ export const createSeminarForm = async (req, res, next) => {
 
         await seminar.save();
 
-        if (isUpdate && coverImagePath && oldCoverImagePath) {
-            fs.unlink(path.join(process.cwd(), oldCoverImagePath), () => { });
+        if (isUpdate) {
+            if (coverImagePath && oldCoverImagePath) {
+                fs.unlink(path.join(process.cwd(), oldCoverImagePath), () => { });
+            }
+            if (signatureUrlPath && oldSignatureUrlPath) {
+                fs.unlink(path.join(process.cwd(), oldSignatureUrlPath), () => { });
+            }
         }
 
         res.status(isUpdate ? 200 : 201).json({
@@ -187,7 +211,10 @@ export const createSeminarForm = async (req, res, next) => {
         });
 
     } catch (error) {
-        cleanupUploadedFiles([...(req.files?.coverImage || [])]);
+        cleanupUploadedFiles([
+            ...(req.files?.coverImage || []),
+            ...(req.files?.signatureUrl || [])
+        ]);
         next(error);
     }
 };

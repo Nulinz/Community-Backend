@@ -5,6 +5,10 @@ import Certificate from "../models/certificateModel.js";
 import User from "../models/userModel.js";
 import Company from "../models/companyModel.js";
 import College from "../models/collegeModel.js";
+import Event from "../models/eventModel.js";
+import Conference from "../models/conferenceModel.js";
+import Competition from "../models/competitionModel.js";
+import Seminar from "../models/seminarModel.js";
 import { generateCertificatePDFBuffer } from "../services/pdfService.js";
 import mongoose from "mongoose";
 
@@ -34,7 +38,23 @@ const getBase64Image = async (filePath) => {
  */
 export const generateCertificate = async (req, res, next) => {
   try {
-    const { userId, name, domain, course, companyName, companyId, issuedDate, recipientEmail } = req.body;
+    const {
+      userId,
+      name,
+      domain,
+      course,
+      companyName,
+      companyId,
+      issuedDate,
+      recipientEmail,
+      eventId,
+      eventType,
+      conferenceId,
+      competitionId,
+      seminarId,
+      itemId,
+    } = req.body;
+
     const internshipDomain = domain || course;
     let company = companyName || "Nulinz Community";
 
@@ -54,35 +74,76 @@ export const generateCertificate = async (req, res, next) => {
       }
     }
 
-    // Fetch Company or College profile details (Logo, Signature, Signatory details, Custom Content)
+    // 1. Resolve Event/Conference/Competition/Seminar document if an ID was provided
+    let itemRecord = null;
+    const targetItemId = eventId || conferenceId || competitionId || seminarId || itemId || req.body.event_id;
+    const normalizedType = String(eventType || "").toLowerCase();
+
+    if (targetItemId && mongoose.Types.ObjectId.isValid(targetItemId)) {
+      if (normalizedType.includes("conference") || conferenceId) {
+        itemRecord = await Conference.findById(targetItemId).lean();
+      } else if (normalizedType.includes("competition") || competitionId) {
+        itemRecord = await Competition.findById(targetItemId).lean();
+      } else if (normalizedType.includes("seminar") || seminarId) {
+        itemRecord = await Seminar.findById(targetItemId).lean();
+      } else if (normalizedType.includes("event") || eventId) {
+        itemRecord = await Event.findById(targetItemId).lean();
+      }
+
+      // If not yet resolved by specific type, query collections
+      if (!itemRecord) {
+        itemRecord =
+          (await Event.findById(targetItemId).lean()) ||
+          (await Conference.findById(targetItemId).lean()) ||
+          (await Competition.findById(targetItemId).lean()) ||
+          (await Seminar.findById(targetItemId).lean());
+      }
+    }
+
+    // 2. Fetch Company or College profile details (for global fallback)
     let companyRecord = null;
+    const creatorId = itemRecord?.c_by || null;
+
     if (companyId) {
       companyRecord = (await Company.findById(companyId).lean()) || (await College.findById(companyId).lean());
-    } else if (req.user?._id) {
+    } else if (creatorId) {
+      companyRecord =
+        (await Company.findOne({ $or: [{ userId: creatorId }, { c_by: creatorId }, { _id: creatorId }] }).lean()) ||
+        (await College.findOne({ $or: [{ userId: creatorId }, { c_by: creatorId }, { _id: creatorId }] }).lean());
+    }
+
+    if (!companyRecord && req.user?._id) {
       companyRecord = (await Company.findOne({
         $or: [{ userId: req.user._id }, { c_by: req.user._id }]
       }).lean()) || (await College.findOne({
         $or: [{ userId: req.user._id }, { c_by: req.user._id }]
       }).lean());
     }
-    if (!companyRecord && companyName) {
+
+    if (!companyRecord && (companyName || itemRecord?.organizer)) {
+      const searchName = companyName || itemRecord?.organizer;
       companyRecord = (await Company.findOne({
-        companyName: new RegExp(`^${companyName.trim()}$`, "i")
+        companyName: new RegExp(`^${searchName.trim()}$`, "i")
       }).lean()) || (await College.findOne({
-        collegeName: new RegExp(`^${companyName.trim()}$`, "i")
+        collegeName: new RegExp(`^${searchName.trim()}$`, "i")
       }).lean());
     }
 
-    if (companyRecord?.companyName || companyRecord?.collegeName) {
-      company = companyRecord.companyName || companyRecord.collegeName;
+    if (itemRecord?.organizer || companyRecord?.companyName || companyRecord?.collegeName) {
+      company = itemRecord?.organizer || companyRecord?.companyName || companyRecord?.collegeName || company;
     }
 
-    const logoFile = companyRecord?.companyLogo || companyRecord?.collegeLogo || "";
+    // 3. Resolve Signatory, Signature, and Content Body (Priority: Item-specific > Profile-level > Default)
+    const finalSignatoryName = itemRecord?.signatoryName || companyRecord?.signatoryName || "";
+    const finalSignatoryDesignation = itemRecord?.signatoryDesignation || companyRecord?.signatoryDesignation || "";
+    const finalSignatureUrl = itemRecord?.signatureUrl || companyRecord?.signatureUrl || "";
+
+    const logoFile = companyRecord?.companyLogo || companyRecord?.collegeLogo || itemRecord?.coverImage || "";
     const companyLogoDataUri = logoFile ? await getBase64Image(logoFile) : "";
-    const signatureImgDataUri = companyRecord?.signatureUrl ? await getBase64Image(companyRecord.signatureUrl) : "";
+    const signatureImgDataUri = finalSignatureUrl ? await getBase64Image(finalSignatureUrl) : "";
     const gradenvyLogoDataUri = await getBase64Image("templates/gradenvyLogo.png");
 
-    let customContentBody = companyRecord?.certificateContentBody || "";
+    let customContentBody = itemRecord?.certificateContentBody || companyRecord?.certificateContentBody || "";
     if (customContentBody) {
       customContentBody = customContentBody
         .replace(/\{\{\s*domain\s*\}\}/gi, internshipDomain)
@@ -103,7 +164,7 @@ export const generateCertificate = async (req, res, next) => {
       ? new Date(issuedDate).toLocaleDateString("en-GB")
       : new Date().toLocaleDateString("en-GB");
 
-    // 1. Generate PDF Buffer via Puppeteer service
+    // 4. Generate PDF Buffer via Puppeteer service
     const pdfBuffer = await generateCertificatePDFBuffer({
       name,
       domain: internshipDomain,
@@ -111,14 +172,14 @@ export const generateCertificate = async (req, res, next) => {
       companyLogo: companyLogoDataUri,
       gradenvyLogo: gradenvyLogoDataUri,
       signatureImg: signatureImgDataUri,
-      signatoryName: companyRecord?.signatoryName || "",
-      signatoryDesignation: companyRecord?.signatoryDesignation || "",
+      signatoryName: finalSignatoryName,
+      signatoryDesignation: finalSignatoryDesignation,
       customContentBody: customContentBody,
       issuedDate: formattedDate,
       certificateId
     });
 
-    // 2. Define upload destination
+    // 5. Define upload destination
     const fileName = `${certificateId}.pdf`;
     const uploadsDir = path.resolve(process.cwd(), "uploads", "certificates");
     await fs.mkdir(uploadsDir, { recursive: true });
@@ -126,14 +187,18 @@ export const generateCertificate = async (req, res, next) => {
     const filePath = path.join(uploadsDir, fileName);
     await fs.writeFile(filePath, pdfBuffer);
 
-    // 3. Construct relative accessible URL
+    // 6. Construct relative accessible URL
     const fileUrl = `/uploads/certificates/${fileName}`;
 
-    // 4. Save to MongoDB
+    // 7. Save to MongoDB
     const certificateRecord = await Certificate.create({
       certificateId,
       userId: targetUserId,
       createdBy: req.user?._id || null,
+      eventId: itemRecord?._id || (targetItemId && mongoose.Types.ObjectId.isValid(targetItemId) ? targetItemId : null),
+      eventType: eventType || (itemRecord?.eventName ? "Event" : null),
+      signatoryName: finalSignatoryName,
+      signatoryDesignation: finalSignatoryDesignation,
       name,
       domain: internshipDomain,
       companyName: company,

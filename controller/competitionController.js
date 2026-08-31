@@ -40,7 +40,7 @@ export const createCompetitionForm = async (req, res, next) => {
         const { id, _id, ...rest } = req.body;
         const targetId = id || _id;
         const isUpdate = !!targetId;
-        const status=req?.user?.role==="admin"?"approved":"pending"
+        const status = req?.user?.role === "admin" ? "approved" : "pending"
         const {
             eventName,
             organizer,
@@ -57,6 +57,7 @@ export const createCompetitionForm = async (req, res, next) => {
             placementOpportunity,
             industryExposure,
             industryPartners,
+            prizesAvailable,
             firstPrize,
             secondPrize,
             thirdPrize,
@@ -84,7 +85,13 @@ export const createCompetitionForm = async (req, res, next) => {
             schedule,
             incharges,
             certificateAvailability,
-            eventStartTime
+            signatoryName,
+            signatoryDesignation,
+            certificateContentBody,
+            eventStartTime,
+            eventEndDate,
+            eventEndTime,
+            onlinePlatformLink
         } = rest;
 
         // Validation
@@ -92,11 +99,22 @@ export const createCompetitionForm = async (req, res, next) => {
         if (!organizer) throw Object.assign(new Error("Organizer is required"), { status: 400 });
         if (!mode) throw Object.assign(new Error("Mode is required"), { status: 400 });
         if (!eventDate) throw Object.assign(new Error("Event Date is required"), { status: 400 });
+        if (!eventStartTime) throw Object.assign(new Error("Event Start Time is required"), { status: 400 });
         if (!registrationType) throw Object.assign(new Error("Registration Type is required"), { status: 400 });
+        if (!registrationStartDate) throw Object.assign(new Error("Registration Start Date is required"), { status: 400 });
+        if (!registrationEndDate) throw Object.assign(new Error("Registration End Date is required"), { status: 400 });
+
+        if ((mode === "Online" || mode === "Hybrid") && !onlinePlatformLink) {
+            throw Object.assign(new Error("Online Platform / Meeting Link is required for Online/Hybrid mode"), { status: 400 });
+        }
+        if ((mode === "Offline" || mode === "Hybrid") && (!venueName || !address || !city || !state || !pincode)) {
+            throw Object.assign(new Error("Venue Details (Venue Name, Address, City, State, Pincode) are required for Offline/Hybrid mode"), { status: 400 });
+        }
 
         // Handle Files
         const coverImageFile = req.files?.coverImage?.[0];
         const ruleBookFile = req.files?.ruleBook?.[0];
+        const signatureUrlFile = req.files?.signatureUrl?.[0];
 
         if (!isUpdate && !coverImageFile) {
             throw Object.assign(new Error("Cover Image is required"), { status: 400 });
@@ -107,8 +125,12 @@ export const createCompetitionForm = async (req, res, next) => {
 
         const coverImagePath = coverImageFile ? getUploadedFilePath(coverImageFile) : undefined;
         const ruleBookPath = ruleBookFile ? getUploadedFilePath(ruleBookFile) : undefined;
+        const signatureUrlPath = signatureUrlFile ? getUploadedFilePath(signatureUrlFile) : undefined;
 
         let competition;
+        let oldCoverImagePath;
+        let oldRuleBookPath;
+        let oldSignatureUrlPath;
 
         if (isUpdate) {
             competition = await Competition.findById(targetId);
@@ -117,33 +139,44 @@ export const createCompetitionForm = async (req, res, next) => {
             }
             oldCoverImagePath = competition.coverImage;
             oldRuleBookPath = competition.ruleBook;
+            oldSignatureUrlPath = competition.signatureUrl;
         } else {
             competition = new Competition({ c_by: req.user._id });
-            competition.status=status
+            competition.status = status
         }
-competition.status=status
+        competition.status = status
         // Update fields
         competition.eventName = toCleanString(eventName);
         competition.organizer = toCleanString(organizer);
         competition.mode = toCleanString(mode);
-        competition.eventDate = eventDate;
+        competition.eventDate = eventDate || undefined;
+        competition.eventStartTime = toCleanString(eventStartTime);
+        competition.eventEndDate = eventEndDate || undefined;
+        competition.eventEndTime = toCleanString(eventEndTime);
+        competition.onlinePlatformLink = toCleanString(onlinePlatformLink);
+
         competition.registrationType = toCleanString(registrationType);
         competition.registrationStartDate = registrationStartDate || undefined;
         competition.registrationEndDate = registrationEndDate || undefined;
         competition.totalSeats = Number(totalSeats) || 0;
-        
+
         if (coverImagePath) competition.coverImage = coverImagePath;
         if (ruleBookPath) competition.ruleBook = ruleBookPath;
+        if (signatureUrlPath) competition.signatureUrl = signatureUrlPath;
 
         competition.individualFees = Number(individualFees) || 0;
         competition.teamFees = Number(teamFees) || 0;
         competition.lateFees = Number(lateFees) || 0;
-        competition.eventStartTime = toCleanString(eventStartTime);
         competition.internshipOpportunity = toCleanString(internshipOpportunity);
+        competition.internshipOpportunityDetails = toCleanString(internshipOpportunityDetails);
         competition.placementOpportunity = toCleanString(placementOpportunity);
+        competition.placementOpportunityDetails = toCleanString(placementOpportunityDetails);
         competition.industryExposure = toCleanString(industryExposure);
+        competition.industryExposureDetails = toCleanString(industryExposureDetails);
         competition.industryPartners = toCleanString(industryPartners);
+        competition.industryPartnersDetails = toCleanString(industryPartnersDetails);
 
+        competition.prizesAvailable = toCleanString(prizesAvailable) || "No";
         competition.firstPrize = toCleanString(firstPrize);
         competition.secondPrize = toCleanString(secondPrize);
         competition.thirdPrize = toCleanString(thirdPrize);
@@ -171,8 +204,24 @@ competition.status=status
 
         competition.additionalRules = toCleanString(additionalRules);
         competition.description = toCleanString(description);
-        competition.certificateAvailability = toCleanString(certificateAvailability);
-        competition.rounds = parseDynamicArray(rounds);
+        competition.certificateAvailability = toCleanString(certificateAvailability) || "No";
+        competition.signatoryName = toCleanString(signatoryName);
+        competition.signatoryDesignation = toCleanString(signatoryDesignation);
+        competition.certificateContentBody = toCleanString(certificateContentBody);
+        const parsedRounds = parseDynamicArray(rounds);
+        competition.rounds = parsedRounds.map((r, i) => {
+            if (typeof r === "string") {
+                return { roundNumber: `Round ${i + 1}`, roundName: r.trim(), roundDescription: "" };
+            }
+            if (r && typeof r === "object") {
+                return {
+                    roundNumber: r.roundNumber || `Round ${i + 1}`,
+                    roundName: r.roundName || r.round || "",
+                    roundDescription: r.roundDescription || "",
+                };
+            }
+            return r;
+        }).filter((r) => r && (r.roundName || r.roundNumber));
         competition.schedule = parseDynamicArray(schedule);
         competition.incharges = parseDynamicArray(incharges);
 
@@ -186,6 +235,9 @@ competition.status=status
             if (ruleBookPath && oldRuleBookPath) {
                 fs.unlink(path.join(process.cwd(), oldRuleBookPath), () => { });
             }
+            if (signatureUrlPath && oldSignatureUrlPath) {
+                fs.unlink(path.join(process.cwd(), oldSignatureUrlPath), () => { });
+            }
         }
 
         res.status(isUpdate ? 200 : 201).json({
@@ -196,7 +248,7 @@ competition.status=status
 
     } catch (error) {
         console.log(error)
-        cleanupUploadedFiles([...(req.files?.coverImage || []), ...(req.files?.ruleBook || [])]);
+        cleanupUploadedFiles([...(req.files?.coverImage || []), ...(req.files?.ruleBook || []), ...(req.files?.signatureUrl || [])]);
         next(error);
     }
 };
@@ -241,46 +293,46 @@ export const getCompetitionById = async (req, res, next) => {
         }
 
 
-        const revenue=await getEventFinancials(id)
+        const revenue = await getEventFinancials(id)
 
-  const registrations = await EventRegistration.find({
-      eventId: id,
-      eventType: "Competition",
-    })
-      .populate("userId", "email phone name")
-      .sort({ createdAt: -1 })
-      .lean();
+        const registrations = await EventRegistration.find({
+            eventId: id,
+            eventType: "Competition",
+        })
+            .populate("userId", "email phone name")
+            .sort({ createdAt: -1 })
+            .lean();
 
-    const registeredList = registrations.map((reg, index) => ({
-      sNo: index + 1,
-      registrationId: reg._id,
-      userId: reg.userId?._id,
-    
-      email: reg.userId?.email || reg.mailId,
-      phone: reg.userId?.phone || reg.phoneNumber,
-      name: reg.fullName,
-      department: reg.department,
-      college: reg.collegeName,
-      year: reg.year,
-      phoneNumber: reg.phoneNumber,
-      mailId: reg.mailId,
-      food: reg.food,
-      foodType: reg.foodType,
-      accommodation: reg.accommodation,
-      accommodationType: reg.accommodationType,
-      registeredAt: reg.createdAt,
-    }));
+        const registeredList = registrations.map((reg, index) => ({
+            sNo: index + 1,
+            registrationId: reg._id,
+            userId: reg.userId?._id,
+
+            email: reg.userId?.email || reg.mailId,
+            phone: reg.userId?.phone || reg.phoneNumber,
+            name: reg.fullName,
+            department: reg.department,
+            college: reg.collegeName,
+            year: reg.year,
+            phoneNumber: reg.phoneNumber,
+            mailId: reg.mailId,
+            food: reg.food,
+            foodType: reg.foodType,
+            accommodation: reg.accommodation,
+            accommodationType: reg.accommodationType,
+            registeredAt: reg.createdAt,
+        }));
 
         res.status(200).json({
             success: true,
             data: {
-        competition,
-        registrations: {
-          count: registeredList.length,
-          list: registeredList,
-          revenue
-        },
-      },
+                competition,
+                registrations: {
+                    count: registeredList.length,
+                    list: registeredList,
+                    revenue
+                },
+            },
         });
     } catch (error) {
         next(error);
@@ -320,7 +372,7 @@ export const addCompetitionPosts = async (req, res, next) => {
         }
 
         const newPosts = (req.files || []).map(file => getUploadedFilePath(file));
-        
+
         if (newPosts.length === 0) {
             throw Object.assign(new Error("No images uploaded"), { status: 400 });
         }

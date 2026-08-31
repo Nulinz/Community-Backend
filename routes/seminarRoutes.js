@@ -14,6 +14,7 @@ const seminarUpload = createUpload("seminar");
 
 const uploader = seminarUpload.fields([
   { name: "coverImage", maxCount: 1 },
+  { name: "signatureUrl", maxCount: 1 },
 ]);
 
 const postsUploader = seminarUpload.fields([
