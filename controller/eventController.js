@@ -92,7 +92,8 @@ export const createEventForm = async (req, res, next) => {
             certificateContentBody,
             eventStartTime,
             eventEndTime,
-            onlinePlatformLink
+            onlinePlatformLink,
+            externalRegistrationLink
         } = rest;
 
         if (!eventType) throw Object.assign(new Error("Event Type is required"), { status: 400 });
@@ -143,6 +144,7 @@ export const createEventForm = async (req, res, next) => {
         event.registrationStartDate = registrationStartDate || undefined;
         event.registrationEndDate = registrationEndDate || undefined;
         event.totalSeats = Number(totalSeats) || 0;
+        event.externalRegistrationLink = toCleanString(externalRegistrationLink);
         event.certificateAvailability = toCleanString(certificateAvailability) || "No";
         event.signatoryName = toCleanString(signatoryName);
         event.signatoryDesignation = toCleanString(signatoryDesignation);
@@ -181,7 +183,7 @@ export const createEventForm = async (req, res, next) => {
 
         event.eligibilityDetails = toCleanString(eligibilityDetails);
         event.allowedDepartments = parseDynamicArray(allowedDepartments);
-        event.teamOrIndividualEvent = toCleanString(teamOrIndividualEvent);
+        event.teamOrIndividualEvent = toCleanString(teamOrIndividualEvent) || "Individual";
         event.teamSizeMinimum = Number(teamSizeMinimum) || 0;
         event.teamSizeMaximum = Number(teamSizeMaximum) || 0;
         event.description = toCleanString(description);

@@ -23,7 +23,7 @@ const freelanceSchema = new mongoose.Schema(
 },
     jobTitle: { type: String, required: true, trim: true },
     companyName: { type: String, required: true, trim: true },
-    mode: { type: String, required: true },
+    mode: { type: String, default: "Online" },
     duration: { type: String },
     location: {
       type: String,
@@ -36,6 +36,7 @@ const freelanceSchema = new mongoose.Schema(
     jobStartDate: { type: Date },
     jobEndDate: { type: Date },
     salary: { type: Number, default: 0 },
+    projectType: { type: String, trim: true, default: "Small Project" },
     budgetType: { type: String, trim: true, default: "Fixed" },
     budget: { type: String, trim: true },
     paymentMethod: { type: String, trim: true },

@@ -50,6 +50,7 @@ const seminarSchema = new mongoose.Schema(
     registrationStartDate: { type: Date },
     registrationEndDate: { type: Date },
     totalSeats: { type: Number },
+    externalRegistrationLink: { type: String, trim: true, default: "" },
     coverImage: { type: String, required: true },
 
     // Advanced Details
@@ -99,7 +100,6 @@ const seminarSchema = new mongoose.Schema(
     teamOrIndividualEvent: {
       type: String,
       enum: ["Team", "Individual", "Both"],
-      required: true,
       default: "Individual",
     },
     teamSizeMinimum: { type: Number },

@@ -30,8 +30,10 @@ import {
   getAllFreelances,
   toggleSavedJob,
   getSavedJobs,
+  getSavedFreelances,
   applyJob,
   getAppliedJobs,
+  getAppliedFreelances,
   getJobProfile,
   getAllCompetitions,
   getCompetitionProfile,
@@ -105,6 +107,7 @@ router.post("/forgot-otp-verify", uploader.none(), forgotOtpVerify);
 router.post("/change-password", uploader.none(), isAuthenticated, changePassword);
 router.post("/apply-job", uploader.none(), isAuthenticated, applyJob);
 router.get("/my-applied-job", isAuthenticated, getAppliedJobs);
+router.get("/my-applied-freelance", isAuthenticated, getAppliedFreelances);
 
 router.get("/dashboard", isAuthenticated, userDashboard);
 router.post("/active-ping", isAuthenticated, activePing);
@@ -113,8 +116,9 @@ router.get("/internships", isAuthenticated, getAllInternships)
 router.get("/freelances", isAuthenticated, getAllFreelances)
 router.post("/job-toggle", uploader.none(), isAuthenticated, toggleSavedJob);
 router.post("/job-profile", uploader.none(), isAuthenticated, getJobProfile);
-// GET /api/saved-jobs          → get all saved jobs (auth required)
+// GET /api/saved-jobs          → get all saved jobs and internships (auth required)
 router.get("/my-saved-job", uploader.none(), isAuthenticated, getSavedJobs);
+router.get("/my-saved-freelance", uploader.none(), isAuthenticated, getSavedFreelances);
 
 router.get("/competitions", uploader.none(), isAuthenticated, getAllCompetitions);
 

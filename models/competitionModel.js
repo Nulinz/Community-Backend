@@ -52,6 +52,7 @@ const competitionSchema = new mongoose.Schema(
     registrationStartDate: { type: Date },
     registrationEndDate: { type: Date },
     totalSeats: { type: Number },
+    externalRegistrationLink: { type: String, trim: true, default: "" },
     coverImage: { type: String, required: true },
     // Advanced Details
     rounds: [roundSchema],
@@ -105,11 +106,10 @@ const competitionSchema = new mongoose.Schema(
   type: [String],
 },
     teamOrIndividualEvent: {
-  type: String,
-  enum: ["Team", "Individual", "Both"],
-  required: true,
-  default: "Individual",
-},
+      type: String,
+      enum: ["Team", "Individual", "Both"],
+      default: "Individual",
+    },
     teamSizeMinimum: { type: Number },
     teamSizeMaximum: { type: Number },
 

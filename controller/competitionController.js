@@ -91,7 +91,8 @@ export const createCompetitionForm = async (req, res, next) => {
             eventStartTime,
             eventEndDate,
             eventEndTime,
-            onlinePlatformLink
+            onlinePlatformLink,
+            externalRegistrationLink
         } = rest;
 
         // Validation
@@ -154,6 +155,7 @@ export const createCompetitionForm = async (req, res, next) => {
         competition.eventEndDate = eventEndDate || undefined;
         competition.eventEndTime = toCleanString(eventEndTime);
         competition.onlinePlatformLink = toCleanString(onlinePlatformLink);
+        competition.externalRegistrationLink = toCleanString(externalRegistrationLink);
 
         competition.registrationType = toCleanString(registrationType);
         competition.registrationStartDate = registrationStartDate || undefined;
@@ -198,7 +200,7 @@ export const createCompetitionForm = async (req, res, next) => {
 
         competition.eligibilityDetails = toCleanString(eligibilityDetails);
         competition.allowedDepartments = parseDynamicArray(allowedDepartments);
-        competition.teamOrIndividualEvent = toCleanString(teamOrIndividualEvent);
+        competition.teamOrIndividualEvent = toCleanString(teamOrIndividualEvent) || "Individual";
         competition.teamSizeMinimum = Number(teamSizeMinimum) || 0;
         competition.teamSizeMaximum = Number(teamSizeMaximum) || 0;
 

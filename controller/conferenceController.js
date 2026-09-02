@@ -89,7 +89,8 @@ export const createConferenceForm = async (req, res, next) => {
             certificateContentBody,
             eventStartTime,
             eventEndTime,
-            onlinePlatformLink
+            onlinePlatformLink,
+            externalRegistrationLink
         } = rest;
 
         // Validation
@@ -138,6 +139,7 @@ export const createConferenceForm = async (req, res, next) => {
         conference.organizer = toCleanString(organizer);
         conference.mode = toCleanString(mode);
         conference.onlinePlatformLink = toCleanString(onlinePlatformLink);
+        conference.externalRegistrationLink = toCleanString(externalRegistrationLink);
         conference.eventDate = eventDate;
         conference.registrationType = toCleanString(registrationType);
         conference.registrationStartDate = registrationStartDate || undefined;
@@ -182,7 +184,7 @@ export const createConferenceForm = async (req, res, next) => {
 
         conference.eligibilityDetails = toCleanString(eligibilityDetails);
         conference.allowedDepartments = parseDynamicArray(allowedDepartments);
-        conference.teamOrIndividualEvent = toCleanString(teamOrIndividualEvent);
+        conference.teamOrIndividualEvent = toCleanString(teamOrIndividualEvent) || "Individual";
         conference.teamSizeMinimum = Number(teamSizeMinimum) || 0;
         conference.teamSizeMaximum = Number(teamSizeMaximum) || 0;
 

@@ -534,7 +534,7 @@ const getJobs = async (req, res) => {
 
     const jobs = await Job.find({ isActive: true, status: "approved" })
       .sort({ createdAt: -1 })
-      .select("jobTitle jobType location companyName duration salary eligibility createdAt description mode totalOpenings c_by")
+      .select("jobTitle jobType location companyName duration salary createdAt mode totalOpenings c_by")
       .populate("c_by", "role");
 
     const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
@@ -646,7 +646,7 @@ const getAllFreelances = async (req, res) => {
       status: "approved"
     })
       .sort({ createdAt: -1 })
-      .select("eligibility description companyName jobTitle jobStartDate jobEndDate totalOpenings mode salary createdAt c_by")
+      .select("eligibility description companyName jobTitle projectType budget budgetType jobStartDate jobEndDate totalOpenings mode salary createdAt c_by")
       .populate("c_by", "role");
 
     const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
@@ -747,16 +747,25 @@ const toggleSavedJob = async (req, res) => {
     });
   }
 };
+/**
+ * Retrieves and returns all active saved jobs and internships for the authenticated user,
+ * categorized into distinct arrays (job, internship) with company branding
+ * and application status.
+ */
 const getSavedJobs = async (req, res) => {
   try {
     const userId = req.user._id;
 
-    const savedJobs = await SavedJob.find({ userId })
+    // Fetch saved Job and Internship items for the user with populated details
+    const savedJobs = await SavedJob.find({
+      userId,
+      jobType: { $in: ["Job", "Internship"] },
+    })
       .populate({
         path: "jobId",
         match: { isActive: true },
         select:
-          "jobTitle location c_by companyName duration salary eligibility createdAt description jobStartDate jobEndDate totalOpenings mode",
+          "jobTitle location c_by companyName duration salary createdAt jobStartDate jobEndDate totalOpenings mode",
         populate: {
           path: "c_by",
           select: "role",
@@ -766,11 +775,13 @@ const getSavedJobs = async (req, res) => {
 
     const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
 
+    // Enrich saved jobs with company branding and application status
     const enrichedSavedJobs = await Promise.all(
       savedJobs.map(async (item) => {
         const job = item.jobId;
 
-        if (!job) return null; // safety
+        // Skip records where the referenced job is deleted or inactive
+        if (!job) return null;
 
         let companyImage = null;
 
@@ -798,16 +809,116 @@ const getSavedJobs = async (req, res) => {
       })
     );
 
+    // Group items into separate arrays by opportunity type
+    const job = [];
+    const internship = [];
+
+    for (const item of enrichedSavedJobs) {
+      if (!item) continue;
+
+      const type = item.jobType?.toLowerCase();
+      if (type === "job") {
+        job.push(item);
+      } else if (type === "internship") {
+        internship.push(item);
+      }
+    }
+
     return res.status(200).json({
       success: true,
-      count: enrichedSavedJobs.length,
-      data: enrichedSavedJobs.filter(Boolean),
+      counts: {
+        total: job.length + internship.length,
+        job: job.length,
+        internship: internship.length,
+      },
+      data: {
+        job,
+        internship,
+      },
     });
   } catch (error) {
     console.error("Get Saved Jobs Error:", error.message);
     return res.status(500).json({
       success: false,
       message: "Failed to fetch saved jobs",
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * Retrieves and returns all saved freelance opportunities for the authenticated user
+ * with project details, company branding, and application status.
+ */
+const getSavedFreelances = async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    // Fetch all saved freelance items for the user with populated details
+    const savedFreelances = await SavedJob.find({
+      userId,
+      jobType: "Freelance",
+    })
+      .populate({
+        path: "jobId",
+        match: { isActive: true },
+        select:
+          "jobTitle location c_by companyName duration salary createdAt jobStartDate jobEndDate totalOpenings mode projectType budget budgetType",
+        populate: {
+          path: "c_by",
+          select: "role",
+        },
+      })
+      .sort({ createdAt: -1 });
+
+    const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
+
+    // Enrich saved freelances with company branding and application status
+    const data = (
+      await Promise.all(
+        savedFreelances.map(async (item) => {
+          const freelance = item.jobId;
+
+          // Skip records where the referenced freelance is deleted or inactive
+          if (!freelance) return null;
+
+          let companyImage = null;
+
+          if (freelance.c_by?.role === "admin") {
+            companyImage = STATIC_ADMIN_IMAGE;
+          } else if (freelance.c_by?.role === "company") {
+            const company = await Company.findOne({
+              userId: freelance.c_by._id,
+            })
+              .select("companyLogo")
+              .lean();
+
+            companyImage = company?.companyLogo || null;
+          }
+
+          return {
+            ...item.toObject(),
+            jobId: {
+              ...freelance.toObject(),
+              companyImage,
+              is_saved: true,
+              is_applied: await checkIsApplied(userId, freelance._id),
+            },
+          };
+        })
+      )
+    ).filter(Boolean);
+
+    return res.status(200).json({
+      success: true,
+      count: data.length,
+      data,
+    });
+  } catch (error) {
+    console.error("Get Saved Freelances Error:", error.message);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch saved freelances",
       error: error.message,
     });
   }
@@ -893,12 +1004,15 @@ const getAppliedJobs = async (req, res) => {
   try {
     const userId = req.user._id;
 
-    const appliedJobs = await AppliedJob.find({ userId })
+    const appliedJobs = await AppliedJob.find({
+      userId,
+      jobType: { $in: ["Job", "Internship"] },
+    })
       .populate({
         path: "jobId",
         match: { isActive: true },
         select:
-          "jobTitle location c_by companyName duration salary eligibility createdAt description jobStartDate jobEndDate totalOpenings mode",
+          "jobTitle location c_by companyName duration salary createdAt jobStartDate jobEndDate totalOpenings mode",
         populate: {
           path: "c_by",
           select: "role",
@@ -908,56 +1022,125 @@ const getAppliedJobs = async (req, res) => {
 
     const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
 
-    const enrichedAppliedJobs = await Promise.all(
-      appliedJobs.map(async (item) => {
-        const job = item.jobId;
+    const enrichedAppliedJobs = (
+      await Promise.all(
+        appliedJobs.map(async (item) => {
+          const job = item.jobId;
 
-        if (!job) return null;
+          if (!job) return null;
 
-        let companyImage = null;
+          let companyImage = null;
 
-        if (job.c_by?.role === "admin") {
-          companyImage = STATIC_ADMIN_IMAGE;
-        } else if (job.c_by?.role === "company") {
-          const company = await Company.findOne({
-            c_by: job.c_by._id,
-          })
-            .select("companyLogo")
-            .lean();
+          if (job.c_by?.role === "admin") {
+            companyImage = STATIC_ADMIN_IMAGE;
+          } else if (job.c_by?.role === "company") {
+            const company = await Company.findOne({
+              userId: job.c_by._id,
+            })
+              .select("companyLogo")
+              .lean();
 
-          companyImage = company?.companyLogo || null;
-        }
+            companyImage = company?.companyLogo || null;
+          }
 
-        return {
-          ...item.toObject(),
-          jobId: {
-            ...job.toObject(),
-            companyImage,
-
-            // ✅ KEY DIFFERENCE
-            is_applied: true,
-
-            // ✅ Need to check saved
-            is_saved: await checkIsSaved(
-              userId,
-              job._id,
-              item.jobType // important for refPath
-            ),
-          },
-        };
-      })
-    );
+          return {
+            ...item.toObject(),
+            jobId: {
+              ...job.toObject(),
+              companyImage,
+              is_applied: true,
+              is_saved: await checkIsSaved(userId, job._id, item.jobType),
+            },
+          };
+        })
+      )
+    ).filter(Boolean);
 
     return res.status(200).json({
       status: true,
       count: enrichedAppliedJobs.length,
-      data: enrichedAppliedJobs.filter(Boolean),
+      data: enrichedAppliedJobs,
     });
   } catch (error) {
     console.error("Get Applied Jobs Error:", error.message);
     return res.status(500).json({
       status: false,
       message: "Failed to fetch applied jobs",
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * Retrieves and returns all applied freelance projects for the authenticated user
+ * with project details, company branding, and save status.
+ */
+const getAppliedFreelances = async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    const appliedFreelances = await AppliedJob.find({
+      userId,
+      jobType: "Freelance",
+    })
+      .populate({
+        path: "jobId",
+        match: { isActive: true },
+        select:
+          "jobTitle location c_by companyName duration salary createdAt jobStartDate jobEndDate totalOpenings mode projectType budget budgetType",
+        populate: {
+          path: "c_by",
+          select: "role",
+        },
+      })
+      .sort({ createdAt: -1 });
+
+    const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
+
+    const enrichedAppliedFreelances = (
+      await Promise.all(
+        appliedFreelances.map(async (item) => {
+          const freelance = item.jobId;
+
+          if (!freelance) return null;
+
+          let companyImage = null;
+
+          if (freelance.c_by?.role === "admin") {
+            companyImage = STATIC_ADMIN_IMAGE;
+          } else if (freelance.c_by?.role === "company") {
+            const company = await Company.findOne({
+              userId: freelance.c_by._id,
+            })
+              .select("companyLogo")
+              .lean();
+
+            companyImage = company?.companyLogo || null;
+          }
+
+          return {
+            ...item.toObject(),
+            jobId: {
+              ...freelance.toObject(),
+              companyImage,
+              is_applied: true,
+              is_saved: await checkIsSaved(userId, freelance._id, "Freelance"),
+            },
+          };
+        })
+      )
+    ).filter(Boolean);
+
+    return res.status(200).json({
+      status: true,
+      count: enrichedAppliedFreelances.length,
+      data: enrichedAppliedFreelances,
+    });
+  } catch (error) {
+    console.error("Get Applied Freelances Error:", error.message);
+    return res.status(500).json({
+      status: false,
+      message: "Failed to fetch applied freelances",
       error: error.message,
     });
   }
@@ -1063,9 +1246,14 @@ const getJobProfile = async (req, res) => {
       });
     }
 
-    // ── Find Job ─────────────────────────────
-    let job = await Internship.findById(id).populate("c_by", "role email phone");
-    let jobType = "Internship";
+    // ── Find Job / Internship / Freelance ─────────────────────────────
+    let job = await Job.findById(id).populate("c_by", "role email phone");
+    let jobType = "Job";
+
+    if (!job) {
+      job = await Internship.findById(id).populate("c_by", "role email phone");
+      jobType = "Internship";
+    }
 
     if (!job) {
       job = await Freelance.findById(id).populate("c_by", "role email phone");
@@ -1149,7 +1337,7 @@ const getAllCompetitions = async (req, res) => {
 
     const competitions = await Competition.find({ isActive: true, status: "approved" })
       .sort({ createdAt: -1 })
-      .select("eventName registrationType coverImage organizer eventDate eligibilityDetails city  totalSeats individualFees teamFees lateFees mode registrationStartDate createdAt");
+      .select("eventName registrationType coverImage organizer eventDate externalRegistrationLink eligibilityDetails city totalSeats individualFees teamFees lateFees mode registrationStartDate createdAt");
 
     const data = await Promise.all(
       competitions.map(async (item) => ({
@@ -2574,7 +2762,7 @@ const getAllConferences = async (req, res) => {
     const conferences = await Conference.find({ isActive: true, status: "approved" })
       .sort({ createdAt: -1 })
       .select(
-        "eventName organizer registrationType mode eventDate registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees city  eligibilityDetails teamOrIndividualEvent createdAt"
+        "eventName organizer registrationType mode eventDate externalRegistrationLink registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees city eligibilityDetails teamOrIndividualEvent createdAt"
       );
 
     const data = await Promise.all(
@@ -2650,15 +2838,19 @@ const getAllTechnicalEvents = async (req, res) => {
     const events = await Event.find({ isActive: true, status: { $in: ["approved", "Approved"] }, eventType: "Technical" })
       .sort({ createdAt: -1 })
       .select(
-        "eventName eventType eventCategory description allowedDepartments organizer mode eventDate registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees city eligibilityDetails teamOrIndividualEvent c_by status isActive createdAt"
+        "eventName eventType eventCategory description allowedDepartments organizer mode eventDate onlinePlatformLink externalRegistrationLink registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees city eligibilityDetails teamOrIndividualEvent c_by status isActive createdAt"
       );
 
     const data = await Promise.all(
-      events.map(async (item) => ({
-        ...item.toObject(),
-
-        is_registered: await checkIsRegistered(userId, item._id),
-      }))
+      events.map(async (item) => {
+        const isOnline = item.mode === "Online" || item.mode === "Hybrid";
+        return {
+          ...item.toObject(),
+          meetingLink: isOnline ? (item.onlinePlatformLink || null) : null,
+          onlinePlatformLink: isOnline ? (item.onlinePlatformLink || null) : null,
+          is_registered: await checkIsRegistered(userId, item._id),
+        };
+      })
     );
 
     return res.status(200).json({
@@ -2682,15 +2874,19 @@ const getAllNonTechnicalEvents = async (req, res) => {
     const events = await Event.find({ isActive: true, status: { $in: ["approved", "Approved"] }, eventType: "Non Technical" })
       .sort({ createdAt: -1 })
       .select(
-        "eventName eventType eventCategory description allowedDepartments organizer mode eventDate registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees city eligibilityDetails teamOrIndividualEvent c_by status isActive createdAt"
+        "eventName eventType eventCategory description allowedDepartments organizer mode eventDate onlinePlatformLink externalRegistrationLink registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees city eligibilityDetails teamOrIndividualEvent c_by status isActive createdAt"
       );
 
     const data = await Promise.all(
-      events.map(async (item) => ({
-        ...item.toObject(),
-
-        is_registered: await checkIsRegistered(userId, item._id),
-      }))
+      events.map(async (item) => {
+        const isOnline = item.mode === "Online" || item.mode === "Hybrid";
+        return {
+          ...item.toObject(),
+          meetingLink: isOnline ? (item.onlinePlatformLink || null) : null,
+          onlinePlatformLink: isOnline ? (item.onlinePlatformLink || null) : null,
+          is_registered: await checkIsRegistered(userId, item._id),
+        };
+      })
     );
 
     return res.status(200).json({
@@ -2758,7 +2954,7 @@ const getAllTechnicalSeminars = async (req, res) => {
     const seminars = await Seminar.find({ isActive: true, status: "approved", eventType: "Technical" })
       .sort({ createdAt: -1 })
       .select(
-        "eventName eventType organizer mode eventDate registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees city  eligibilityDetails teamOrIndividualEvent createdAt"
+        "eventName eventType organizer mode eventDate externalRegistrationLink registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees city eligibilityDetails teamOrIndividualEvent createdAt"
       );
 
     const data = await Promise.all(
@@ -2789,7 +2985,7 @@ const getAllNonTechnicalSeminars = async (req, res) => {
     const seminars = await Seminar.find({ isActive: true, status: "approved", eventType: "Non Technical" })
       .sort({ createdAt: -1 })
       .select(
-        "eventName eventType organizer mode eventDate registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees city  eligibilityDetails teamOrIndividualEvent createdAt"
+        "eventName eventType organizer mode eventDate externalRegistrationLink registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees city eligibilityDetails teamOrIndividualEvent createdAt"
       );
 
     const data = await Promise.all(
@@ -3174,40 +3370,35 @@ const getEventsPage = async (req, res) => {
     const upcomingRaw = await Event.find({ isActive: true, status: { $in: ["approved", "Approved"] }, eventDate: { $gte: now } })
       .sort({ eventDate: 1 })
       .limit(2)
-      .select("eventName registrationType eventType eventCategory description allowedDepartments organizer mode eventDate coverImage city totalSeats individualFees teamFees registrationStartDate registrationEndDate c_by status isActive createdAt");
+      .select("eventName registrationType eventType eventCategory description allowedDepartments organizer mode eventDate onlinePlatformLink externalRegistrationLink coverImage city totalSeats individualFees teamFees registrationStartDate registrationEndDate c_by status isActive createdAt");
 
     const upcomingIds = upcomingRaw.map((e) => e._id);
 
     const [technicalRaw, nonTechnicalRaw] = await Promise.all([
       Event.find({ isActive: true, status: { $in: ["approved", "Approved"] }, eventType: "Technical", _id: { $nin: upcomingIds } })
         .sort({ createdAt: -1 })
-        .select("eventName registrationType eventType eventCategory description allowedDepartments organizer mode eventDate coverImage city totalSeats individualFees teamFees registrationStartDate registrationEndDate c_by status isActive createdAt"),
+        .select("eventName registrationType eventType eventCategory description allowedDepartments organizer mode eventDate onlinePlatformLink externalRegistrationLink coverImage city totalSeats individualFees teamFees registrationStartDate registrationEndDate c_by status isActive createdAt"),
 
       Event.find({ isActive: true, status: { $in: ["approved", "Approved"] }, eventType: "Non Technical", _id: { $nin: upcomingIds } })
         .sort({ createdAt: -1 })
-        .select("eventName registrationType eventType eventCategory description allowedDepartments organizer mode eventDate coverImage city totalSeats individualFees teamFees registrationStartDate registrationEndDate c_by status isActive createdAt"),
+        .select("eventName registrationType eventType eventCategory description allowedDepartments organizer mode eventDate onlinePlatformLink externalRegistrationLink coverImage city totalSeats individualFees teamFees registrationStartDate registrationEndDate c_by status isActive createdAt"),
     ]);
+
+    const formatEventItem = async (item) => {
+      const isOnline = item.mode === "Online" || item.mode === "Hybrid";
+      return {
+        ...item.toObject(),
+        meetingLink: isOnline ? (item.onlinePlatformLink || null) : null,
+        onlinePlatformLink: isOnline ? (item.onlinePlatformLink || null) : null,
+        is_registered: await checkIsRegistered(userId, item._id),
+      };
+    };
 
     // ✅ attachFlags + is_registered for all three
     const [upcomingEvents, technicalEvents, nonTechnicalEvents] = await Promise.all([
-      Promise.all(
-        upcomingRaw.map(async (item) => ({
-          ...item.toObject(),
-          is_registered: await checkIsRegistered(userId, item._id),
-        }))
-      ),
-      Promise.all(
-        technicalRaw.map(async (item) => ({
-          ...item.toObject(),
-          is_registered: await checkIsRegistered(userId, item._id),
-        }))
-      ),
-      Promise.all(
-        nonTechnicalRaw.map(async (item) => ({
-          ...item.toObject(),
-          is_registered: await checkIsRegistered(userId, item._id),
-        }))
-      ),
+      Promise.all(upcomingRaw.map(formatEventItem)),
+      Promise.all(technicalRaw.map(formatEventItem)),
+      Promise.all(nonTechnicalRaw.map(formatEventItem)),
     ]);
 
     return res.status(200).json({
@@ -3232,20 +3423,18 @@ const getSeminarsPage = async (req, res) => {
     const upcomingRaw = await Seminar.find({ isActive: true, status: "approved", eventDate: { $gte: now } })
       .sort({ eventDate: 1 })
       .limit(2)
-      .select("eventName eventType registrationType organizer mode eventDate coverImage city totalSeats individualFees teamFees registrationEndDate createdAt");
+      .select("eventName eventType registrationType organizer mode eventDate externalRegistrationLink coverImage city totalSeats individualFees teamFees registrationEndDate createdAt");
 
     const upcomingIds = upcomingRaw.map((s) => s._id);
 
     const [technicalRaw, nonTechnicalRaw] = await Promise.all([
       Seminar.find({ isActive: true, status: "approved", eventType: "Technical", _id: { $nin: upcomingIds } })
         .sort({ createdAt: -1 })
-
-        .select("eventName eventType registrationType city organizer mode eventDate coverImage venueAddress totalSeats individualFees teamFees registrationEndDate createdAt"),
+        .select("eventName eventType registrationType city organizer mode eventDate externalRegistrationLink coverImage venueAddress totalSeats individualFees teamFees registrationEndDate createdAt"),
 
       Seminar.find({ isActive: true, status: "approved", eventType: "Non Technical", _id: { $nin: upcomingIds } })
         .sort({ createdAt: -1 })
-
-        .select("eventName eventType registrationType city organizer mode eventDate coverImage venueAddress totalSeats individualFees teamFees registrationEndDate createdAt"),
+        .select("eventName eventType registrationType city organizer mode eventDate externalRegistrationLink coverImage venueAddress totalSeats individualFees teamFees registrationEndDate createdAt"),
     ]);
 
     // ✅ attachFlags + is_registered for all three
@@ -3871,8 +4060,10 @@ export {
   getAllFreelances,
   toggleSavedJob,
   getSavedJobs,
+  getSavedFreelances,
   applyJob,
   getAppliedJobs,
+  getAppliedFreelances,
   getJobProfile,
   getAllCompetitions,
   getCompetitionProfile,

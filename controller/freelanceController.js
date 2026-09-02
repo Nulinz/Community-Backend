@@ -14,6 +14,13 @@ const parseArray = (val) => {
   return [];
 };
 
+const PROJECT_TYPE_MIN_BUDGET = {
+  "Small Project": 1000,
+  "Standard Project": 2500,
+  "Medium Project": 5000,
+  "Advanced Project": 10000,
+};
+
 export const createFreelanceForm = async (req, res, next) => {
   try {
     const { id, _id, ...rest } = req.body;
@@ -23,6 +30,7 @@ export const createFreelanceForm = async (req, res, next) => {
     const {
       jobTitle,
       companyName,
+      projectType,
       mode,
       totalOpenings,
       duration,
@@ -53,7 +61,16 @@ export const createFreelanceForm = async (req, res, next) => {
     // Validation
     if (!jobTitle) throw Object.assign(new Error("Job Title is required"), { status: 400 });
     if (!companyName) throw Object.assign(new Error("Company Name is required"), { status: 400 });
-    if (!mode) throw Object.assign(new Error("Mode is required"), { status: 400 });
+
+    const selectedType = projectType || "Small Project";
+    const numericBudget = parseFloat(String(budget || "").replace(/[^0-9.]/g, ""));
+    const minRequired = PROJECT_TYPE_MIN_BUDGET[selectedType];
+    if (minRequired && (!numericBudget || numericBudget < minRequired)) {
+      throw Object.assign(
+        new Error(`Minimum budget for ${selectedType} is ₹${minRequired.toLocaleString("en-IN")}`),
+        { status: 400 }
+      );
+    }
 
     let freelance;
 
@@ -73,7 +90,8 @@ export const createFreelanceForm = async (req, res, next) => {
     // Update fields
     freelance.jobTitle = toCleanString(jobTitle);
     freelance.companyName = toCleanString(companyName);
-    freelance.mode = toCleanString(mode);
+    freelance.projectType = toCleanString(projectType) || "Small Project";
+    freelance.mode = toCleanString(mode) || "Online";
     freelance.totalOpenings = Number(totalOpenings) || 0;
     freelance.duration = toCleanString(duration);
     freelance.applicationDeadline = applicationDeadline || undefined;

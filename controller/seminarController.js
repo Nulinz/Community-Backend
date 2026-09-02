@@ -93,7 +93,8 @@ export const createSeminarForm = async (req, res, next) => {
             certificateContentBody,
             eventStartTime,
             eventEndTime,
-            onlinePlatformLink
+            onlinePlatformLink,
+            externalRegistrationLink
         } = rest;
 
         // Validation
@@ -139,6 +140,7 @@ export const createSeminarForm = async (req, res, next) => {
         seminar.organizer = toCleanString(organizer);
         seminar.mode = toCleanString(mode);
         seminar.onlinePlatformLink = toCleanString(onlinePlatformLink);
+        seminar.externalRegistrationLink = toCleanString(externalRegistrationLink);
         seminar.eventDate = eventDate;
         seminar.registrationType = toCleanString(registrationType);
         seminar.eventStartTime = toCleanString(eventStartTime);
@@ -183,7 +185,7 @@ export const createSeminarForm = async (req, res, next) => {
 
         seminar.eligibilityDetails = toCleanString(eligibilityDetails);
         seminar.allowedDepartments =  parseDynamicArray(allowedDepartments);
-        seminar.teamOrIndividualEvent = toCleanString(teamOrIndividualEvent);
+        seminar.teamOrIndividualEvent = toCleanString(teamOrIndividualEvent) || "Individual";
         seminar.teamSizeMinimum = Number(teamSizeMinimum) || 0;
         seminar.teamSizeMaximum = Number(teamSizeMaximum) || 0;
 
