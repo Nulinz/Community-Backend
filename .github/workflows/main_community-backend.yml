@@ -6,7 +6,7 @@ name: Build and deploy Node.js app to Azure Web App - community-backend
 on:
   push:
     branches:
-      - main
+      - community
   workflow_dispatch:
 
 jobs:
