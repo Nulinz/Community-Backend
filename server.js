@@ -46,13 +46,14 @@ const allowedOrigins = [
   "http://192.168.1.2:5173",
   "http://192.168.29.221:5173",
   "http://192.168.29.74:5173",
+  "https://salmon-ocean-053a6b810.6.azurestaticapps.net"
 ].filter(Boolean);
 
 app.set("trust proxy", true);
 app.use(
   cors({
-    //origin: allowedOrigins,
-    origin: "https://icy-tree-067e50e10.7.azurestaticapps.net",
+    origin: allowedOrigins,
+    //origin: "https://icy-tree-067e50e10.7.azurestaticapps.net",
     credentials: true
   })
 );
