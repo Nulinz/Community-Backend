@@ -12,6 +12,8 @@ export const XP_ACTIONS = {
   // COMPETITION_ATTENDANCE: { xp: 50, label: "Attended Competition" },
   // COMPETITION_WIN: { xp: 250, label: "Won Competition" },
   FIRST_REGISTERATION: { xp: 10, label: "First Registration", isDaily: false, target: 1, unit: "count" },
+  COMPLETE_PROFILE: { xp: 10, label: "Complete Your Profile", isDaily: false, target: 1, unit: "count" },
+  FIRST_SAVED_JOB: { xp: 10, label: "Save Your First Opportunity", isDaily: false, target: 1, unit: "count" },
   DAILY_LOGIN: { xp: 5, label: "Daily Login", isDaily: true, target: 1, unit: "count" },
   AI_STATION: { xp: 5, label: "AI STATION", isDaily: true, target: 1, unit: "count" },
   LEVEL_1_BONUS: { xp: 25, label: "Reached Level 1 Bonus", isDaily: false, target: 1, unit: "count" },
@@ -25,6 +27,7 @@ export const XP_ACTIONS = {
   FIRST_EVENT_ATTENDANCE: { xp: 25, label: "Attend event and mark attendance first time", isDaily: false, target: 1, unit: "count" },
   FIRST_FREELANCE_APPLICATION: { xp: 10, label: "Apply for your first Envy freelancing project", isDaily: false, target: 1, unit: "count" },
   FIRST_COMPETITION_REGISTRATION: { xp: 15, label: "Join your first Envy League competition", isDaily: false, target: 1, unit: "count" },
+  REFERRAL: { xp: 20, label: "Referred a Friend", isDaily: false, target: 1, unit: "count" },
 };
 
 /**
@@ -36,24 +39,24 @@ export const calculateLevelInfo = (totalXP = 0) => {
 
   let currentLevel = 0;
   let xpForCurrentLevel = 0;
-  let xpForNextLevel = 100;
+  let xpForNextLevel = 200;
 
-  if (safeXP >= 500) {
+  if (safeXP >= 600) {
     currentLevel = 4;
-    xpForCurrentLevel = 500;
-    xpForNextLevel = 500;
-  } else if (safeXP >= 250) {
+    xpForCurrentLevel = 600;
+    xpForNextLevel = 600;
+  } else if (safeXP >= 400) {
     currentLevel = 3;
-    xpForCurrentLevel = 250;
-    xpForNextLevel = 500;
-  } else if (safeXP >= 100) {
+    xpForCurrentLevel = 400;
+    xpForNextLevel = 600;
+  } else if (safeXP >= 200) {
     currentLevel = 2;
-    xpForCurrentLevel = 100;
-    xpForNextLevel = 250;
+    xpForCurrentLevel = 200;
+    xpForNextLevel = 400;
   } else {
     currentLevel = 1;
     xpForCurrentLevel = 0;
-    xpForNextLevel = 100;
+    xpForNextLevel = 200;
   }
 
   const levelProgressXP = safeXP - xpForCurrentLevel;

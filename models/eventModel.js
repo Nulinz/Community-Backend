@@ -27,13 +27,13 @@ const eventSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
-     rejected_reason: { type: String },
+    rejected_reason: { type: String },
     status: {
-  type: String,
-  required: true,
-  enum: ["pending", "approved", "rejected"],
-  default: "pending"
-},
+      type: String,
+      required: true,
+      enum: ["pending", "approved", "rejected"],
+      default: "pending"
+    },
     // Basic Details
     eventType: { type: String, required: true },
     eventCategory: { type: String, trim: true },
@@ -45,11 +45,11 @@ const eventSchema = new mongoose.Schema(
     eventEndTime: { type: String, trim: true },
     onlinePlatformLink: { type: String, trim: true },
     registrationType: {
-  type: String,
-  enum: ["Free", "Paid"],
-  required: true,
-  default: "Free",
-},
+      type: String,
+      enum: ["Free", "Paid"],
+      required: true,
+      default: "Free",
+    },
     registrationStartDate: { type: Date },
     registrationEndDate: { type: Date },
     totalSeats: { type: Number },
@@ -97,13 +97,13 @@ const eventSchema = new mongoose.Schema(
     accommodationProvide: { type: String },
     separatedForBoysGirls: { type: String },
     onlyForOutstationParticipants: { type: String },
- eventStartTime: { type: String, trim: true },
+    eventStartTime: { type: String, trim: true },
     // Team & Eligibility
     incharges: [inchargeSchema],
     eligibilityDetails: { type: String, trim: true },
     allowedDepartments: {
-  type: [String],
-},
+      type: [String],
+    },
     teamOrIndividualEvent: {
       type: String,
       enum: ["Team", "Individual", "Both"],

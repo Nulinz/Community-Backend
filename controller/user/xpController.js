@@ -3,6 +3,8 @@ import XPLog from "../../models/xpLogModel.js";
 import CompanyFollow from "../../models/companyFollowModel.js";
 import EventRegistration from "../../models/eventRegistrationModel.js";
 import AppliedJob from "../../models/appliedJobModel.js";
+import SavedJob from "../../models/savedJobModel.js";
+import UserDetails from "../../models/userDetails.js";
 import { XP_ACTIONS, calculateLevelInfo } from "../../config/xpConfig.js";
 import { awardXP, triggerMissionNotification } from "../../services/xpService.js";
 import { sendAndSaveNotification } from "../../helper/sendAndSaveNotification.js";
@@ -88,11 +90,31 @@ export const getMissions = async (req, res, next) => {
     }
 
     // Pre-query database for real user activity completion status
-    const [hasFollowedCompany, hasEventRegistration, hasCompetitionRegistration, hasFreelanceApp] = await Promise.all([
+    const [
+      hasFollowedCompany,
+      hasEventRegistration,
+      hasCompetitionRegistration,
+      hasFreelanceApp,
+      hasSavedJob,
+      hasCompletedProfile,
+    ] = await Promise.all([
       CompanyFollow.exists({ userId }),
       EventRegistration.exists({ userId }),
       EventRegistration.exists({ userId, eventType: "Competition" }),
       AppliedJob.exists({ userId, jobType: "Freelance" }),
+      SavedJob.exists({ userId }),
+      UserDetails.exists({
+        userId,
+        $or: [
+          { currentStatus: { $ne: null } },
+          { education: { $ne: null } },
+          { dob: { $ne: null } },
+          { gender: { $ne: null } },
+          { city: { $ne: null } },
+          { name: { $ne: null } },
+          { "skills.primary_skills.0": { $exists: true } },
+        ],
+      }),
     ]);
 
     // Build missions list
@@ -101,6 +123,8 @@ export const getMissions = async (req, res, next) => {
       activeTimeMissionKey,
       "AI_STATION",
       "FIRST_REGISTERATION",
+      "COMPLETE_PROFILE",
+      "FIRST_SAVED_JOB",
       "FIRST_COMPANY_FOLLOW",
       "FIRST_EVENT_REGISTRATION",
       "FIRST_COMPETITION_REGISTRATION",
@@ -130,6 +154,10 @@ export const getMissions = async (req, res, next) => {
         currentProgress = Math.min(dailyMins, config.target);
       } else if (key === "FIRST_REGISTERATION") {
         currentProgress = 1;
+      } else if (key === "COMPLETE_PROFILE") {
+        currentProgress = hasCompletedProfile ? 1 : 0;
+      } else if (key === "FIRST_SAVED_JOB") {
+        currentProgress = hasSavedJob ? 1 : 0;
       } else if (key === "FIRST_COMPANY_FOLLOW") {
         currentProgress = hasFollowedCompany ? 1 : 0;
       } else if (key === "FIRST_EVENT_REGISTRATION") {
@@ -260,6 +288,29 @@ export const claimMission = async (req, res, next) => {
       return res.status(400).json({ status: false, message: "Target of 60 active minutes not reached yet" });
     } else if (actionKey === "ACTIVE_180_MIN" && dailyMins < 180) {
       return res.status(400).json({ status: false, message: "Target of 180 active minutes not reached yet" });
+    } else if (actionKey === "FIRST_REGISTERATION") {
+      // User account exists by definition
+    } else if (actionKey === "COMPLETE_PROFILE") {
+      const hasProfile = await UserDetails.exists({
+        userId,
+        $or: [
+          { currentStatus: { $ne: null } },
+          { education: { $ne: null } },
+          { dob: { $ne: null } },
+          { gender: { $ne: null } },
+          { city: { $ne: null } },
+          { name: { $ne: null } },
+          { "skills.primary_skills.0": { $exists: true } },
+        ],
+      });
+      if (!hasProfile) {
+        return res.status(400).json({ status: false, message: "Complete profile mission not completed yet" });
+      }
+    } else if (actionKey === "FIRST_SAVED_JOB") {
+      const hasSaved = await SavedJob.exists({ userId });
+      if (!hasSaved) {
+        return res.status(400).json({ status: false, message: "Save opportunity mission not completed yet" });
+      }
     } else if (actionKey === "FIRST_COMPANY_FOLLOW") {
       const hasFollowed = await CompanyFollow.exists({ userId });
       if (!hasFollowed) {

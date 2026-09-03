@@ -10,6 +10,7 @@ import path from "path";
 
 import connectDB from "./config/db.js";
 import errorMiddleware from "./middleware/error.middleware.js";
+import AppError from "./helper/appError.js";
 import userRoutes from "./routes/userRoutes.js";
 import userDetailsRoutes from "./routes/userDetails.js"
 import companyRoutes from "./routes/companyRoutes.js";
@@ -124,11 +125,9 @@ app.use("/api/resume", resumeRoutes)
 
 //  migrateStatusField()
 
-// error
+// Catch-all for unhandled endpoints
 app.use((req, res, next) => {
-  const error = new Error(`Route not found: ${req.originalUrl}`);
-  error.status = 404;
-  next(error);
+  next(new AppError("The requested resource could not be found.", 404));
 });
 
 app.use(errorMiddleware);
@@ -167,3 +166,12 @@ const startServer = async () => {
 
 
 startServer();
+
+// Global process error safety guards
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("[CRITICAL] Unhandled Promise Rejection at:", promise, "reason:", reason);
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("[CRITICAL] Uncaught Exception:", err);
+});

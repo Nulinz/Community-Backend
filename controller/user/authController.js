@@ -5,6 +5,24 @@ import otpService from "../../config/sendSMS.js";
 import { awardXP, triggerMissionNotification } from "../../services/xpService.js";
 import { calculateLevelInfo } from "../../config/xpConfig.js";
 
+// 🔹 Helper function to generate unique 6-8 character referral codes (e.g. JOHN4819)
+const generateUniqueReferralCode = async (name = "USER") => {
+  const cleanName = name.replace(/[^a-zA-Z]/g, "").slice(0, 4).toUpperCase();
+  const prefix = cleanName.padEnd(4, "GRAD");
+  let isUnique = false;
+  let code = "";
+
+  while (!isUnique) {
+    const randomDigits = Math.floor(1000 + Math.random() * 9000);
+    code = `${prefix}${randomDigits}`;
+    const existing = await User.exists({ referralCode: code });
+    if (!existing) {
+      isUnique = true;
+    }
+  }
+
+  return code;
+};
 
 export const loginUser = async (req, res) => {
   try {
@@ -86,20 +104,30 @@ export const loginUser = async (req, res) => {
       { expiresIn: "30d" }
     );
 
+    // 🔹 Ensure referralCode is available for user
+    let userReferralCode = user.referralCode;
+    if (!userReferralCode && (!user.role || user.role === "user")) {
+      userReferralCode = await generateUniqueReferralCode(user.name);
+      user.referralCode = userReferralCode;
+      await user.save();
+    }
+
     // 🔹 8. Response
     return res.status(200).json({
       status: true,
       data: {
         details_comp: (userDetails && user.register_status === "completed") ? true : false, // 👈 key logic
         register_status: user.register_status,
+        referralCode: userReferralCode || "",
         token,
         user: {
           _id: user._id,
           name: user.name,
           phone: user.phone,
           email: user.email,
-          role: "user",
-          profile_pic: userDetails?.profile_pic
+          role: user.role || "user",
+          profile_pic: userDetails?.profile_pic,
+          referralCode: userReferralCode || "",
         },
       },
       message: "Login successfully"
@@ -111,24 +139,6 @@ export const loginUser = async (req, res) => {
       message: "Server error",
     });
   }
-};
-// 🔹 Helper function to generate unique 6-8 character referral codes (e.g. JOHN4819)
-const generateUniqueReferralCode = async (name = "USER") => {
-  const cleanName = name.replace(/[^a-zA-Z]/g, "").slice(0, 4).toUpperCase();
-  const prefix = cleanName.padEnd(4, "GRAD");
-  let isUnique = false;
-  let code = "";
-
-  while (!isUnique) {
-    const randomDigits = Math.floor(1000 + Math.random() * 9000);
-    code = `${prefix}${randomDigits}`;
-    const existing = await User.exists({ referralCode: code });
-    if (!existing) {
-      isUnique = true;
-    }
-  }
-
-  return code;
 };
 
 export const registerUser = async (req, res) => {
@@ -177,6 +187,21 @@ export const registerUser = async (req, res) => {
       }
     }
 
+    // 🔹 Process Referral attribution code if supplied (User-to-User referral link)
+    let referredBy = null;
+    const incomingReferralCode = req.body.referralCode || req.body.ref;
+    if (incomingReferralCode && typeof incomingReferralCode === "string") {
+      const cleanReferralCode = incomingReferralCode.trim().toUpperCase();
+      const referrer = await User.findOne({
+        referralCode: cleanReferralCode,
+      });
+
+      // Guard against self-referral
+      if (referrer && referrer.email !== email && referrer.phone !== phone) {
+        referredBy = referrer._id;
+      }
+    }
+
     // 🔹 Create user
     const user = await User.create({
       name,
@@ -184,6 +209,7 @@ export const registerUser = async (req, res) => {
       phone,
       password,
       referralCode,
+      referredBy,
       influencerId,
       otp,
       otp_expire,
@@ -201,6 +227,7 @@ export const registerUser = async (req, res) => {
         pending: true,
         otp_expire,
         otp, // ⚠️ remove this in production (only for testing)
+        referralCode: user.referralCode || "",
       }
     });
   } catch (error) {
@@ -273,6 +300,17 @@ export const verifyOtp = async (req, res) => {
     triggerMissionNotification(user._id, "FIRST_REGISTERATION").catch((err) =>
       console.error("FIRST_REGISTERATION notification error:", err.message)
     );
+
+    // 🔹 Award Referral XP to the referrer if this user registered via a referral link
+    if (user.referredBy) {
+      awardXP({
+        userId: user.referredBy,
+        actionKey: "REFERRAL",
+        referenceId: user._id.toString(),
+      }).catch((err) =>
+        console.error("REFERRAL awardXP error:", err.message)
+      );
+    }
 
     // 🔹 6. Generate JWT token
     const token = jwt.sign(

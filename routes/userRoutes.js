@@ -38,6 +38,7 @@ import {
   getAllCompetitions,
   getCompetitionProfile,
   createEventRegistration,
+  createExternalEventRegistration,
   getAllConferences,
   getConferenceProfile,
   getLocations,
@@ -165,6 +166,8 @@ router.post(
 router.get("/seminars", isAuthenticated, getSeminarsPage);
 router.get("/locations", getLocations);
 router.post("/event-register", uploader.none(), isAuthenticated, createEventRegistration);
+router.post("/external-event-register", uploader.none(), isAuthenticated, createExternalEventRegistration);
+
 router.get(
   "/event-technical",
   isAuthenticated,

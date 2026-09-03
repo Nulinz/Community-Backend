@@ -13,6 +13,7 @@ import { checkIsApplied } from "../../helper/isApplied.js";
 import Competition from "../../models/competitionModel.js";
 import EventRegistration from "../../models/eventRegistrationModel.js";
 import { checkIsRegistered } from "../../helper/isRegistered.js";
+import { checkIsEnded } from "../../helper/isEnded.js";
 import { getSeatAvailability } from "../../helper/getSeatAvailability.js";
 
 
@@ -34,255 +35,7 @@ import Payment from "../../models/paymentModel.js";
 import XPLog from "../../models/xpLogModel.js";
 import Notification from "../../models/notificationModel.js";
 
-// const userDashboard = async (req, res) => {
-//   try {
-//     const userId = req.user._id
-//     const [popularEvents, preferredInternships, topCompanies] =
-//       await Promise.all([
-//         // ── Popular Events ─────────────────────────────────────────
 
-//         Event.find({ isActive: true })
-//           .sort({ createdAt: -1 })
-//           .limit(3)
-//           .select("eventName coverImage organizer c_by mode description individualFees teamFees lateFees totalSeats eventDate geoLocation image isActive createdAt"),
-
-//         // ── Preferred Internships ──────────────────────────────────
-//         // No condition, latest 3
-//         Internship.find({ isActive: true })
-//           .sort({ createdAt: -1 })
-//           .limit(3)
-//           .select("jobTitle c_by location companyName duration salary eligibility createdAt")
-//           .populate("c_by", "role"),
-//         // ── Top Companies ──────────────────────────────────────────
-//         // Latest 4 companies
-//         Company.find()
-//           .sort({ createdAt: -1 })
-//           .limit(4)
-//           .select("companyName technologies companyTagLine companyLogo address state address industry website location createdAt"),
-//       ]);
-
-//     const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
-//     console.log()
-//     const data = await Promise.all(
-//       preferredInternships.map(async (item) => {
-//         const obj = item.toObject();
-
-//         let companyImage = null;
-
-//         if (item.c_by?.role === "admin") {
-//           companyImage = STATIC_ADMIN_IMAGE;
-
-//         } else if (item.c_by?.role === "company") {
-
-//           const company = await Company.findOne({
-//             c_by: item.c_by,
-//           }).select("companyLogo").lean();
-//           companyImage = company?.companyLogo || null;
-//           console.log(company)
-//         }
-
-//         return {
-//           ...obj,
-//           companyImage,
-//           is_saved: await checkIsSaved(userId, item._id, "internship"),
-//           is_applied: await checkIsApplied(userId, item._id),
-//         };
-//       })
-//     );
-
-//     return res.status(200).json({
-//       status: true,
-//       data: {
-//         popularEvents,
-//         preferredInternships: data,
-//         topCompanies,
-//       },
-//     });
-//   } catch (error) {
-//     console.error("Dashboard API Error:", error.message);
-//     return res.status(500).json({
-//       status: false,
-//       message: "Failed to load dashboard data",
-//       error: error.message,
-//     });
-//   }
-// };
-// const getJobs = async (req, res) => {
-//   try {
-//     const [internships, freelance] = await Promise.all([
-//       // ── Internships ────────────────────────────────────────────
-//       Internship.find()
-//         .sort({ createdAt: -1 })
-//         .limit(3)
-//         .select("jobTitle companyName duration salary eligibility createdAt"),
-
-//       // ── Freelance ──────────────────────────────────────────────
-//       Freelance.find()
-//         .sort({ createdAt: -1 })
-//         .limit(3)
-//         .select("eligibility companyName jobTitle  jobStartDate totalOpenings mode salary createdAt"),
-//     ]);
-
-//     return res.status(200).json({
-//       status: true,
-//       data: {
-//         internships,
-//         freelance,
-//       },
-//     });
-//   } catch (error) {
-//     console.error("Jobs API Error:", error.message);
-//     return res.status(500).json({
-//       status: false,
-//       message: "Failed to load jobs data",
-//       error: error.message,
-//     });
-//   }
-// };
-
-// const getAllInternships = async (req, res) => {
-//   try {
-//     const internships = await Internship.find()
-//       .sort({ createdAt: -1 })
-//       .select("jobTitle companyName duration salary eligibility createdAt");
-
-//     return res.status(200).json({
-//       status: true,
-//       count: internships.length,
-//       data: internships,
-//     });
-//   } catch (error) {
-//     console.error("Internships API Error:", error.message);
-//     return res.status(500).json({
-//       status: false,
-//       message: "Failed to load internships",
-//       error: error.message,
-//     });
-//   }
-// };
-
-// const getAllFreelances = async (req, res) => {
-//   try {
-//     const freelances = await Freelance.find()
-//       .sort({ createdAt: -1 })
-//       .select("eligibility companyName jobTitle  jobStartDate totalOpenings mode salary createdAt")
-
-//     return res.status(200).json({
-//       status: true,
-//       count: freelances.length,
-//       data:freelances,
-//     });
-//   } catch (error) {
-//     console.error("Freelances API Error:", error.message);
-//     return res.status(500).json({
-//       status: false,
-//       message: "Failed to load Freelances",
-//       error: error.message,
-//     });
-//   }
-// };
-
-
-
-// const getJobs = async (req, res) => {
-//   try {
-//     const userId = req.user._id;
-
-//     const [internships, freelances] = await Promise.all([
-//       // ── Internships ────────────────────────────────────────────
-//       Internship.find()
-//         .sort({ createdAt: -1 })
-//         .limit(3)
-//         .select("jobTitle location c_by companyName duration salary eligibility createdAt")
-//         .populate("c_by", "role"),
-
-//       // ── Freelance ──────────────────────────────────────────────
-//       Freelance.find()
-//         .sort({ createdAt: -1 })
-//         .limit(3)
-//         .select("eligibility c_by description  companyName jobTitle jobStartDate totalOpenings mode salary createdAt")
-//         .populate("c_by", "role")
-//     ]);
-
-//     const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
-
-//     const [internshipsWithSaved, freelancesWithSaved] = await Promise.all([
-
-//       // =========================
-//       // INTERNSHIPS
-//       // =========================
-//       Promise.all(
-//         internships.map(async (item) => {
-//           const obj = item.toObject();
-
-//           let companyImage = null;
-
-//           if (item.c_by?.role === "admin") {
-//             companyImage = STATIC_ADMIN_IMAGE;
-
-//           } else if (item.c_by?.role === "company") {
-//             const company = await Company.findOne({
-//               c_by: item.c_by._id,
-
-//             }).select("companyLogo").lean();
-
-//             companyImage = company?.companyLogo || null;
-//           }
-
-//           return {
-//             ...obj,
-//             companyImage,
-//             is_saved: await checkIsSaved(userId, item._id, "Internship"),
-//             is_applied: await checkIsApplied(userId, item._id),
-//           };
-//         })
-//       ),
-
-//       Promise.all(
-//         freelances.map(async (item) => {
-//           const obj = item.toObject();
-
-//           let companyImage = null;
-
-//           if (item.c_by?.role === "admin") {
-//             companyImage = STATIC_ADMIN_IMAGE;
-
-//           } else if (item.c_by?.role === "company") {
-//             const company = await Company.findOne({
-//               c_by: item.c_by._id,
-
-//             }).select("companyLogo").lean();
-
-//             companyImage = company?.companyLogo || null;
-//           }
-
-//           return {
-//             ...obj,
-//             companyImage,
-//             is_saved: await checkIsSaved(userId, item._id, "Freelance"),
-//             is_applied: await checkIsApplied(userId, item._id),
-//           };
-//         })
-//       ),
-
-//     ]);
-
-//     return res.status(200).json({
-//       status: true,
-//       data: {
-//         internships: internshipsWithSaved,
-//         freelance: freelancesWithSaved,
-//       },
-//     });
-//   } catch (error) {
-//     console.error("Jobs API Error:", error.message);
-//     return res.status(500).json({
-//       status: false,
-//       message: "Failed to load jobs data",
-//       error: error.message,
-//     });
-//   }
-// };
 const userDashboard = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -531,11 +284,29 @@ const userDashboard = async (req, res) => {
 const getJobs = async (req, res) => {
   try {
     const userId = req.user._id;
+    const userObjectId = mongoose.Types.ObjectId.isValid(userId)
+      ? new mongoose.Types.ObjectId(String(userId))
+      : userId;
 
-    const jobs = await Job.find({ isActive: true, status: "approved" })
-      .sort({ createdAt: -1 })
-      .select("jobTitle jobType location companyName duration salary createdAt mode totalOpenings c_by")
-      .populate("c_by", "role");
+    const [jobs, savedJobs, appliedJobs] = await Promise.all([
+      Job.find({ isActive: true, status: "approved" })
+        .sort({ createdAt: -1 })
+        .select("jobTitle jobType location companyName duration salary createdAt mode totalOpenings c_by")
+        .populate("c_by", "role"),
+      SavedJob.find({
+        $or: [{ userId: userObjectId }, { userId: String(userId) }],
+      })
+        .select("jobId")
+        .lean(),
+      AppliedJob.find({
+        $or: [{ userId: userObjectId }, { userId: String(userId) }],
+      })
+        .select("jobId")
+        .lean(),
+    ]);
+
+    const savedSet = new Set(savedJobs.map((s) => String(s.jobId)));
+    const appliedSet = new Set(appliedJobs.map((a) => String(a.jobId)));
 
     const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
 
@@ -555,11 +326,18 @@ const getJobs = async (req, res) => {
           companyImage = company?.companyLogo || null;
         }
 
+        const isSaved = savedSet.has(String(item._id));
+        const isApplied = appliedSet.has(String(item._id));
+
         return {
           ...obj,
           companyImage,
-          is_saved: await checkIsSaved(userId, item._id, "Job"),
-          is_applied: await checkIsApplied(userId, item._id),
+          is_saved: isSaved,
+          // isSaved: isSaved,
+          // saved: isSaved,
+          is_applied: isApplied,
+          // isApplied: isApplied,
+          // applied: isApplied,
         };
       })
     );
@@ -581,11 +359,29 @@ const getJobs = async (req, res) => {
 const getAllInternships = async (req, res) => {
   try {
     const userId = req.user._id;
+    const userObjectId = mongoose.Types.ObjectId.isValid(userId)
+      ? new mongoose.Types.ObjectId(String(userId))
+      : userId;
 
-    const internships = await Internship.find({ isActive: true, status: "approved" })
-      .sort({ createdAt: -1 })
-      .select("jobTitle location companyName duration salary eligibility createdAt c_by")
-      .populate("c_by", "role");
+    const [internships, savedJobs, appliedJobs] = await Promise.all([
+      Internship.find({ isActive: true, status: "approved" })
+        .sort({ createdAt: -1 })
+        .select("jobTitle location companyName duration salary eligibility createdAt c_by")
+        .populate("c_by", "role"),
+      SavedJob.find({
+        $or: [{ userId: userObjectId }, { userId: String(userId) }],
+      })
+        .select("jobId")
+        .lean(),
+      AppliedJob.find({
+        $or: [{ userId: userObjectId }, { userId: String(userId) }],
+      })
+        .select("jobId")
+        .lean(),
+    ]);
+
+    const savedSet = new Set(savedJobs.map((s) => String(s.jobId)));
+    const appliedSet = new Set(appliedJobs.map((a) => String(a.jobId)));
 
     const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
 
@@ -598,21 +394,26 @@ const getAllInternships = async (req, res) => {
         } else if (item.c_by?.role === "company") {
           const company = await Company.findOne({
             userId: item.c_by._id,
-
           }).select("companyLogo").lean();
 
           companyImage = company?.companyLogo || null;
         }
 
+        const isSaved = savedSet.has(String(item._id));
+        const isApplied = appliedSet.has(String(item._id));
+
         return {
           ...obj,
           companyImage,
-          is_saved: await checkIsSaved(userId, item._id, "Internship"),
-          is_applied: await checkIsApplied(userId, item._id),
+          is_saved: isSaved,
+          isSaved: isSaved,
+          saved: isSaved,
+          is_applied: isApplied,
+          isApplied: isApplied,
+          applied: isApplied,
         };
       })
     );
-
 
     return res.status(200).json({
       status: true,
@@ -631,13 +432,28 @@ const getAllInternships = async (req, res) => {
 const getAllFreelances = async (req, res) => {
   try {
     const userId = req.user._id;
+    const userObjectId = mongoose.Types.ObjectId.isValid(userId)
+      ? new mongoose.Types.ObjectId(String(userId))
+      : userId;
 
-    // ── Step 1: Get applied job IDs ─────────────
-    const appliedJobs = await AppliedJob.find({ userId }).select("jobId");
+    // ── Step 1: Get applied job IDs and saved job IDs ─────────────
+    const [appliedJobs, savedJobs] = await Promise.all([
+      AppliedJob.find({
+        $or: [{ userId: userObjectId }, { userId: String(userId) }],
+      })
+        .select("jobId")
+        .lean(),
+      SavedJob.find({
+        $or: [{ userId: userObjectId }, { userId: String(userId) }],
+      })
+        .select("jobId")
+        .lean(),
+    ]);
 
     const appliedIds = appliedJobs.map(
       (a) => new mongoose.Types.ObjectId(a.jobId)
     );
+    const savedSet = new Set(savedJobs.map((s) => String(s.jobId)));
 
     // ── Step 2: Fetch freelances (exclude applied) ─────────────
     const freelances = await Freelance.find({
@@ -670,15 +486,17 @@ const getAllFreelances = async (req, res) => {
           companyImage = company?.companyLogo || null;
         }
 
+        const isSaved = savedSet.has(String(item._id));
+
         return {
           ...obj,
           companyImage,
-
-          // ✅ still needed
-          is_saved: await checkIsSaved(userId, item._id, "Freelance"),
-
-          // ✅ always false (filtered)
+          is_saved: isSaved,
+          isSaved: isSaved,
+          saved: isSaved,
           is_applied: false,
+          isApplied: false,
+          applied: false,
         };
       })
     );
@@ -701,46 +519,98 @@ const toggleSavedJob = async (req, res) => {
   try {
     const userId = req.user._id;
     const { jobId, jobType } = req.body;
-    console.log(jobId, jobType, userId)
+
     // Validate required fields
-    if (!jobId || !jobType) {
+    if (!jobId) {
       return res.status(400).json({
         success: false,
-        message: "jobId and jobType are required",
+        message: "jobId is required",
       });
     }
 
-    // Validate jobType
-    if (!["Job", "Internship", "Freelance"].includes(jobType)) {
-      return res.status(400).json({
-        success: false,
-        message: "jobType must be 'Job', 'Internship', or 'Freelance'",
-      });
-    }
+    const userObjectId = mongoose.Types.ObjectId.isValid(userId)
+      ? new mongoose.Types.ObjectId(String(userId))
+      : userId;
+    const jobObjectId = mongoose.Types.ObjectId.isValid(jobId)
+      ? new mongoose.Types.ObjectId(String(jobId))
+      : jobId;
 
-    // Check if already saved
-    const existing = await SavedJob.findOne({ userId, jobId, jobType });
+    // Check if already saved (match by user and job ID)
+    const existing = await SavedJob.findOne({
+      $or: [
+        { userId: userObjectId, jobId: jobObjectId },
+        { userId: String(userId), jobId: String(jobId) },
+      ],
+    });
 
     if (existing) {
       // Already saved → unsave it
       await SavedJob.findByIdAndDelete(existing._id);
       return res.status(200).json({
+        status: true,
         success: true,
         saved: false,
+        isSaved: false,
+        is_saved: false,
         message: "Job unsaved successfully",
-      });
-    } else {
-      // Not saved → save it
-      await SavedJob.create({ userId, jobId, jobType });
-      return res.status(200).json({
-        success: true,
-        saved: true,
-        message: "Job saved successfully",
+        data: {
+          jobId,
+          isSaved: false,
+          is_saved: false,
+          saved: false,
+        },
       });
     }
+
+    // Auto-detect or normalize jobType for new save
+    let normalizedJobType = "Job";
+    if (jobType && typeof jobType === "string") {
+      const lower = jobType.trim().toLowerCase();
+      if (lower === "internship") normalizedJobType = "Internship";
+      else if (lower === "freelance") normalizedJobType = "Freelance";
+      else if (lower === "job") normalizedJobType = "Job";
+    }
+
+    if (!normalizedJobType || normalizedJobType === "Job") {
+      const [isInternship, isFreelance] = await Promise.all([
+        Internship.exists({ _id: jobObjectId }),
+        Freelance.exists({ _id: jobObjectId }),
+      ]);
+      if (isInternship) normalizedJobType = "Internship";
+      else if (isFreelance) normalizedJobType = "Freelance";
+      else normalizedJobType = "Job";
+    }
+
+    const newSaved = await SavedJob.create({
+      userId: userObjectId,
+      jobId: jobObjectId,
+      jobType: normalizedJobType,
+    });
+
+    // Trigger first save opportunity mission notification
+    triggerMissionNotification(userId, "FIRST_SAVED_JOB").catch((err) =>
+      console.error("FIRST_SAVED_JOB notification error:", err.message)
+    );
+
+    return res.status(200).json({
+      status: true,
+      success: true,
+      saved: true,
+      isSaved: true,
+      is_saved: true,
+      message: "Job saved successfully",
+      data: {
+        jobId,
+        isSaved: true,
+        is_saved: true,
+        saved: true,
+        savedJob: newSaved,
+      },
+    });
   } catch (error) {
     console.error("Toggle Saved Job Error:", error.message);
     return res.status(500).json({
+      status: false,
       success: false,
       message: "Failed to toggle saved job",
       error: error.message,
@@ -765,7 +635,7 @@ const getSavedJobs = async (req, res) => {
         path: "jobId",
         match: { isActive: true },
         select:
-          "jobTitle location c_by companyName duration salary createdAt jobStartDate jobEndDate totalOpenings mode",
+          "jobTitle jobType location c_by companyName duration salary createdAt jobStartDate jobEndDate totalOpenings mode eligibility",
         populate: {
           path: "c_by",
           select: "role",
@@ -797,12 +667,20 @@ const getSavedJobs = async (req, res) => {
           companyImage = company?.companyLogo || null;
         }
 
+        const jobObj = job.toObject();
+        // Use actual jobType from Job (e.g. "Full Time") or fallback to "Internship"
+        const actualJobType = jobObj.jobType || (item.jobType === "Internship" ? "Internship" : "Full Time");
+
         return {
           ...item.toObject(),
+          jobType: actualJobType,
           jobId: {
-            ...job.toObject(),
+            ...jobObj,
+            jobType: actualJobType,
             companyImage,
             is_saved: true,
+            isSaved: true,
+            saved: true,
             is_applied: await checkIsApplied(userId, job._id),
           },
         };
@@ -813,14 +691,15 @@ const getSavedJobs = async (req, res) => {
     const job = [];
     const internship = [];
 
-    for (const item of enrichedSavedJobs) {
-      if (!item) continue;
+    for (let i = 0; i < savedJobs.length; i++) {
+      const enriched = enrichedSavedJobs[i];
+      if (!enriched) continue;
 
-      const type = item.jobType?.toLowerCase();
-      if (type === "job") {
-        job.push(item);
-      } else if (type === "internship") {
-        internship.push(item);
+      const originalType = savedJobs[i].jobType?.toLowerCase();
+      if (originalType === "job") {
+        job.push(enriched);
+      } else if (originalType === "internship") {
+        internship.push(enriched);
       }
     }
 
@@ -1316,10 +1195,13 @@ const getJobProfile = async (req, res) => {
 
         // ✅ flags
         is_saved,
+        isSaved: is_saved,
         is_applied,
+        isApplied: is_applied,
 
         // ✅ count
         applied_count: appliedCount,
+        appliedCount: appliedCount,
       },
     });
   } catch (error) {
@@ -1337,13 +1219,20 @@ const getAllCompetitions = async (req, res) => {
 
     const competitions = await Competition.find({ isActive: true, status: "approved" })
       .sort({ createdAt: -1 })
-      .select("eventName registrationType coverImage organizer eventDate externalRegistrationLink eligibilityDetails city totalSeats individualFees teamFees lateFees mode registrationStartDate createdAt");
+      .select("eventName registrationType coverImage organizer eventDate eventEndDate eventStartTime eventEndTime externalRegistrationLink eligibilityDetails city totalSeats individualFees teamFees lateFees mode registrationStartDate createdAt");
 
     const data = await Promise.all(
-      competitions.map(async (item) => ({
-        ...item.toObject(),
-        is_registered: await checkIsRegistered(userId, item._id),
-      }))
+      competitions.map(async (item) => {
+        const obj = item.toObject();
+        const isRegistered = await checkIsRegistered(userId, item._id);
+        return {
+          ...obj,
+          eventEndTime: obj.eventEndTime || null,
+          isEnded: checkIsEnded(obj.eventDate, obj.eventEndDate, obj.eventEndTime),
+          is_registered: isRegistered,
+          isRegistered: isRegistered,
+        };
+      })
     );
 
     return res.status(200).json({
@@ -1386,12 +1275,16 @@ const getCompetitionProfile = async (req, res) => {
       getCollegeByEventId({ eventType: "competition", eventId: id }),
       getSeatAvailability({ eventType: "competition", eventId: id })
     ]);
-    console.log(college)
+
+    const compObj = competition.toObject();
     return res.status(200).json({
       status: true,
       data: {
-        ...competition.toObject(),
+        ...compObj,
+        eventEndTime: compObj.eventEndTime || null,
+        isEnded: checkIsEnded(compObj.eventDate, compObj.eventEndDate, compObj.eventEndTime),
         is_registered,
+        isRegistered: is_registered,
         college: college,
         availableSeats: availability?.availableSeats
       },
@@ -1405,902 +1298,7 @@ const getCompetitionProfile = async (req, res) => {
     });
   }
 };
-// const createEventRegistration = async (req, res) => {
-//   try {
 
-//     const userId = req.user._id;
-
-//     const {
-//       eventId,
-//       eventType,
-//       fullName,
-//       department,
-//       collegeName,
-//       year,
-//       phoneNumber,
-//       mailId,
-//       food,
-//       foodType,
-//       accommodation,
-//       accommodationType,
-//       type,
-//       teamMembersCount,
-//       transaction_id,
-//       amount,
-//     } = req.body;
-
-//     // ==============================
-//     // REQUIRED VALIDATION
-//     // ==============================
-
-//     if (
-//       !eventId ||
-//       !eventType ||
-//       !fullName ||
-//       !department ||
-//       !collegeName ||
-//       !year ||
-//       !phoneNumber ||
-//       !mailId ||
-//       !type
-//     ) {
-//       return res.status(400).json({
-//         status: false,
-//         message:
-//           "eventId, eventType, fullName, department, collegeName, year, type, phoneNumber and mailId are required",
-//       });
-//     }
-
-//     // ==============================
-//     // EVENT TYPE VALIDATION
-//     // ==============================
-
-//     if (
-//       !["Conference", "Competition", "Seminar", "Event"].includes(eventType)
-//     ) {
-//       return res.status(400).json({
-//         status: false,
-//         message:
-//           "eventType must be Conference, Competition, Seminar or Event",
-//       });
-//     }
-
-//     // ==============================
-//     // REGISTRATION TYPE VALIDATION
-//     // ==============================
-
-//     if (!["Team", "Individual"].includes(type)) {
-//       return res.status(400).json({
-//         status: false,
-//         message: "type must be Team or Individual",
-//       });
-//     }
-
-//     // ==============================
-//     // FOOD VALIDATION
-//     // ==============================
-
-//     if (food === "yes" && !foodType) {
-//       return res.status(400).json({
-//         status: false,
-//         message: "foodType is required when food is yes",
-//       });
-//     }
-
-//     // ==============================
-//     // ACCOMMODATION VALIDATION
-//     // ==============================
-
-//     if (accommodation === "yes" && !accommodationType) {
-//       return res.status(400).json({
-//         status: false,
-//         message:
-//           "accommodationType is required when accommodation is yes",
-//       });
-//     }
-
-//     // ==============================
-//     // GET EVENT DOCUMENT
-//     // ==============================
-
-//     let eventDoc = null;
-
-//     const selectFields = `
-//       c_by
-//       totalSeats
-//       teamOrIndividualEvent
-//       teamSizeMinimum
-//       teamSizeMaximum
-//       individualFees
-//       teamFees
-//       lateFees
-//     `;
-
-//     if (eventType === "Conference") {
-//       eventDoc = await Conference.findById(eventId)
-//         .select(selectFields);
-//     }
-
-//     if (eventType === "Competition") {
-//       eventDoc = await Competition.findById(eventId)
-//         .select(selectFields);
-//     }
-
-//     if (eventType === "Seminar") {
-//       eventDoc = await Seminar.findById(eventId)
-//         .select(selectFields);
-//     }
-
-//     if (eventType === "Event") {
-//       eventDoc = await Event.findById(eventId)
-//         .select(selectFields);
-//     }
-
-//     // ==============================
-//     // EVENT NOT FOUND
-//     // ==============================
-
-//     if (!eventDoc) {
-//       return res.status(404).json({
-//         status: false,
-//         message: "Event not found",
-//       });
-//     }
-
-//     // ==============================
-//     // ALREADY REGISTERED
-//     // ==============================
-
-//     const existing = await EventRegistration.findOne({
-//       userId,
-//       eventId,
-//     });
-
-//     if (existing) {
-//       return res.status(400).json({
-//         status: false,
-//         message:
-//           "You have already registered for this event",
-//       });
-//     }
-
-//     // ==============================
-//     // MEMBER COUNT
-//     // ==============================
-
-//     let member_count = 1;
-
-//     if (type === "Team") {
-
-//       member_count = Number(teamMembersCount);
-
-//       if (!member_count || member_count <= 0) {
-//         return res.status(400).json({
-//           status: false,
-//           message:
-//             "Valid teamMembersCount is required",
-//         });
-//       }
-//     }
-
-//     // ==============================
-//     // TEAM / INDIVIDUAL VALIDATION
-//     // ==============================
-
-//     if (eventDoc.teamOrIndividualEvent === "Team") {
-
-//       // Only Team allowed
-//       if (type !== "Team") {
-//         return res.status(400).json({
-//           status: false,
-//           message:
-//             "This event allows only team registration",
-//         });
-//       }
-
-//     } else if (
-//       eventDoc.teamOrIndividualEvent === "Individual"
-//     ) {
-
-//       // Only Individual allowed
-//       if (type !== "Individual") {
-//         return res.status(400).json({
-//           status: false,
-//           message:
-//             "This event allows only individual registration",
-//         });
-//       }
-
-//     } else if (
-//       eventDoc.teamOrIndividualEvent === "Both"
-//     ) {
-
-//       // Both allowed
-//       if (!["Team", "Individual"].includes(type)) {
-//         return res.status(400).json({
-//           status: false,
-//           message:
-//             "type must be Team or Individual",
-//         });
-//       }
-//     }
-
-//     // ==============================
-//     // TEAM SIZE VALIDATION
-//     // ==============================
-
-//     if (type === "Team") {
-
-//       // Minimum Team Size
-//       if (
-//         eventDoc.teamSizeMinimum &&
-//         member_count < eventDoc.teamSizeMinimum
-//       ) {
-//         return res.status(400).json({
-//           status: false,
-//           message:
-//             `Minimum ${eventDoc.teamSizeMinimum} team members required`,
-//         });
-//       }
-
-//       // Maximum Team Size
-//       if (
-//         eventDoc.teamSizeMaximum &&
-//         member_count > eventDoc.teamSizeMaximum
-//       ) {
-//         return res.status(400).json({
-//           status: false,
-//           message:
-//             `Maximum ${eventDoc.teamSizeMaximum} team members allowed`,
-//         });
-//       }
-//     }
-
-//     // ==============================
-//     // TOTAL SEATS VALIDATION
-//     // ==============================
-
-//     const registrations =
-//       await EventRegistration.find({
-//         eventId,
-//       }).select("member_count");
-
-//     const usedSeats = registrations.reduce(
-//       (sum, item) =>
-//         sum + (item.member_count || 1),
-//       0
-//     );
-
-//     const remainingSeats =
-//       (eventDoc.totalSeats || 0) - usedSeats;
-
-//     if (
-//       eventDoc.totalSeats &&
-//       member_count > remainingSeats
-//     ) {
-//       return res.status(400).json({
-//         status: false,
-//         message:
-//           `Only ${remainingSeats} seats remaining`,
-//       });
-//     }
-
-//     // ==============================
-//     // CALCULATE FEES
-//     // ==============================
-
-//     let finalAmount = 0;
-
-//     // Team Fees
-//     if (type === "Team") {
-
-//       finalAmount =
-//         Number(eventDoc.teamFees || 0);
-
-//     } else {
-
-//       // Individual Fees
-//       finalAmount =
-//         Number(eventDoc.individualFees || 0) *
-//         member_count;
-//     }
-
-//     // Add Late Fees
-//     finalAmount +=
-//       Number(eventDoc.lateFees || 0);
-
-//     // ==============================
-//     // PAYMENT VALIDATION
-//     // ==============================
-
-//     if (finalAmount > 0) {
-
-//       if (!transaction_id) {
-//         return res.status(400).json({
-//           status: false,
-//           message:
-//             "transaction_id is required",
-//         });
-//       }
-
-//       if (!amount) {
-//         return res.status(400).json({
-//           status: false,
-//           message: "amount is required",
-//         });
-//       }
-
-//       if (Number(amount) !== finalAmount) {
-//         return res.status(400).json({
-//           status: false,
-//           message:
-//             `Invalid amount. Payable amount is ${finalAmount}`,
-//         });
-//       }
-//     }
-
-//     // ==============================
-//     // CREATE REGISTRATION
-//     // ==============================
-
-//     const registration =
-//       await EventRegistration.create({
-//         userId,
-//         eventId,
-//         eventType,
-//         fullName,
-//         department,
-//         c_by: eventDoc.c_by,
-//         collegeName,
-//         year,
-//         type,
-//         member_count,
-//         phoneNumber,
-//         mailId,
-//         food: food || "no",
-//         foodType:
-//           food === "yes"
-//             ? foodType
-//             : null,
-//         accommodation:
-//           accommodation || "no",
-//         accommodationType:
-//           accommodation === "yes"
-//             ? accommodationType
-//             : null,
-//       });
-
-//     // ==============================
-//     // CREATE PAYMENT
-//     // ==============================
-
-//     let paymentData = null;
-
-//     if (finalAmount > 0) {
-
-//       paymentData = await Payment.create({
-//         userId,
-//         referenceId: registration._id,
-//         referenceType:
-//           "EventRegistration",
-//         eventId,
-//         eventType,
-//         c_by: eventDoc.c_by,
-//         amount: finalAmount,
-//         paymentMethod: "UPI",
-//         paymentStatus: "Success",
-//         paymentGateway: "Offline",
-//         transactionId: transaction_id,
-//         remarks:
-//           `${eventType} registration payment`,
-//       });
-//     }
-
-//     // ==============================
-//     // SEND NOTIFICATION
-//     // ==============================
-
-//     await sendAndSaveNotification({
-//       senderId: userId,
-//       receiverId: userId,
-//       title:
-//         "Event Registration Successful",
-//       message:
-//         `You have successfully registered for the ${eventType}.`,
-//       type: "event_registered",
-//       reference_id: eventId,
-//       metadata: {
-//         eventType,
-//         registrationId:
-//           registration._id,
-//         paymentId:
-//           paymentData?._id || null,
-//         amount: finalAmount,
-//         food: food || "no",
-//         accommodation:
-//           accommodation || "no",
-//       },
-//     });
-
-//     // ==============================
-//     // RESPONSE
-//     // ==============================
-
-//     return res.status(200).json({
-//       status: true,
-//       message:
-//         "Registered successfully",
-//       data: {
-//         registration,
-//         payment: paymentData,
-//         payableAmount: finalAmount,
-//       },
-//     });
-
-//   } catch (error) {
-
-//     console.error(
-//       "Event Registration Error:",
-//       error.message
-//     );
-
-//     return res.status(500).json({
-//       status: false,
-//       message:
-//         "Failed to register for event",
-//       error: error.message,
-//     });
-//   }
-// };
-// ============================================
-
-// const createEventRegistration = async (req, res) => {
-//   try {
-
-//     const userId = req.user._id;
-
-//     const {
-//       eventId,
-//       eventType,
-//       fullName,
-//       department,
-//       collegeName,
-//       year,
-//       phoneNumber,
-//       mailId,
-//       food,
-//       foodType,
-//       accommodation,
-//       accommodationType,
-//       type,
-//       teamMembersCount,
-//       transaction_id,
-//       amount,
-//     } = req.body;
-
-//     // ==============================
-//     // REQUIRED VALIDATION
-//     // ==============================
-
-//     if (
-//       !eventId ||
-//       !eventType ||
-//       !fullName ||
-//       !department ||
-//       !collegeName ||
-//       !year ||
-//       !phoneNumber ||
-//       !mailId ||
-//       !type
-//     ) {
-//       return res.status(400).json({
-//         status: false,
-//         message:
-//           "eventId, eventType, fullName, department, collegeName, year, type, phoneNumber and mailId are required",
-//       });
-//     }
-
-//     // ==============================
-//     // EVENT TYPE VALIDATION
-//     // ==============================
-
-//     if (
-//       !["Conference", "Competition", "Seminar", "Event"].includes(eventType)
-//     ) {
-//       return res.status(400).json({
-//         status: false,
-//         message:
-//           "eventType must be Conference, Competition, Seminar or Event",
-//       });
-//     }
-
-//     // ==============================
-//     // REGISTRATION TYPE VALIDATION
-//     // ==============================
-
-//     if (!["Team", "Individual"].includes(type)) {
-//       return res.status(400).json({
-//         status: false,
-//         message: "type must be Team or Individual",
-//       });
-//     }
-
-//     // ==============================
-//     // FOOD VALIDATION
-//     // ==============================
-
-//     if (food === "yes" && !foodType) {
-//       return res.status(400).json({
-//         status: false,
-//         message: "foodType is required when food is yes",
-//       });
-//     }
-
-//     // ==============================
-//     // ACCOMMODATION VALIDATION
-//     // ==============================
-
-//     if (accommodation === "yes" && !accommodationType) {
-//       return res.status(400).json({
-//         status: false,
-//         message:
-//           "accommodationType is required when accommodation is yes",
-//       });
-//     }
-
-//     // ==============================
-//     // GET EVENT DOCUMENT
-//     // ==============================
-
-//     let eventDoc = null;
-
-//     const selectFields = `
-//       c_by
-//       totalSeats
-//       teamOrIndividualEvent
-//       teamSizeMinimum
-//       teamSizeMaximum
-//       individualFees
-//       teamFees
-//       lateFees
-//     `;
-
-//     if (eventType === "Conference") {
-//       eventDoc = await Conference.findById(eventId)
-//         .select(selectFields);
-//     }
-
-//     if (eventType === "Competition") {
-//       eventDoc = await Competition.findById(eventId)
-//         .select(selectFields);
-//     }
-
-//     if (eventType === "Seminar") {
-//       eventDoc = await Seminar.findById(eventId)
-//         .select(selectFields);
-//     }
-
-//     if (eventType === "Event") {
-//       eventDoc = await Event.findById(eventId)
-//         .select(selectFields);
-//     }
-
-//     // ==============================
-//     // EVENT NOT FOUND
-//     // ==============================
-
-//     if (!eventDoc) {
-//       return res.status(404).json({
-//         status: false,
-//         message: "Event not found",
-//       });
-//     }
-
-//     // ==============================
-//     // ALREADY REGISTERED
-//     // ==============================
-
-//     const existing = await EventRegistration.findOne({
-//       userId,
-//       eventId,
-//     });
-
-//     if (existing) {
-//       return res.status(400).json({
-//         status: false,
-//         message:
-//           "You have already registered for this event",
-//       });
-//     }
-
-//     // ==============================
-//     // MEMBER COUNT
-//     // ==============================
-
-//     let member_count = 1;
-
-//     if (type === "Team") {
-
-//       member_count = Number(teamMembersCount);
-
-//       if (!member_count || member_count <= 0) {
-//         return res.status(400).json({
-//           status: false,
-//           message:
-//             "Valid teamMembersCount is required",
-//         });
-//       }
-//     }
-
-//     // ==============================
-//     // TEAM / INDIVIDUAL VALIDATION
-//     // ==============================
-
-//     if (eventDoc.teamOrIndividualEvent === "Team") {
-
-//       // Only Team allowed
-//       if (type !== "Team") {
-//         return res.status(400).json({
-//           status: false,
-//           message:
-//             "This event allows only team registration",
-//         });
-//       }
-
-//     } else if (
-//       eventDoc.teamOrIndividualEvent === "Individual"
-//     ) {
-
-//       // Only Individual allowed
-//       if (type !== "Individual") {
-//         return res.status(400).json({
-//           status: false,
-//           message:
-//             "This event allows only individual registration",
-//         });
-//       }
-
-//     } else if (
-//       eventDoc.teamOrIndividualEvent === "Both"
-//     ) {
-
-//       // Both allowed
-//       if (!["Team", "Individual"].includes(type)) {
-//         return res.status(400).json({
-//           status: false,
-//           message:
-//             "type must be Team or Individual",
-//         });
-//       }
-//     }
-
-//     // ==============================
-//     // TEAM SIZE VALIDATION
-//     // ==============================
-
-//     if (type === "Team") {
-
-//       // Minimum Team Size
-//       if (
-//         eventDoc.teamSizeMinimum &&
-//         member_count < eventDoc.teamSizeMinimum
-//       ) {
-//         return res.status(400).json({
-//           status: false,
-//           message:
-//             `Minimum ${eventDoc.teamSizeMinimum} team members required`,
-//         });
-//       }
-
-//       // Maximum Team Size
-//       if (
-//         eventDoc.teamSizeMaximum &&
-//         member_count > eventDoc.teamSizeMaximum
-//       ) {
-//         return res.status(400).json({
-//           status: false,
-//           message:
-//             `Maximum ${eventDoc.teamSizeMaximum} team members allowed`,
-//         });
-//       }
-//     }
-
-//     // ==============================
-//     // TOTAL SEATS VALIDATION
-//     // ==============================
-
-//     const registrations =
-//       await EventRegistration.find({
-//         eventId,
-//       }).select("member_count");
-
-//     const usedSeats = registrations.reduce(
-//       (sum, item) =>
-//         sum + (item.member_count || 1),
-//       0
-//     );
-
-//     const remainingSeats =
-//       (eventDoc.totalSeats || 0) - usedSeats;
-
-//     if (
-//       eventDoc.totalSeats &&
-//       member_count > remainingSeats
-//     ) {
-//       return res.status(400).json({
-//         status: false,
-//         message:
-//           `Only ${remainingSeats} seats remaining`,
-//       });
-//     }
-
-//     // ==============================
-//     // CALCULATE FEES
-//     // ==============================
-
-//     let finalAmount = 0;
-
-//     // Team Fees
-//     if (type === "Team") {
-
-//       finalAmount =
-//         Number(eventDoc.teamFees || 0);
-
-//     } else {
-
-//       // Individual Fees
-//       finalAmount =
-//         Number(eventDoc.individualFees || 0) *
-//         member_count;
-//     }
-
-//     // Add Late Fees
-//     finalAmount +=
-//       Number(eventDoc.lateFees || 0);
-
-//     // ==============================
-//     // PAYMENT VALIDATION
-//     // ==============================
-
-//     if (finalAmount > 0) {
-
-//       if (!transaction_id) {
-//         return res.status(400).json({
-//           status: false,
-//           message:
-//             "transaction_id is required",
-//         });
-//       }
-
-//       if (!amount) {
-//         return res.status(400).json({
-//           status: false,
-//           message: "amount is required",
-//         });
-//       }
-
-//       if (Number(amount) !== finalAmount) {
-//         return res.status(400).json({
-//           status: false,
-//           message:
-//             `Invalid amount. Payable amount is ${finalAmount}`,
-//         });
-//       }
-//     }
-
-//     // ==============================
-//     // CREATE REGISTRATION
-//     // ==============================
-
-//     const registration =
-//       await EventRegistration.create({
-//         userId,
-//         eventId,
-//         eventType,
-//         fullName,
-//         department,
-//         c_by: eventDoc.c_by,
-//         collegeName,
-//         year,
-//         type,
-//         member_count,
-//         phoneNumber,
-//         mailId,
-//         food: food || "no",
-//         foodType:
-//           food === "yes"
-//             ? foodType
-//             : null,
-//         accommodation:
-//           accommodation || "no",
-//         accommodationType:
-//           accommodation === "yes"
-//             ? accommodationType
-//             : null,
-//       });
-
-//     // ==============================
-//     // CREATE PAYMENT
-//     // ==============================
-
-//     let paymentData = null;
-
-//     if (finalAmount > 0) {
-
-//       paymentData = await Payment.create({
-//         userId,
-//         referenceId: registration._id,
-//         referenceType:
-//           "EventRegistration",
-//         eventId,
-//         eventType,
-//         c_by: eventDoc.c_by,
-//         amount: finalAmount,
-//         paymentMethod: "UPI",
-//         paymentStatus: "Success",
-//         paymentGateway: "Offline",
-//         transactionId: transaction_id,
-//         remarks:
-//           `${eventType} registration payment`,
-//       });
-//     }
-
-//     // ==============================
-//     // SEND NOTIFICATION
-//     // ==============================
-
-//     await sendAndSaveNotification({
-//       senderId: userId,
-//       receiverId: userId,
-//       title:
-//         "Event Registration Successful",
-//       message:
-//         `You have successfully registered for the ${eventType}.`,
-//       type: "event_registered",
-//       reference_id: eventId,
-//       metadata: {
-//         eventType,
-//         registrationId:
-//           registration._id,
-//         paymentId:
-//           paymentData?._id || null,
-//         amount: finalAmount,
-//         food: food || "no",
-//         accommodation:
-//           accommodation || "no",
-//       },
-//     });
-
-//     // ==============================
-//     // RESPONSE
-//     // ==============================
-
-//     return res.status(200).json({
-//       status: true,
-//       message:
-//         "Registered successfully",
-//       data: {
-//         registration,
-//         payment: paymentData,
-//         payableAmount: finalAmount,
-//       },
-//     });
-
-//   } catch (error) {
-
-//     console.error(
-//       "Event Registration Error:",
-//       error.message
-//     );
-
-//     return res.status(500).json({
-//       status: false,
-//       message:
-//         "Failed to register for event",
-//       error: error.message,
-//     });
-//   }
-// };
 
 const createEventRegistration = async (req, res) => {
   try {
@@ -2711,14 +1709,23 @@ const createEventRegistration = async (req, res) => {
     }
 
     const regActionMap = {
-      Event: "EVENT_REGISTRATION",
-      Seminar: "SEMINAR_REGISTRATION",
-      Conference: "CONFERENCE_REGISTRATION",
-      Competition: "COMPETITION_REGISTRATION",
+      Event: "FIRST_EVENT_REGISTRATION",
+      Seminar: "FIRST_EVENT_REGISTRATION",
+      Conference: "FIRST_EVENT_REGISTRATION",
+      Competition: "FIRST_COMPETITION_REGISTRATION",
     };
-    const regActionKey = regActionMap[eventType] || "EVENT_REGISTRATION";
+    const regActionKey = regActionMap[eventType] || "FIRST_EVENT_REGISTRATION";
 
-
+    let xpResult = { success: false, xpAwarded: 0, isLevelUp: false, level: 1 };
+    try {
+      xpResult = await awardXP({
+        userId,
+        actionKey: regActionKey,
+        referenceId: registration._id,
+      });
+    } catch (xpErr) {
+      console.error("XP Award Error in eventRegister:", xpErr.message);
+    }
 
     // ==============================
     // RESPONSE
@@ -2734,9 +1741,9 @@ const createEventRegistration = async (req, res) => {
         payableAmount: amount,
         registrationType:
           eventDoc.registrationType,
-        xpGained: xpResult.xpAwarded || 0,
-        isLevelUp: xpResult.isLevelUp || false,
-        currentLevel: xpResult.level || 1,
+        xpGained: xpResult?.xpAwarded || 0,
+        isLevelUp: xpResult?.isLevelUp || false,
+        currentLevel: xpResult?.level || 1,
       },
     });
 
@@ -2755,6 +1762,211 @@ const createEventRegistration = async (req, res) => {
     });
   }
 };
+
+/**
+ * Confirms external registration for an Event, Conference, Seminar, or Competition.
+ * Invoked when user completes external registration flow and selects "Yes".
+ */
+const createExternalEventRegistration = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const {
+      eventId,
+      eventType,
+      fullName,
+      department,
+      collegeName,
+      year,
+      phoneNumber,
+      mailId,
+    } = req.body;
+
+    if (!eventId) {
+      return res.status(400).json({
+        status: false,
+        message: "eventId is required",
+      });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(eventId)) {
+      return res.status(400).json({
+        status: false,
+        message: "Invalid eventId format",
+      });
+    }
+
+    // ==============================
+    // 1. RESOLVE EVENT DOCUMENT & TYPE
+    // ==============================
+    let eventDoc = null;
+    let resolvedEventType = eventType;
+
+    if (eventType) {
+      const normalized = String(eventType).trim().toLowerCase();
+      if (normalized === "conference") resolvedEventType = "Conference";
+      else if (normalized === "competition") resolvedEventType = "Competition";
+      else if (normalized === "seminar") resolvedEventType = "Seminar";
+      else if (normalized === "event") resolvedEventType = "Event";
+    }
+
+    if (resolvedEventType === "Conference") {
+      eventDoc = await Conference.findById(eventId).select("c_by eventName title organizer isActive");
+    } else if (resolvedEventType === "Competition") {
+      eventDoc = await Competition.findById(eventId).select("c_by eventName title organizer isActive");
+    } else if (resolvedEventType === "Seminar") {
+      eventDoc = await Seminar.findById(eventId).select("c_by eventName title organizer isActive");
+    } else if (resolvedEventType === "Event") {
+      eventDoc = await Event.findById(eventId).select("c_by eventName title organizer isActive");
+    }
+
+    // Auto-detect from all 4 collections if not found yet
+    if (!eventDoc) {
+      const [conf, comp, sem, evt] = await Promise.all([
+        Conference.findById(eventId).select("c_by eventName title organizer isActive").lean(),
+        Competition.findById(eventId).select("c_by eventName title organizer isActive").lean(),
+        Seminar.findById(eventId).select("c_by eventName title organizer isActive").lean(),
+        Event.findById(eventId).select("c_by eventName title organizer isActive").lean(),
+      ]);
+
+      if (conf) {
+        eventDoc = conf;
+        resolvedEventType = "Conference";
+      } else if (comp) {
+        eventDoc = comp;
+        resolvedEventType = "Competition";
+      } else if (sem) {
+        eventDoc = sem;
+        resolvedEventType = "Seminar";
+      } else if (evt) {
+        eventDoc = evt;
+        resolvedEventType = "Event";
+      }
+    }
+
+    if (!eventDoc) {
+      return res.status(404).json({
+        status: false,
+        message: "Event not found in Conference, Competition, Seminar, or Event",
+      });
+    }
+
+    // ==============================
+    // 2. CHECK IF ALREADY REGISTERED
+    // ==============================
+    const existing = await EventRegistration.findOne({
+      userId,
+      eventId: eventDoc._id,
+    });
+
+    if (existing) {
+      return res.status(200).json({
+        status: true,
+        alreadyRegistered: true,
+        message: `You are already registered for this ${resolvedEventType}`,
+        data: {
+          registration: existing,
+          is_registered: true,
+          isRegistered: true,
+          eventId: eventDoc._id,
+          eventType: resolvedEventType,
+        },
+      });
+    }
+
+    // ==============================
+    // 3. FETCH USER PROFILE FOR DEFAULTS
+    // ==============================
+    const user = await User.findById(userId).select("name email phone collegeName department year").lean();
+
+    const finalFullName = fullName?.trim() || user?.name || "Participant";
+    const finalMailId = mailId?.trim() || user?.email || "";
+    const finalPhone = phoneNumber?.trim() || user?.phone || "";
+    const finalCollege = collegeName?.trim() || user?.collegeName || "N/A";
+    const finalDept = department?.trim() || user?.department || "N/A";
+    const finalYear = year?.trim() || user?.year || "N/A";
+
+    // ==============================
+    // 4. CREATE REGISTRATION RECORD
+    // ==============================
+    const registration = await EventRegistration.create({
+      eventId: eventDoc._id,
+      eventType: resolvedEventType,
+      c_by: eventDoc.c_by,
+      userId,
+      member_count: 1,
+      fullName: finalFullName,
+      department: finalDept,
+      collegeName: finalCollege,
+      year: finalYear,
+      phoneNumber: finalPhone,
+      mailId: finalMailId,
+      food: "no",
+      accommodation: "no",
+      type: "Individual",
+    });
+
+    // ==============================
+    // 5. NOTIFICATION & GAMIFICATION XP
+    // ==============================
+    await Notification.create({
+      userId,
+      title: "Registration Confirmed",
+      message: `You have successfully registered for the ${resolvedEventType}: ${eventDoc.eventName || eventDoc.title || ""}.`,
+      type: "event_registered",
+      reference_id: eventDoc._id,
+      metadata: {
+        eventType: resolvedEventType,
+        registrationId: registration._id,
+        source: "external",
+      },
+    });
+
+    triggerMissionNotification(userId, "FIRST_EVENT_REGISTRATION").catch((err) =>
+      console.error("FIRST_EVENT_REGISTRATION notification error:", err.message)
+    );
+
+    if (resolvedEventType === "Competition") {
+      triggerMissionNotification(userId, "FIRST_COMPETITION_REGISTRATION").catch((err) =>
+        console.error("FIRST_COMPETITION_REGISTRATION notification error:", err.message)
+      );
+    }
+
+    let xpResult = { success: false, xpAwarded: 0, isLevelUp: false, level: 1 };
+    try {
+      const regActionKey = resolvedEventType === "Competition" ? "FIRST_COMPETITION_REGISTRATION" : "FIRST_EVENT_REGISTRATION";
+      xpResult = await awardXP({
+        userId,
+        actionKey: regActionKey,
+        referenceId: registration._id,
+      });
+    } catch (xpErr) {
+      console.error("XP Award Error in external event registration:", xpErr.message);
+    }
+
+    return res.status(200).json({
+      status: true,
+      success: true,
+      message: `Successfully registered for ${resolvedEventType}`,
+      data: {
+        registration,
+        is_registered: true,
+        isRegistered: true,
+        eventId: eventDoc._id,
+        eventType: resolvedEventType,
+        xpGained: xpResult?.xpAwarded || 0,
+        isLevelUp: xpResult?.isLevelUp || false,
+        currentLevel: xpResult?.level || 1,
+      },
+    });
+  } catch (error) {
+    console.error("External Event Registration Error:", error.message);
+    return res.status(500).json({
+      status: false,
+      message: "Failed to confirm external registration",
+      error: error.message,
+    });
+  }
+};
 const getAllConferences = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -2762,14 +1974,21 @@ const getAllConferences = async (req, res) => {
     const conferences = await Conference.find({ isActive: true, status: "approved" })
       .sort({ createdAt: -1 })
       .select(
-        "eventName organizer registrationType mode eventDate externalRegistrationLink registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees city eligibilityDetails teamOrIndividualEvent createdAt"
+        "eventName organizer registrationType mode eventDate eventEndDate eventStartTime eventEndTime externalRegistrationLink registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees city eligibilityDetails teamOrIndividualEvent createdAt"
       );
 
     const data = await Promise.all(
-      conferences.map(async (item) => ({
-        ...item.toObject(),
-        is_registered: await checkIsRegistered(userId, item._id),
-      }))
+      conferences.map(async (item) => {
+        const obj = item.toObject();
+        const isRegistered = await checkIsRegistered(userId, item._id);
+        return {
+          ...obj,
+          eventEndTime: obj.eventEndTime || null,
+          isEnded: checkIsEnded(obj.eventDate, obj.eventEndDate, obj.eventEndTime),
+          is_registered: isRegistered,
+          isRegistered: isRegistered,
+        };
+      })
     );
 
     return res.status(200).json({
@@ -2813,12 +2032,16 @@ const getConferenceProfile = async (req, res) => {
       getSeatAvailability({ eventType: "conference", eventId: id })
     ]);
 
+    const confObj = conference.toObject();
     return res.status(200).json({
       status: true,
       data: {
         college,
-        ...conference.toObject(),
+        ...confObj,
+        eventEndTime: confObj.eventEndTime || null,
+        isEnded: checkIsEnded(confObj.eventDate, confObj.eventEndDate, confObj.eventEndTime),
         is_registered,
+        isRegistered: is_registered,
         availableSeats: availability?.availableSeats
       },
     });
@@ -2838,17 +2061,22 @@ const getAllTechnicalEvents = async (req, res) => {
     const events = await Event.find({ isActive: true, status: { $in: ["approved", "Approved"] }, eventType: "Technical" })
       .sort({ createdAt: -1 })
       .select(
-        "eventName eventType eventCategory description allowedDepartments organizer mode eventDate onlinePlatformLink externalRegistrationLink registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees city eligibilityDetails teamOrIndividualEvent c_by status isActive createdAt"
+        "eventName eventType eventCategory description allowedDepartments organizer mode eventDate eventEndDate eventStartTime eventEndTime onlinePlatformLink externalRegistrationLink registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees city eligibilityDetails teamOrIndividualEvent c_by status isActive createdAt"
       );
 
     const data = await Promise.all(
       events.map(async (item) => {
         const isOnline = item.mode === "Online" || item.mode === "Hybrid";
+        const obj = item.toObject();
+        const isRegistered = await checkIsRegistered(userId, item._id);
         return {
-          ...item.toObject(),
+          ...obj,
+          eventEndTime: obj.eventEndTime || null,
+          isEnded: checkIsEnded(obj.eventDate, obj.eventEndDate, obj.eventEndTime),
           meetingLink: isOnline ? (item.onlinePlatformLink || null) : null,
           onlinePlatformLink: isOnline ? (item.onlinePlatformLink || null) : null,
-          is_registered: await checkIsRegistered(userId, item._id),
+          is_registered: isRegistered,
+          isRegistered: isRegistered,
         };
       })
     );
@@ -2874,17 +2102,22 @@ const getAllNonTechnicalEvents = async (req, res) => {
     const events = await Event.find({ isActive: true, status: { $in: ["approved", "Approved"] }, eventType: "Non Technical" })
       .sort({ createdAt: -1 })
       .select(
-        "eventName eventType eventCategory description allowedDepartments organizer mode eventDate onlinePlatformLink externalRegistrationLink registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees city eligibilityDetails teamOrIndividualEvent c_by status isActive createdAt"
+        "eventName eventType eventCategory description allowedDepartments organizer mode eventDate eventEndDate eventStartTime eventEndTime onlinePlatformLink externalRegistrationLink registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees city eligibilityDetails teamOrIndividualEvent c_by status isActive createdAt"
       );
 
     const data = await Promise.all(
       events.map(async (item) => {
         const isOnline = item.mode === "Online" || item.mode === "Hybrid";
+        const obj = item.toObject();
+        const isRegistered = await checkIsRegistered(userId, item._id);
         return {
-          ...item.toObject(),
+          ...obj,
+          eventEndTime: obj.eventEndTime || null,
+          isEnded: checkIsEnded(obj.eventDate, obj.eventEndDate, obj.eventEndTime),
           meetingLink: isOnline ? (item.onlinePlatformLink || null) : null,
           onlinePlatformLink: isOnline ? (item.onlinePlatformLink || null) : null,
-          is_registered: await checkIsRegistered(userId, item._id),
+          is_registered: isRegistered,
+          isRegistered: isRegistered,
         };
       })
     );
@@ -2929,11 +2162,15 @@ const getEventProfile = async (req, res) => {
       getSeatAvailability({ eventType: "event", eventId: id })
     ]);
 
+    const evtObj = event.toObject();
     return res.status(200).json({
       status: true,
       data: {
-        ...event.toObject(),
+        ...evtObj,
+        eventEndTime: evtObj.eventEndTime || null,
+        isEnded: checkIsEnded(evtObj.eventDate, evtObj.eventEndDate, evtObj.eventEndTime),
         is_registered,
+        isRegistered: is_registered,
         college,
         availableSeats: availability?.availableSeats
       },
@@ -2954,14 +2191,21 @@ const getAllTechnicalSeminars = async (req, res) => {
     const seminars = await Seminar.find({ isActive: true, status: "approved", eventType: "Technical" })
       .sort({ createdAt: -1 })
       .select(
-        "eventName eventType organizer mode eventDate externalRegistrationLink registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees city eligibilityDetails teamOrIndividualEvent createdAt"
+        "eventName eventType organizer mode eventDate eventEndDate eventStartTime eventEndTime externalRegistrationLink registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees city eligibilityDetails teamOrIndividualEvent createdAt"
       );
 
     const data = await Promise.all(
-      seminars.map(async (item) => ({
-        ...item.toObject(),
-        is_registered: await checkIsRegistered(userId, item._id),
-      }))
+      seminars.map(async (item) => {
+        const obj = item.toObject();
+        const isRegistered = await checkIsRegistered(userId, item._id);
+        return {
+          ...obj,
+          eventEndTime: obj.eventEndTime || null,
+          isEnded: checkIsEnded(obj.eventDate, obj.eventEndDate, obj.eventEndTime),
+          is_registered: isRegistered,
+          isRegistered: isRegistered,
+        };
+      })
     );
 
     return res.status(200).json({
@@ -2985,14 +2229,21 @@ const getAllNonTechnicalSeminars = async (req, res) => {
     const seminars = await Seminar.find({ isActive: true, status: "approved", eventType: "Non Technical" })
       .sort({ createdAt: -1 })
       .select(
-        "eventName eventType organizer mode eventDate externalRegistrationLink registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees city eligibilityDetails teamOrIndividualEvent createdAt"
+        "eventName eventType organizer mode eventDate eventEndDate eventStartTime eventEndTime externalRegistrationLink registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees city eligibilityDetails teamOrIndividualEvent createdAt"
       );
 
     const data = await Promise.all(
-      seminars.map(async (item) => ({
-        ...item.toObject(),
-        is_registered: await checkIsRegistered(userId, item._id),
-      }))
+      seminars.map(async (item) => {
+        const obj = item.toObject();
+        const isRegistered = await checkIsRegistered(userId, item._id);
+        return {
+          ...obj,
+          eventEndTime: obj.eventEndTime || null,
+          isEnded: checkIsEnded(obj.eventDate, obj.eventEndDate, obj.eventEndTime),
+          is_registered: isRegistered,
+          isRegistered: isRegistered,
+        };
+      })
     );
 
     return res.status(200).json({
@@ -3037,13 +2288,17 @@ const getSeminarProfile = async (req, res) => {
       getSeatAvailability({ eventType: "seminar", eventId: id })
     ]);
 
+    const semObj = seminar.toObject();
     return res.status(200).json({
       status: true,
       data: {
-        ...seminar.toObject(),
+        ...semObj,
+        eventEndTime: semObj.eventEndTime || null,
+        isEnded: checkIsEnded(semObj.eventDate, semObj.eventEndDate, semObj.eventEndTime),
         college,
         availableSeats: availability?.availableSeats,
         is_registered,
+        isRegistered: is_registered,
       },
     });
   } catch (error) {
@@ -3066,13 +2321,29 @@ const getMyRegistrations = async (req, res) => {
       .populate({
         path: "eventId",
         select:
-          "eventName eventType registrationType totalSeats organizer mode eventDate coverImage city  individualFees teamFees isActive",
-      })
+          "eventName eventType registrationType totalSeats organizer mode eventDate eventEndDate eventStartTime eventEndTime coverImage city individualFees teamFees isActive",
+      });
+
+    const enriched = registrations.map((item) => {
+      const regObj = item.toObject();
+      if (regObj.eventId && typeof regObj.eventId === "object") {
+        regObj.eventId = {
+          ...regObj.eventId,
+          eventEndTime: regObj.eventId.eventEndTime || null,
+          isEnded: checkIsEnded(
+            regObj.eventId.eventDate,
+            regObj.eventId.eventEndDate,
+            regObj.eventId.eventEndTime
+          ),
+        };
+      }
+      return regObj;
+    });
 
     return res.status(200).json({
       status: true,
-      count: registrations.length,
-      data: registrations,
+      count: enriched.length,
+      data: enriched,
     });
   } catch (error) {
     console.error("My Registrations API Error:", error.message);
@@ -3370,31 +2641,36 @@ const getEventsPage = async (req, res) => {
     const upcomingRaw = await Event.find({ isActive: true, status: { $in: ["approved", "Approved"] }, eventDate: { $gte: now } })
       .sort({ eventDate: 1 })
       .limit(2)
-      .select("eventName registrationType eventType eventCategory description allowedDepartments organizer mode eventDate onlinePlatformLink externalRegistrationLink coverImage city totalSeats individualFees teamFees registrationStartDate registrationEndDate c_by status isActive createdAt");
+      .select("eventName registrationType eventType eventCategory description allowedDepartments organizer mode eventDate eventEndDate eventStartTime eventEndTime onlinePlatformLink externalRegistrationLink coverImage city totalSeats individualFees teamFees registrationStartDate registrationEndDate c_by status isActive createdAt");
 
     const upcomingIds = upcomingRaw.map((e) => e._id);
 
     const [technicalRaw, nonTechnicalRaw] = await Promise.all([
       Event.find({ isActive: true, status: { $in: ["approved", "Approved"] }, eventType: "Technical", _id: { $nin: upcomingIds } })
         .sort({ createdAt: -1 })
-        .select("eventName registrationType eventType eventCategory description allowedDepartments organizer mode eventDate onlinePlatformLink externalRegistrationLink coverImage city totalSeats individualFees teamFees registrationStartDate registrationEndDate c_by status isActive createdAt"),
+        .select("eventName registrationType eventType eventCategory description allowedDepartments organizer mode eventDate eventEndDate eventStartTime eventEndTime onlinePlatformLink externalRegistrationLink coverImage city totalSeats individualFees teamFees registrationStartDate registrationEndDate c_by status isActive createdAt"),
 
       Event.find({ isActive: true, status: { $in: ["approved", "Approved"] }, eventType: "Non Technical", _id: { $nin: upcomingIds } })
         .sort({ createdAt: -1 })
-        .select("eventName registrationType eventType eventCategory description allowedDepartments organizer mode eventDate onlinePlatformLink externalRegistrationLink coverImage city totalSeats individualFees teamFees registrationStartDate registrationEndDate c_by status isActive createdAt"),
+        .select("eventName registrationType eventType eventCategory description allowedDepartments organizer mode eventDate eventEndDate eventStartTime eventEndTime onlinePlatformLink externalRegistrationLink coverImage city totalSeats individualFees teamFees registrationStartDate registrationEndDate c_by status isActive createdAt"),
     ]);
 
     const formatEventItem = async (item) => {
       const isOnline = item.mode === "Online" || item.mode === "Hybrid";
+      const obj = item.toObject();
+      const isRegistered = await checkIsRegistered(userId, item._id);
       return {
-        ...item.toObject(),
+        ...obj,
+        eventEndTime: obj.eventEndTime || null,
+        isEnded: checkIsEnded(obj.eventDate, obj.eventEndDate, obj.eventEndTime),
         meetingLink: isOnline ? (item.onlinePlatformLink || null) : null,
         onlinePlatformLink: isOnline ? (item.onlinePlatformLink || null) : null,
-        is_registered: await checkIsRegistered(userId, item._id),
+        is_registered: isRegistered,
+        isRegistered: isRegistered,
       };
     };
 
-    // ✅ attachFlags + is_registered for all three
+    // ✅ attachFlags + is_registered + isEnded for all three
     const [upcomingEvents, technicalEvents, nonTechnicalEvents] = await Promise.all([
       Promise.all(upcomingRaw.map(formatEventItem)),
       Promise.all(technicalRaw.map(formatEventItem)),
@@ -3423,40 +2699,37 @@ const getSeminarsPage = async (req, res) => {
     const upcomingRaw = await Seminar.find({ isActive: true, status: "approved", eventDate: { $gte: now } })
       .sort({ eventDate: 1 })
       .limit(2)
-      .select("eventName eventType registrationType organizer mode eventDate externalRegistrationLink coverImage city totalSeats individualFees teamFees registrationEndDate createdAt");
+      .select("eventName eventType registrationType organizer mode eventDate eventEndDate eventStartTime eventEndTime externalRegistrationLink coverImage city totalSeats individualFees teamFees registrationEndDate createdAt");
 
     const upcomingIds = upcomingRaw.map((s) => s._id);
 
     const [technicalRaw, nonTechnicalRaw] = await Promise.all([
       Seminar.find({ isActive: true, status: "approved", eventType: "Technical", _id: { $nin: upcomingIds } })
         .sort({ createdAt: -1 })
-        .select("eventName eventType registrationType city organizer mode eventDate externalRegistrationLink coverImage venueAddress totalSeats individualFees teamFees registrationEndDate createdAt"),
+        .select("eventName eventType registrationType city organizer mode eventDate eventEndDate eventStartTime eventEndTime externalRegistrationLink coverImage venueAddress totalSeats individualFees teamFees registrationEndDate createdAt"),
 
       Seminar.find({ isActive: true, status: "approved", eventType: "Non Technical", _id: { $nin: upcomingIds } })
         .sort({ createdAt: -1 })
-        .select("eventName eventType registrationType city organizer mode eventDate externalRegistrationLink coverImage venueAddress totalSeats individualFees teamFees registrationEndDate createdAt"),
+        .select("eventName eventType registrationType city organizer mode eventDate eventEndDate eventStartTime eventEndTime externalRegistrationLink coverImage venueAddress totalSeats individualFees teamFees registrationEndDate createdAt"),
     ]);
 
-    // ✅ attachFlags + is_registered for all three
+    const formatSeminarItem = async (item) => {
+      const obj = item.toObject();
+      const isRegistered = await checkIsRegistered(userId, item._id);
+      return {
+        ...obj,
+        eventEndTime: obj.eventEndTime || null,
+        isEnded: checkIsEnded(obj.eventDate, obj.eventEndDate, obj.eventEndTime),
+        is_registered: isRegistered,
+        isRegistered: isRegistered,
+      };
+    };
+
+    // ✅ attachFlags + is_registered + isEnded for all three
     const [upcomingSeminars, technicalSeminars, nonTechnicalSeminars] = await Promise.all([
-      Promise.all(
-        upcomingRaw.map(async (item) => ({
-          ...item.toObject(),
-          is_registered: await checkIsRegistered(userId, item._id),
-        }))
-      ),
-      Promise.all(
-        technicalRaw.map(async (item) => ({
-          ...item.toObject(),
-          is_registered: await checkIsRegistered(userId, item._id),
-        }))
-      ),
-      Promise.all(
-        nonTechnicalRaw.map(async (item) => ({
-          ...item.toObject(),
-          is_registered: await checkIsRegistered(userId, item._id),
-        }))
-      ),
+      Promise.all(upcomingRaw.map(formatSeminarItem)),
+      Promise.all(technicalRaw.map(formatSeminarItem)),
+      Promise.all(nonTechnicalRaw.map(formatSeminarItem)),
     ]);
 
     return res.status(200).json({
@@ -4068,6 +3341,7 @@ export {
   getAllCompetitions,
   getCompetitionProfile,
   createEventRegistration,
+  createExternalEventRegistration,
   getAllConferences,
   getConferenceProfile,
   getAllTechnicalEvents,

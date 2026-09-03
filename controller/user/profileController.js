@@ -2,6 +2,7 @@ import Resume from "../../models/resumeModel.js";
 import Notification from "../../models/notificationModel.js";
 import UserDetails from "../../models/userDetails.js";
 import User from "../../models/userModel.js";
+import { triggerMissionNotification } from "../../services/xpService.js";
 const uploadResume = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -149,27 +150,33 @@ const updateProfilePic = async (req, res) => {
   try {
     const userId = req.user._id;
 
-    if (!req.file) {
+    let fileUrl = null;
+    if (req.file) {
+      fileUrl = req.file.path; // replace with cloud URL if using S3/Cloudinary
+    } else if (req.body.profile_pic !== undefined) {
+      fileUrl = req.body.profile_pic || null;
+    } else {
       return res.status(400).json({
         status: false,
         message: "Profile picture file is required",
       });
     }
 
-    const fileUrl = req.file.path; // replace with cloud URL if using S3/Cloudinary
-
+    // Upsert UserDetails so it works even if user details document does not exist yet (empty profile)
     const userDetails = await UserDetails.findOneAndUpdate(
       { userId },
-      { profile_pic: fileUrl },
-      { new: true }
-    ).select("userId profile_pic updatedAt");
-
-    if (!userDetails) {
-      return res.status(404).json({
-        status: false,
-        message: "User details not found",
-      });
-    }
+      { 
+        $set: { 
+          profile_pic: fileUrl,
+          userId,
+        } 
+      },
+      { 
+        new: true, 
+        upsert: true, 
+        setDefaultsOnInsert: true 
+      }
+    ).select("userId profile_pic updatedAt createdAt");
 
     return res.status(200).json({
       status: true,
@@ -273,6 +280,11 @@ const updateUserDetails = async (req, res) => {
         upsert: true,        // create if not found
         runValidators: true, // enforce schema validation
       }
+    );
+
+    // Trigger complete profile mission notification
+    triggerMissionNotification(userId, "COMPLETE_PROFILE").catch((err) =>
+      console.error("COMPLETE_PROFILE notification error:", err.message)
     );
 
     return res.status(200).json({

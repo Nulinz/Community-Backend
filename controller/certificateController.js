@@ -156,6 +156,29 @@ export const generateCertificate = async (req, res, next) => {
       }
     }
 
+    // 3.5 Validate that the college/organizer has filled all certificate-related fields
+    const missingCertFields = [];
+    if (!finalSignatoryName || !finalSignatoryName.trim()) {
+      missingCertFields.push("Authorized Signatory Name");
+    }
+    if (!finalSignatoryDesignation || !finalSignatoryDesignation.trim()) {
+      missingCertFields.push("Signatory Designation");
+    }
+    if (!finalSignatureUrl || !finalSignatureUrl.trim()) {
+      missingCertFields.push("Signature");
+    }
+    if (!customContentBody || !customContentBody.trim()) {
+      missingCertFields.push("Certificate Body");
+    }
+
+    if (missingCertFields.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Please fill in the required certificate field(s) in College Certificate Settings first: ${missingCertFields.join(", ")} and try again.`,
+        missingFields: missingCertFields
+      });
+    }
+
     // Generate unique Certificate ID (e.g. CERT-A8F92B10)
     const randomHex = crypto.randomBytes(4).toString("hex").toUpperCase();
     const certificateId = `CERT-${randomHex}`;

@@ -1,6 +1,7 @@
 import UserDetails from "../models/userDetails.js";
 import User from "../models/userModel.js";
 import { calculateLevelInfo } from "../config/xpConfig.js";
+import { triggerMissionNotification } from "../services/xpService.js";
 
 const sanitizeInput = (value) =>
     typeof value === "string" ? value.trim() : value;
@@ -199,6 +200,10 @@ export const createUserDetails = async (req, res, next) => {
             { upsert: true, new: true, runValidators: true }
         );
 
+        triggerMissionNotification(req.user._id, "COMPLETE_PROFILE").catch((err) =>
+            console.error("COMPLETE_PROFILE notification error:", err.message)
+        );
+
         res.status(200).json({
             success: true,
             message: `User details ${userDetails.createdAt === userDetails.updatedAt ? "created" : "updated"} successfully`,
@@ -220,18 +225,26 @@ export const getUserDetails = async (req, res, next) => {
             User.findById(userId).select("name email phone xp level").lean(),
         ]);
 
-        if (!userDetails) {
-            const error = new Error("User details not found");
-            error.status = 404;
-            throw error;
-        }
-
         const levelInfo = calculateLevelInfo(user?.xp || 0);
+
+        const detailsObj = userDetails ? userDetails.toObject() : {
+            userId,
+            name: user?.name || req?.user?.name || null,
+            profile_pic: null,
+            dob: null,
+            gender: null,
+            currentStatus: null,
+            education: null,
+            skills: { primary_skills: [], tools: [], languages: [] },
+            city: null,
+            address: null,
+            website: null,
+        };
 
         res.status(200).json({
             success: true,
             userDetails: {
-                ...userDetails.toObject(),
+                ...detailsObj,
                 name: user?.name || req?.user?.name,
                 email: user?.email || req?.user?.email,
                 phone: user?.phone || req?.user?.phone,
@@ -406,6 +419,10 @@ export const updateUserDetails = async (req, res, next) => {
         userDetails.others = others;
 
         await userDetails.save();
+
+        triggerMissionNotification(req.user._id, "COMPLETE_PROFILE").catch((err) =>
+            console.error("COMPLETE_PROFILE notification error:", err.message)
+        );
 
         res.status(200).json({
             success: true,

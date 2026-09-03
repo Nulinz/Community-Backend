@@ -142,6 +142,12 @@ const userSchema = new mongoose.Schema(
       trim: true,
       index: true,
     },
+    referredBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+      index: true,
+    },
 
     // 🔹 INFLUENCER SYSTEM
     influencerCode: {
