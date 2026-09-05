@@ -61,7 +61,7 @@ import {
   activePing,
 } from "../controller/user/userController.js";
 import fileUploader from "../middleware/fileUploader.js";
-import { getNotifications, getUserResumes, markAsRead, updateProfilePic, updateUserDetails, uploadResume } from "../controller/user/profileController.js";
+import { clearAllNotifications, getNotifications, getUserResumes, markAsRead, markAllAsRead, updateProfilePic, updateUserDetails, uploadResume } from "../controller/user/profileController.js";
 import { getUserDetails } from "../controller/userDetailController.js";
 import {
   markEventAttendance,
@@ -232,8 +232,12 @@ router.get("/share/job", getJobMetaPage);
 // ─────────────────────────────────────────────
 router.get("/share/event", getEventMetaPage);
 router.get("/share/company", getCompanyMetaPage);
-// Mark notification(s) as read
+// Mark single notification or all as read
 router.post("/notifications/read", uploader.none(), isAuthenticated, markAsRead);
+// Explicitly mark all notifications as read (supports POST and PATCH)
+router.post("/notifications/read-all", uploader.none(), isAuthenticated, markAllAsRead);
+// Clear (soft-delete) all notifications for authenticated user
+router.post("/notifications/clear", uploader.none(), isAuthenticated, clearAllNotifications);
 router.get("/user-details", isAuthenticated, getUserDetails)
 // admin
 router.post("/create-admin", uploader.none(), isAuthenticated, authorizeRoles("admin"), uploader.none(), createAdmin);

@@ -5,6 +5,7 @@ import EventRegistration from "../../models/eventRegistrationModel.js";
 import AppliedJob from "../../models/appliedJobModel.js";
 import SavedJob from "../../models/savedJobModel.js";
 import UserDetails from "../../models/userDetails.js";
+import Resume from "../../models/resumeModel.js";
 import { XP_ACTIONS, calculateLevelInfo } from "../../config/xpConfig.js";
 import { awardXP, triggerMissionNotification } from "../../services/xpService.js";
 import { sendAndSaveNotification } from "../../helper/sendAndSaveNotification.js";
@@ -58,7 +59,14 @@ export const getMissions = async (req, res, next) => {
       return res.status(404).json({ status: false, message: "User not found" });
     }
 
-    const userLevel = user.level || 1;
+    // Calculate current level dynamically from total XP to ensure consistency with userDashboard
+    const levelInfo = calculateLevelInfo(user.xp || 0);
+    const userLevel = levelInfo.currentLevel;
+
+    // Self-healing synchronization: update user document if stored level lagged behind XP calculation
+    if (user.level !== userLevel) {
+      User.findByIdAndUpdate(userId, { level: userLevel }).exec();
+    }
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
 
@@ -97,6 +105,7 @@ export const getMissions = async (req, res, next) => {
       hasFreelanceApp,
       hasSavedJob,
       hasCompletedProfile,
+      hasCreatedResume,
     ] = await Promise.all([
       CompanyFollow.exists({ userId }),
       EventRegistration.exists({ userId }),
@@ -115,6 +124,7 @@ export const getMissions = async (req, res, next) => {
           { "skills.primary_skills.0": { $exists: true } },
         ],
       }),
+      Resume.exists({ userId }),
     ]);
 
     // Build missions list
@@ -124,6 +134,7 @@ export const getMissions = async (req, res, next) => {
       "AI_STATION",
       "FIRST_REGISTERATION",
       "COMPLETE_PROFILE",
+      "FIRST_RESUME_CREATE",
       "FIRST_SAVED_JOB",
       "FIRST_COMPANY_FOLLOW",
       "FIRST_EVENT_REGISTRATION",
@@ -156,6 +167,8 @@ export const getMissions = async (req, res, next) => {
         currentProgress = 1;
       } else if (key === "COMPLETE_PROFILE") {
         currentProgress = hasCompletedProfile ? 1 : 0;
+      } else if (key === "FIRST_RESUME_CREATE") {
+        currentProgress = hasCreatedResume ? 1 : 0;
       } else if (key === "FIRST_SAVED_JOB") {
         currentProgress = hasSavedJob ? 1 : 0;
       } else if (key === "FIRST_COMPANY_FOLLOW") {
@@ -244,7 +257,9 @@ export const claimMission = async (req, res, next) => {
       return res.status(404).json({ status: false, message: "User not found" });
     }
 
-    const userLevel = user.level || 1;
+    // Derive level dynamically from XP to prevent blocking users whose XP progressed to higher tiers
+    const levelInfo = calculateLevelInfo(user.xp || 0);
+    const userLevel = levelInfo.currentLevel;
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
 
@@ -305,6 +320,11 @@ export const claimMission = async (req, res, next) => {
       });
       if (!hasProfile) {
         return res.status(400).json({ status: false, message: "Complete profile mission not completed yet" });
+      }
+    } else if (actionKey === "FIRST_RESUME_CREATE") {
+      const hasResume = await Resume.exists({ userId });
+      if (!hasResume) {
+        return res.status(400).json({ status: false, message: "Create resume mission not completed yet" });
       }
     } else if (actionKey === "FIRST_SAVED_JOB") {
       const hasSaved = await SavedJob.exists({ userId });

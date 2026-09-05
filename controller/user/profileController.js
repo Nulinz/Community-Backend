@@ -146,6 +146,99 @@ const markAsRead = async (req, res) => {
     });
   }
 };
+
+/**
+ * Bulk soft-clears all active notifications for the authenticated user.
+ * 
+ * Sets `is_deleted: true` and records `deleted_at` timestamp rather than
+ * physically deleting records from the database. This preserves historical records
+ * for audit trails, analytics, and debugging while immediately removing them
+ * from the user's active notification feed.
+ * 
+ * Scopes update strictly to `receiver: userId` to enforce user isolation.
+ */
+const clearAllNotifications = async (req, res) => {
+  try {
+    const userId = req.user?._id;
+    if (!userId) {
+      return res.status(401).json({
+        status: false,
+        message: "Unauthorized access",
+      });
+    }
+
+    const result = await Notification.updateMany(
+      {
+        receiver: userId,
+        is_deleted: false,
+      },
+      {
+        $set: {
+          is_deleted: true,
+          deleted_at: new Date(),
+        },
+      }
+    );
+
+    return res.status(200).json({
+      status: true,
+      message: "All notifications cleared successfully",
+      clearedCount: result.modifiedCount,
+    });
+  } catch (error) {
+    console.error("Clear All Notifications Error:", error.message);
+    return res.status(500).json({
+      status: false,
+      message: "Failed to clear notifications",
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * Bulk updates all active, unread notifications for the authenticated user to read status.
+ * Sets is_read to true and records the read_at timestamp.
+ * Scoped strictly to receiver: userId and is_deleted: false to respect user isolation and soft deletes.
+ */
+const markAllAsRead = async (req, res) => {
+  try {
+    const userId = req.user?._id;
+    if (!userId) {
+      return res.status(401).json({
+        status: false,
+        message: "Unauthorized access",
+      });
+    }
+
+    const result = await Notification.updateMany(
+      {
+        receiver: userId,
+        is_read: false,
+        is_deleted: false,
+      },
+      {
+        $set: {
+          is_read: true,
+          read_at: new Date(),
+        },
+      }
+    );
+
+    return res.status(200).json({
+      status: true,
+      message: "All notifications marked as read",
+      modifiedCount: result.modifiedCount,
+    });
+  } catch (error) {
+    console.error("Mark All As Read Error:", error.message);
+    return res.status(500).json({
+      status: false,
+      message: "Failed to mark all notifications as read",
+      error: error.message,
+    });
+  }
+};
+
 const updateProfilePic = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -308,4 +401,4 @@ const updateUserDetails = async (req, res) => {
   }
 };
 
-export { uploadResume, updateUserDetails, getUserResumes, getNotifications, markAsRead, updateProfilePic };
+export { uploadResume, updateUserDetails, getUserResumes, getNotifications, markAsRead, markAllAsRead, clearAllNotifications, updateProfilePic };

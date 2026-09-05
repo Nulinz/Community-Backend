@@ -48,6 +48,7 @@ const allowedOrigins = [
   "http://192.168.29.221:5173",
   "http://192.168.29.74:5173",
   "https://icy-tree-067e50e10.7.azurestaticapps.net",
+  "https://gradenvy.com",
 ].filter(Boolean);
 
 app.set("trust proxy", true);
@@ -68,27 +69,60 @@ app.use(express.json());
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 app.use("/resume", express.static(path.join(process.cwd(), "resume")));
 
-// Serve .well-known & .wellknown static files for Android App Links & iOS Universal Links
-app.use(
-  "/.well-known",
-  express.static(path.join(process.cwd(), ".wellknown"), {
-    setHeaders: (res) => res.setHeader("Content-Type", "application/json"),
-  })
-);
-app.use(
-  "/.wellknown",
-  express.static(path.join(process.cwd(), ".wellknown"), {
-    setHeaders: (res) => res.setHeader("Content-Type", "application/json"),
-  })
-);
-
+// ── Deep Linking & App Association Assets ──────────────────────
+// 1. Android Digital Asset Links (Required for Android App Links auto-verify)
 app.get(
   ["/.well-known/assetlinks.json", "/.wellknown/assetlinks.json", "/.wellknown/assetlinks"],
   (req, res) => {
     res.setHeader("Content-Type", "application/json");
-    res.sendFile(path.join(process.cwd(), ".wellknown", "assetlinks.json"));
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.sendFile(path.join(process.cwd(), ".well-known", "assetlinks.json"), { dotfiles: "allow" });
   }
 );
+
+// 2. Apple App Site Association (Required for iOS Universal Links - served as application/json with NO extension)
+app.get(
+  [
+    "/.well-known/apple-app-site-association",
+    "/.wellknown/apple-app-site-association",
+    "/apple-app-site-association",
+  ],
+  (req, res) => {
+    res.setHeader("Content-Type", "application/json");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.sendFile(path.join(process.cwd(), ".well-known", "apple-app-site-association"), { dotfiles: "allow" });
+  }
+);
+
+// 3. Static directory fallback for .well-known & .wellknown URLs
+app.use(
+  ["/.well-known", "/.wellknown"],
+  express.static(path.join(process.cwd(), ".well-known"), {
+    dotfiles: "allow",
+    setHeaders: (res) => {
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("Access-Control-Allow-Origin", "*");
+    },
+  })
+);
+
+// 4. Referral Landing Page & Smart App Redirection
+app.use(
+  "/referral",
+  express.static(path.join(process.cwd(), "public", "referral"), { redirect: false })
+);
+app.get(/^\/referral(\/.*)?$/, (req, res) => {
+  res.sendFile(path.join(process.cwd(), "public", "referral", "index.html"));
+});
+
+// 5. Fallback Share App Landing Page
+app.use(
+  "/share",
+  express.static(path.join(process.cwd(), "public", "share"), { redirect: false })
+);
+app.get(/^\/share(\/.*)?$/, (req, res) => {
+  res.sendFile(path.join(process.cwd(), "public", "share", "index.html"));
+});
 // seedTamilNaduLocations()
 
 app.get("/", (req, res) => {

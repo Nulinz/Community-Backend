@@ -20,7 +20,7 @@ const subscriptionPlanSchema = new mongoose.Schema(
     },
     billingCycle: {
       type: String,
-      enum: ["monthly", "yearly"],
+      enum: ["monthly", "quarterly", "yearly"],
       required: true,
     },
     durationDays: {

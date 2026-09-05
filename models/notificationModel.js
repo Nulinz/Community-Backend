@@ -61,6 +61,10 @@ const notificationSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    deleted_at: {
+      type: Date,
+      default: null,
+    },
     metadata: {
       type: Object,
       default: {},
@@ -71,7 +75,7 @@ const notificationSchema = new mongoose.Schema(
   }
 );
 
-notificationSchema.index({ receiver: 1, createdAt: -1 });
+notificationSchema.index({ receiver: 1, is_deleted: 1, createdAt: -1 });
 
 const Notification =
   mongoose.models.Notification ||

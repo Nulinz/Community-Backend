@@ -54,17 +54,29 @@ const sendNotification = async (data) => {
       return result;
     };
 
+    const { token, title, body, ...restPayload } = data;
+
     const safeData = stringifyData({
       type: data.type || "alert",
-      id:   String(data.id || ""),
+      id: String(data.id || ""),
+      ...restPayload,
     });
 
-    
     const message = {
-      token:data.token,
-      notification: { title:data.title, body:data.body },
-      data: safeData, 
-      android: { priority: "high" },
+      token: data.token,
+      notification: {
+        title: data.title,
+        body: data.body,
+      },
+      data: safeData,
+      android: {
+        priority: "high",
+        notification: {
+          channelId: "default_notification_channel",
+          sound: "default",
+          priority: "high",
+        },
+      },
       apns: {
         payload: {
           aps: { sound: "default", badge: 1 },

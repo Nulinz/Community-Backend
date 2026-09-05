@@ -28,7 +28,8 @@ export const awardXP = async ({ userId, actionKey, referenceId = null }) => {
     return { success: false, reason: "USER_NOT_FOUND" };
   }
 
-  const userLevel = user.level || 1;
+  // Dynamically calculate level from XP to ensure guards evaluate against the actual active level
+  const userLevel = calculateLevelInfo(user.xp || 0).currentLevel;
 
   // Level-based activity guards
   if (actionKey === "ACTIVE_30_MIN" && userLevel !== 1) {
@@ -173,13 +174,14 @@ export const triggerMissionNotification = async (userId, actionKey) => {
       if (alreadyClaimed) return;
     }
 
-    // 2. Check if notification was already sent/saved
+    // 2. Check if notification was already sent and delivered via FCM push
     if (isDaily) {
       const alreadyNotified = await Notification.exists({
         receiver: userId,
         type: "Claim XP",
         "metadata.action": actionKey,
         createdAt: { $gte: startOfToday },
+        "metadata.fcm_sent": true,
       });
       if (alreadyNotified) return;
     } else {
@@ -187,6 +189,7 @@ export const triggerMissionNotification = async (userId, actionKey) => {
         receiver: userId,
         type: "Claim XP",
         "metadata.action": actionKey,
+        "metadata.fcm_sent": true,
       });
       if (alreadyNotified) return;
     }

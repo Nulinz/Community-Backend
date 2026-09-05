@@ -13,6 +13,7 @@ export const XP_ACTIONS = {
   // COMPETITION_WIN: { xp: 250, label: "Won Competition" },
   FIRST_REGISTERATION: { xp: 10, label: "First Registration", isDaily: false, target: 1, unit: "count" },
   COMPLETE_PROFILE: { xp: 10, label: "Complete Your Profile", isDaily: false, target: 1, unit: "count" },
+  FIRST_RESUME_CREATE: { xp: 10, label: "Create Your First Professional Resume", isDaily: false, target: 1, unit: "count" },
   FIRST_SAVED_JOB: { xp: 10, label: "Save Your First Opportunity", isDaily: false, target: 1, unit: "count" },
   DAILY_LOGIN: { xp: 5, label: "Daily Login", isDaily: true, target: 1, unit: "count" },
   AI_STATION: { xp: 5, label: "AI STATION", isDaily: true, target: 1, unit: "count" },

@@ -68,9 +68,11 @@ export const sendAndSaveNotification = async ({
       return null;
     }
 
+    let fcmResult = null;
+
     // ── Step 2: Send push notification if FCM token exists ──
     if (receiver.fcm_token) {
-      await sendNotification({
+      fcmResult = await sendNotification({
         token: receiver.fcm_token,
         title,
         body: body || message,   // fallback to message if body not provided
@@ -82,7 +84,7 @@ export const sendAndSaveNotification = async ({
       console.warn(`sendAndSaveNotification: No FCM token for receiver ${receiverId}`);
     }
 
-    // ── Step 3: Save notification to DB regardless of FCM result ──
+    // ── Step 3: Save notification to DB with fcm_sent delivery status ──
     const saved = await saveNotification({
       sender: senderId,
       receiver: receiverId,
@@ -91,7 +93,10 @@ export const sendAndSaveNotification = async ({
       type,
       body: body || null,
       reference_id,
-      metadata,
+      metadata: {
+        ...metadata,
+        fcm_sent: Boolean(fcmResult),
+      },
     });
 
     return saved;

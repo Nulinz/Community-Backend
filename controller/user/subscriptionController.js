@@ -31,11 +31,11 @@ export const getSubscriptionPlans = async (req, res, next) => {
     if (!plans || plans.length === 0) {
       plans = [
         {
-          planKey: "pro_monthly",
-          name: "Pro Monthly",
+          planKey: "pro_quarterly",
+          name: "Pro Quarterly",
           tier: "pro",
-          billingCycle: "monthly",
-          durationDays: 30,
+          billingCycle: "90 days",
+          durationDays: 90,
           price: 499,
           currency: "INR",
           features: ["Access all events & courses", "Priority support", "Pro badge"],
@@ -79,7 +79,7 @@ export const verifySubscriptionPayment = async (req, res, next) => {
       orderId,
       signature,
       paymentGateway = "Razorpay",
-      planKey = "pro_monthly",
+      planKey = "pro_quarterly",
       planName,
       durationDays,
       amount,
@@ -95,11 +95,17 @@ export const verifySubscriptionPayment = async (req, res, next) => {
     const actualSignature = razorpay_signature || signature || null;
 
     // Calculate duration, amount, and plan name from client request with fallbacks
-    const activeDays = Number(durationDays) || (planKey === "pro_yearly" ? 365 : 30);
+    const activeDays =
+      Number(durationDays) ||
+      (planKey === "pro_yearly" ? 365 : planKey === "pro_monthly" ? 30 : 90);
     const finalAmount = Number(amount) || (planKey === "pro_yearly" ? 2999 : 499);
     const finalPlanName =
       planName ||
-      (planKey === "pro_yearly" ? "Pro Annual" : "Pro Monthly");
+      (planKey === "pro_yearly"
+        ? "Pro Annual"
+        : planKey === "pro_monthly"
+        ? "Pro Monthly"
+        : "Pro Quarterly");
 
     const startDate = new Date();
     const expiryDate = new Date(Date.now() + activeDays * 24 * 60 * 60 * 1000);

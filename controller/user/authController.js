@@ -26,7 +26,8 @@ const generateUniqueReferralCode = async (name = "USER") => {
 
 export const loginUser = async (req, res) => {
   try {
-    const { phone, password, fcm_token } = req.body;
+    const { phone, password } = req.body;
+    const fcm_token = req.body.fcm_token || req.body.fcmToken || null;
 
     // 🔹 1. Validate input
     if (!phone || !password) {
@@ -73,6 +74,9 @@ export const loginUser = async (req, res) => {
       const otp_expire = new Date(Date.now() + 5 * 60 * 1000);
       user.otp = otp;
       user.otp_expire = otp_expire;
+      if (fcm_token) {
+        user.fcm_token = fcm_token;
+      }
       await user.save();
       return res.status(200).json({
         status: false,
@@ -144,6 +148,7 @@ export const loginUser = async (req, res) => {
 export const registerUser = async (req, res) => {
   try {
     const { name, email, phone, password } = req.body;
+    const fcm_token = req.body.fcm_token || req.body.fcmToken || null;
     // 🔹 Validate
     if (!name || !email || !phone || !password) {
       return res.status(400).json({
@@ -213,6 +218,7 @@ export const registerUser = async (req, res) => {
       influencerId,
       otp,
       otp_expire,
+      fcm_token,
     });
     await otpService.sendOtp(
       phone,
@@ -248,7 +254,8 @@ export const registerUser = async (req, res) => {
 };
 export const verifyOtp = async (req, res) => {
   try {
-    const { phone, otp, fcm_token } = req.body;
+    const { phone, otp } = req.body;
+    const fcm_token = req.body.fcm_token || req.body.fcmToken || null;
 
     // 🔹 1. Validate input
     if (!phone || !otp) {
@@ -735,6 +742,7 @@ export const webLoginUser = async (req, res) => {
   try {
     // 🔹 1. Identifier (email or phone) and password
     const { phone, email, password } = req.body;
+    const fcm_token = req.body.fcm_token || req.body.fcmToken || null;
     const identifier = email || phone;
 
     if (!identifier || !password)
@@ -772,6 +780,11 @@ export const webLoginUser = async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: "30d" }
     );
+
+    if (fcm_token) {
+      user.fcm_token = fcm_token;
+      await user.save();
+    }
 
     const userDetails = await UserDetails.findOne({ userId: user._id });
 

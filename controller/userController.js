@@ -97,7 +97,7 @@ export const loginUser = async (req, res, next) => {
         const email = sanitizeInput(req.body.email).toLowerCase();
         const phone = sanitizeInput(req.body.phone);
         const password = sanitizeInput(req.body.password);
-        const fcmToken = sanitizeInput(req.body.fcmToken);
+        const fcmToken = sanitizeInput(req.body.fcmToken || req.body.fcm_token);
 
         if (!email && !phone) {
             const error = new Error("Email or phone is required");
@@ -149,7 +149,7 @@ export const loginUser = async (req, res, next) => {
             throw error;
         }
 
-        user.fcmToken = fcmToken;
+        user.fcm_token = fcmToken;
         await user.save();
 
         const token = generateToken(user._id);
@@ -218,7 +218,7 @@ export const verifyOtp = async (req, res, next) => {
         const phone = sanitizeInput(req.body.phone);
         const otp = sanitizeInput(req.body.otp);
         const type = sanitizeInput(req.body.type).toLowerCase();
-        const fcmToken = sanitizeInput(req.body.fcmToken);
+        const fcmToken = sanitizeInput(req.body.fcmToken || req.body.fcm_token);
 
         if (!phone) {
             const error = new Error("Phone is required");
@@ -286,7 +286,7 @@ export const verifyOtp = async (req, res, next) => {
                 throw error;
             }
 
-            user.fcmToken = fcmToken;
+            user.fcm_token = fcmToken;
             await user.save();
 
             response.token = generateToken(user._id);
@@ -368,7 +368,7 @@ export const createNewPassword = async (req, res, next) => {
 
 export const logoutUser = async (req, res, next) => {
     try {
-        req.user.fcmToken = null;
+        req.user.fcm_token = null;
         await req.user.save();
 
         res.status(200).json({

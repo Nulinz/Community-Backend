@@ -4,6 +4,8 @@ import { RESUME_TEMPLATES } from "../config/resumeTemplates.js";
 import { generateResumePDFBuffer, renderResumeHTML } from "../services/pdfService.js";
 import UserDetails from "../models/userDetails.js";
 import Resume from "../models/resumeModel.js";
+import XPLog from "../models/xpLogModel.js";
+import { triggerMissionNotification, awardXP } from "../services/xpService.js";
 
 const DUMMY_RESUME_DATA = {
   personalInfo: {
@@ -194,6 +196,7 @@ export const generateResume = async (req, res, next) => {
 
     const userId = req.user?._id || req.user?.id;
     let savedResume = null;
+    let xpStatus = null;
 
     if (userId) {
       savedResume = await Resume.create({
@@ -204,6 +207,42 @@ export const generateResume = async (req, res, next) => {
         fileSize: pdfBuffer.length,
         mimeType: "application/pdf",
       });
+
+      // Check lifetime claim status for "Create Your First Professional Resume" mission
+      const alreadyClaimed = await XPLog.exists({
+        userId,
+        action: "FIRST_RESUME_CREATE",
+      });
+
+      const wantsDirectClaim =
+        req.body?.claimXp === true ||
+        req.query?.claimXp === "true" ||
+        req.body?.autoClaim === true;
+
+      if (wantsDirectClaim && !alreadyClaimed) {
+        // Direct claim requested via payload/query flag
+        const claimResult = await awardXP({ userId, actionKey: "FIRST_RESUME_CREATE" });
+        xpStatus = {
+          actionKey: "FIRST_RESUME_CREATE",
+          xpAwarded: claimResult.xpAwarded || 10,
+          claimed: true,
+          totalXP: claimResult.totalXP,
+          level: claimResult.level,
+          isLevelUp: claimResult.isLevelUp,
+        };
+      } else {
+        xpStatus = {
+          actionKey: "FIRST_RESUME_CREATE",
+          xpReward: 10,
+          alreadyClaimed: Boolean(alreadyClaimed),
+          readyToClaim: !alreadyClaimed,
+        };
+
+        // Notify user via FCM push and in-app notification that 10 XP is ready to claim in Missions
+        triggerMissionNotification(userId, "FIRST_RESUME_CREATE").catch((err) =>
+          console.error("FIRST_RESUME_CREATE triggerMissionNotification error:", err.message)
+        );
+      }
     } else {
       console.warn("generateResume: req.user._id is missing, unable to persist resume to database collection.");
     }
@@ -239,6 +278,7 @@ export const generateResume = async (req, res, next) => {
       fileUrl: relativeUrl,
       downloadUrl,
       data: responseData,
+      xp: xpStatus,
     });
   } catch (error) {
     next(error);

@@ -3219,8 +3219,9 @@ const activePing = async (req, res, next) => {
     user.lastActiveDate = now;
     await user.save();
 
-    // Trigger active time mission claim notification if threshold is reached
-    const userLevel = user.level || 1;
+    // Derive active level dynamically from XP so the correct tier mission notification triggers
+    const levelInfo = calculateLevelInfo(user.xp || 0);
+    const userLevel = levelInfo.currentLevel;
     let activeTimeMissionKey = "ACTIVE_30_MIN";
     let targetMins = 30;
     if (userLevel === 2) {

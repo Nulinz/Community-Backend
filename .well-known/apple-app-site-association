@@ -1,0 +1,37 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "<APPLE_TEAM_ID>.com.grad.envy",
+        "paths": [
+          "/referral",
+          "/referral/*",
+          "/referral?*",
+          "/share",
+          "/share/*",
+          "/share?*"
+        ],
+        "components": [
+          {
+            "/": "/referral*",
+            "comment": "Matches all gradenvy.com referral links and query parameters"
+          },
+          {
+            "/": "/join*",
+            "comment": "Matches all gradenvy.com join links"
+          },
+          {
+            "/": "/share*",
+            "comment": "Matches all gradenvy.com share links"
+          }
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": [
+      "<APPLE_TEAM_ID>.com.grad.envy"
+    ]
+  }
+}
