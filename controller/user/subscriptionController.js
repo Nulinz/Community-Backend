@@ -66,7 +66,6 @@ export const getSubscriptionPlans = async (req, res, next) => {
 
 /**
  * Store payment details sent from the client and activate the user subscription.
- * Saves whatever is passed from the client directly into MongoDB without backend validation.
  */
 export const verifySubscriptionPayment = async (req, res, next) => {
   try {
@@ -104,11 +103,34 @@ export const verifySubscriptionPayment = async (req, res, next) => {
       (planKey === "pro_yearly"
         ? "Pro Annual"
         : planKey === "pro_monthly"
-        ? "Pro Monthly"
-        : "Pro Quarterly");
+          ? "Pro Monthly"
+          : "Pro Quarterly");
 
-    const startDate = new Date();
-    const expiryDate = new Date(Date.now() + activeDays * 24 * 60 * 60 * 1000);
+    // ── Plan Extension / Stacking Logic ──────────────────────────────
+    // Check if the user currently possesses an active, unexpired subscription.
+    // If active days remain, stack the new duration directly onto the existing expiry date.
+    // Otherwise, start fresh from the current moment.
+    const existingUser = await User.findById(userId).select("subscription").lean();
+    const currentSub = existingUser?.subscription;
+
+    const now = new Date();
+    const isCurrentlyActive = Boolean(
+      currentSub?.isPlanActive &&
+      currentSub?.expiryDate &&
+      new Date(currentSub.expiryDate) > now
+    );
+
+    // If active, anchor on existing expiryDate; otherwise anchor on now
+    const baseDate = isCurrentlyActive ? new Date(currentSub.expiryDate) : now;
+    const expiryDate = new Date(baseDate.getTime() + activeDays * 24 * 60 * 60 * 1000);
+    expiryDate.setHours(23, 59, 59, 999);
+
+    // Preserve initial startDate if extending active membership; else start now
+    const startDate = isCurrentlyActive && currentSub?.startDate
+      ? new Date(currentSub.startDate)
+      : now;
+
+    const actionText = isCurrentlyActive ? "extended" : "activated";
 
     // 1. Save Payment record directly to DB
     const paymentRecord = await Payment.create({
@@ -124,7 +146,7 @@ export const verifySubscriptionPayment = async (req, res, next) => {
       paymentId: actualPaymentId,
       signature: actualSignature,
       transactionId: actualPaymentId,
-      remarks: `Subscription activated: ${finalPlanName}`,
+      remarks: `Subscription ${actionText}: ${finalPlanName}`,
     });
 
     // 2. Update User's active subscription status in DB
@@ -145,7 +167,7 @@ export const verifySubscriptionPayment = async (req, res, next) => {
 
     return res.status(200).json({
       success: true,
-      message: "Subscription activated successfully!",
+      message: `Subscription ${actionText} successfully!`,
       data: {
         paymentId: paymentRecord._id,
         subscription: updatedUser?.subscription,
@@ -215,6 +237,7 @@ export const getActiveSubscribedUsers = async (req, res, next) => {
       if (sub.startDate && sub.expiryDate) {
         const start = new Date(sub.startDate);
         const expiry = new Date(sub.expiryDate);
+        expiry.setHours(23, 59, 59, 999);
         const now = new Date();
 
         durationDays = Math.max(0, Math.round((expiry - start) / (1000 * 60 * 60 * 24)));
@@ -267,9 +290,14 @@ export const getUserPlanHistory = async (req, res, next) => {
       paymentStatus: "Success",
     }).sort({ createdAt: -1 });
 
-    const isExpired = userDoc?.subscription?.expiryDate
-      ? new Date() > new Date(userDoc.subscription.expiryDate)
-      : false;
+    const rawExpiry = userDoc?.subscription?.expiryDate;
+    const expiryDate = rawExpiry ? new Date(rawExpiry) : null;
+    const endOfDayExpiry = expiryDate ? new Date(expiryDate) : null;
+    if (endOfDayExpiry) {
+      endOfDayExpiry.setHours(23, 59, 59, 999);
+    }
+
+    const isExpired = endOfDayExpiry ? new Date() > endOfDayExpiry : false;
 
     const isCurrentlyActive = Boolean(
       userDoc?.subscription?.isPlanActive && !isExpired
@@ -278,7 +306,40 @@ export const getUserPlanHistory = async (req, res, next) => {
     let currentPlan = [];
     let previousPlans = [];
 
+    // Helper to format date only (YYYY-MM-DD)
+    const formatDateOnly = (d) => {
+      if (!d) return null;
+      const dateObj = new Date(d);
+      if (isNaN(dateObj.getTime())) return null;
+      return `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, "0")}-${String(dateObj.getDate()).padStart(2, "0")}`;
+    };
+
+    const extractPlanName = (payment, defaultName = "Pro Quarterly") => {
+      if (payment?.remarks) {
+        if (payment.remarks.startsWith("Subscription activated: ")) {
+          return payment.remarks.replace("Subscription activated: ", "").trim();
+        }
+        if (payment.remarks.startsWith("Subscription extended: ")) {
+          return payment.remarks.replace("Subscription extended: ", "").trim();
+        }
+      }
+      if (payment?.metadata?.planName) {
+        return payment.metadata.planName;
+      }
+      return defaultName;
+    };
+
+    let planDetails = null;
+
     if (isCurrentlyActive && userDoc?.subscription) {
+      planDetails = {
+        planName: userDoc.subscription.planName || "Pro Quarterly",
+        startDate: formatDateOnly(userDoc.subscription.startDate) || formatDateOnly(paymentHistory[0]?.createdAt),
+        expiryDate: formatDateOnly(endOfDayExpiry),
+        isPlanActive: true,
+        isExpired: false,
+      };
+
       // Set current plan
       currentPlan = [
         {
@@ -292,7 +353,24 @@ export const getUserPlanHistory = async (req, res, next) => {
 
       // Exclude current plan's payment from previous plans
       previousPlans = paymentHistory.slice(1);
+    } else if (isExpired && (rawExpiry || paymentHistory.length > 0)) {
+      planDetails = {
+        planName: userDoc?.subscription?.planName || (paymentHistory[0] ? extractPlanName(paymentHistory[0]) : "Pro Quarterly"),
+        startDate: formatDateOnly(userDoc?.subscription?.startDate) || formatDateOnly(paymentHistory[0]?.createdAt),
+        expiryDate: formatDateOnly(endOfDayExpiry),
+        isPlanActive: false,
+        isExpired: true,
+      };
+      currentPlan = [];
+      previousPlans = paymentHistory;
     } else {
+      planDetails = {
+        planName: "Free",
+        startDate: null,
+        expiryDate: null,
+        isPlanActive: false,
+        isExpired: false,
+      };
       currentPlan = [];
       previousPlans = paymentHistory;
     }
@@ -300,6 +378,7 @@ export const getUserPlanHistory = async (req, res, next) => {
     return res.status(200).json({
       success: true,
       data: {
+        planDetails,
         currentPlan,
         previousPlans,
       },

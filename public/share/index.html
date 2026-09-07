@@ -1,136 +1,512 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Grad Envy - Explore & Join</title>
-  
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Grad Envy - Explore & Join Opportunities</title>
+
   <!-- Primary Meta Tags -->
   <meta name="title" content="Grad Envy - Take Action. Earn Rewards.">
-  <meta name="description" content="View shared opportunities, events, and career tools on Grad Envy. Download the app on Google Play.">
-  <meta name="theme-color" content="#EA580C">
+  <meta name="description"
+    content="View shared opportunities, events, jobs, and career tools on Grad Envy. Download the app to explore!">
+  <meta name="theme-color" content="#FFFFFF">
 
-  <!-- Open Graph / WhatsApp / Facebook -->
+  <!-- Open Graph / Social Sharing -->
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://gradenvy.com/share">
   <meta property="og:title" content="Grad Envy - Career Opportunities & Events">
-  <meta property="og:description" content="Join the Grad Envy community. Discover jobs, internships, and live events!">
-  <meta property="og:image" content="https://gradenvy.com/assets/Images/App_Logo.png">
+  <meta property="og:description"
+    content="Discover jobs, internships, freelance gigs, and live community events on Grad Envy!">
+  <meta property="og:image" content="https://gradenvy.com/share/assets/phone_mockup.png">
 
+  <!-- Twitter -->
+  <meta property="twitter:card" content="summary_large_image">
+  <meta property="twitter:url" content="https://gradenvy.com/share">
+  <meta property="twitter:title" content="Grad Envy - Career Opportunities & Events">
+  <meta property="twitter:description"
+    content="Discover jobs, internships, freelance gigs, and live community events on Grad Envy!">
+  <meta property="twitter:image" content="https://gradenvy.com/share/assets/phone_mockup.png">
+
+  <link rel="icon" type="image/png" href="./assets/index_icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@500;600;700;800&family=JetBrains+Mono:wght@600;700;800&display=swap"
+    rel="stylesheet">
 
   <style>
     :root {
-      --primary: #EA580C;
-      --primary-dark: #C2410C;
-      --bg: #FAFBFD;
+      --bg-page: #F8FAFC;
       --card-bg: #FFFFFF;
+      --card-border: #E2E8F0;
+      --card-shadow: 0 20px 45px -12px rgba(15, 23, 42, 0.08), 0 4px 12px -2px rgba(15, 23, 42, 0.03);
+      --primary: #2563EB;
+      --primary-hover: #1D4ED8;
+      --primary-gradient: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%);
+      --primary-glow: rgba(37, 99, 235, 0.22);
+      --emerald: #059669;
+      --emerald-bg: #ECFDF5;
+      --emerald-border: #A7F3D0;
+      --amber: #D97706;
       --text-main: #0F172A;
+      --text-secondary: #475569;
       --text-muted: #64748B;
-      --border: #F1F5F9;
+      --ticket-bg: #F8FAFC;
+      --ticket-border: #E2E8F0;
+      --font-heading: 'Outfit', 'Plus Jakarta Sans', sans-serif;
+      --font-body: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
     }
 
     * {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
-      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      height: 100dvh;
+      max-height: 100dvh;
+      overflow: hidden;
+      background-color: var(--bg-page);
+      font-family: var(--font-body);
+      color: var(--text-main);
     }
 
     body {
-      background: var(--bg);
-      color: var(--text-main);
-      min-height: 100vh;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      padding: 24px 16px;
+      padding: 16px;
+      position: relative;
     }
 
-    .card {
-      background: var(--card-bg);
-      border-radius: 24px;
-      border: 1px solid var(--border);
-      box-shadow: 0 20px 40px -12px rgba(15, 23, 42, 0.08);
-      padding: 36px 24px;
-      text-align: center;
-      max-width: 440px;
+    /* Ambient luxury light gradient */
+    .ambient-glow {
+      position: absolute;
+      top: -140px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 700px;
+      height: 350px;
+      background: radial-gradient(ellipse at center, rgba(37, 99, 235, 0.07) 0%, rgba(37, 99, 235, 0.01) 60%, transparent 80%);
+      filter: blur(40px);
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    /* ── Outer Page Wrapper (Guaranteed No-Scroll) ── */
+    .page-wrapper {
+      position: relative;
+      z-index: 1;
       width: 100%;
-    }
-
-    .logo-container {
-      width: 64px;
-      height: 64px;
-      background: #0F172A;
-      border-radius: 16px;
-      display: inline-flex;
+      max-width: 820px;
+      height: 100%;
+      max-height: calc(100dvh - 32px);
+      display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
-      margin-bottom: 20px;
-      box-shadow: 0 8px 16px -4px rgba(15, 23, 42, 0.15);
     }
 
-    .logo-container img {
-      width: 36px;
-      height: 36px;
+    /* ── Main Unified Luxury Card ── */
+    .luxury-card {
+      width: 100%;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 28px;
+      box-shadow: var(--card-shadow);
+      display: flex;
+      align-items: stretch;
+      min-height: 460px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* Top Accent Stripe */
+    .luxury-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, #2563EB, #3B82F6, #60A5FA);
+      z-index: 10;
+    }
+
+    /* ── Left Showcase Panel (Desktop / Tablet) ── */
+    .card-showcase-panel {
+      flex: 0 0 46%;
+      min-width: 0;
+      align-self: stretch;
+      display: flex;
+      align-items: stretch;
+      justify-content: center;
+      padding: 0;
+      margin: 0;
+      position: relative;
+      overflow: hidden;
+      border-right: 1px solid var(--card-border);
+      background: #0B0F19;
+    }
+
+    .showcase-mockup-img {
+      width: 100%;
+      height: 100%;
+      min-height: 100%;
+      object-fit: cover;
+      object-position: center;
+      display: block;
+      transition: transform 0.4s ease;
+    }
+
+    .showcase-mockup-img:hover {
+      transform: scale(1.03);
+    }
+
+    /* ── Right Content Panel ── */
+    .card-content-panel {
+      flex: 1;
+      padding: 32px 36px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 18px;
+      text-align: left;
+    }
+
+    /* Header Bar inside card */
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .brand-logo {
+      height: 30px;
+      width: auto;
       object-fit: contain;
     }
 
-    h1 {
-      font-size: 22px;
-      font-weight: 800;
-      color: var(--text-main);
-      margin-bottom: 8px;
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--emerald-bg);
+      border: 1px solid var(--emerald-border);
+      padding: 4px 10px;
+      border-radius: 9999px;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--emerald);
+      letter-spacing: 0.02em;
     }
 
-    h1 span {
+    .pulse-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #10B981;
+      box-shadow: 0 0 8px #10B981;
+      animation: pulse 1.8s infinite;
+    }
+
+    @keyframes pulse {
+      0% {
+        transform: scale(0.95);
+        opacity: 0.8;
+      }
+
+      50% {
+        transform: scale(1.3);
+        opacity: 1;
+        box-shadow: 0 0 10px #10B981;
+      }
+
+      100% {
+        transform: scale(0.95);
+        opacity: 0.8;
+      }
+    }
+
+    /* Title & Description */
+    .hero-info {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .hero-title {
+      font-family: var(--font-heading);
+      font-size: 23px;
+      font-weight: 800;
+      color: var(--text-main);
+      line-height: 1.2;
+      letter-spacing: -0.02em;
+    }
+
+    .hero-title span.highlight {
       color: var(--primary);
     }
 
-    p.subtitle {
-      font-size: 13px;
-      color: var(--text-muted);
-      line-height: 1.5;
-      margin-bottom: 24px;
+    .hero-subtitle {
+      font-size: 13.5px;
+      color: var(--text-secondary);
+      line-height: 1.45;
     }
 
-    .btn-playstore {
+    /* Shared Opportunity Ticket Box */
+    .ticket-box {
+      background: var(--ticket-bg);
+      border: 1px solid var(--ticket-border);
+      border-radius: 16px;
+      padding: 12px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .ticket-top {
       display: flex;
       align-items: center;
-      justify-content: center;
-      gap: 12px;
-      background: #0F172A;
-      color: #FFFFFF;
-      text-decoration: none;
-      padding: 14px 24px;
-      border-radius: 16px;
+      justify-content: space-between;
+      padding-bottom: 6px;
+      border-bottom: 1px dashed #CBD5E1;
+    }
+
+    .ticket-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 10.5px;
       font-weight: 700;
-      font-size: 14px;
-      box-shadow: 0 10px 20px -4px rgba(15, 23, 42, 0.2);
-      transition: transform 0.2s, background 0.2s;
+      color: var(--amber);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
     }
 
-    .btn-playstore:active {
-      transform: scale(0.98);
-      background: #1E293B;
+    .ticket-tag svg {
+      width: 13px;
+      height: 13px;
+      fill: currentColor;
     }
 
-    .redirect-status {
-      margin-top: 20px;
-      font-size: 12px;
+    .ticket-bonus {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--emerald);
+      background: var(--emerald-bg);
+      padding: 2px 8px;
+      border-radius: 6px;
+      border: 1px solid var(--emerald-border);
+    }
+
+    .ticket-main {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .code-meta {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      flex: 1;
+    }
+
+    .code-label {
+      font-size: 9.5px;
+      font-weight: 600;
       color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .code-string {
+      font-family: var(--font-mono);
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: 0.8px;
+      color: var(--primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .btn-copy {
+      background: #FFFFFF;
+      border: 1.5px solid #CBD5E1;
+      color: var(--text-main);
+      padding: 7px 15px;
+      border-radius: 10px;
+      font-size: 12.5px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+      flex-shrink: 0;
+    }
+
+    .btn-copy:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+      background: #F1F5F9;
+    }
+
+    .btn-copy:active {
+      transform: scale(0.96);
+    }
+
+    .btn-copy.copied {
+      background: var(--emerald);
+      border-color: var(--emerald);
+      color: #FFFFFF;
+      box-shadow: 0 4px 12px rgba(5, 150, 105, 0.3);
+    }
+
+    /* Actions Section */
+    .actions-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      width: 100%;
+    }
+
+    /* Main CTA Button */
+    .btn-primary {
+      width: 100%;
+      background: var(--primary-gradient);
+      color: #FFFFFF;
+      border: none;
+      padding: 13px 20px;
+      border-radius: 14px;
+      font-size: 14.5px;
+      font-weight: 700;
+      cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 8px;
+      box-shadow: 0 8px 20px -4px var(--primary-glow);
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      text-decoration: none;
     }
 
-    .spinner {
-      width: 14px;
-      height: 14px;
+    .btn-primary:hover {
+      background: var(--primary-hover);
+      transform: translateY(-1px);
+      box-shadow: 0 12px 24px -4px rgba(37, 99, 235, 0.38);
+    }
+
+    .btn-primary:active {
+      transform: scale(0.98);
+    }
+
+    /* Store Download Row */
+    .store-grid {
+      display: flex;
+      gap: 10px;
+      width: 100%;
+    }
+
+    .store-badge {
+      flex: 1;
+      background: #FFFFFF;
+      border: 1px solid #E2E8F0;
+      padding: 8px 12px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      text-decoration: none;
+      transition: all 0.2s ease;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+      min-height: 42px;
+    }
+
+    .store-badge:hover {
+      background: #F8FAFC;
+      border-color: #CBD5E1;
+      transform: translateY(-1px);
+    }
+
+    .store-badge:active {
+      transform: scale(0.97);
+    }
+
+    .store-icon {
+      width: 22px;
+      height: 22px;
+      object-fit: contain;
+      flex-shrink: 0;
+    }
+
+    .store-info {
+      text-align: left;
+      line-height: 1.15;
+    }
+
+    .store-caption {
+      font-size: 8.5px;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .store-brand {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    /* Panel Footer Trust & Redirect */
+    .panel-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--text-muted);
+      padding-top: 4px;
+    }
+
+    .trust-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+
+    .trust-indicator svg {
+      width: 13px;
+      height: 13px;
+      fill: var(--emerald);
+    }
+
+    .redirect-status {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .orbit-spinner {
+      width: 11px;
+      height: 11px;
       border: 2px solid #E2E8F0;
       border-top-color: var(--primary);
       border-radius: 50%;
@@ -138,94 +514,463 @@
     }
 
     @keyframes spin {
-      to { transform: rotate(360deg); }
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    /* Mobile Brand Row (Hidden on Desktop) */
+    .mobile-app-row {
+      display: none;
+    }
+
+    /* Toast Notification */
+    #toast {
+      position: fixed;
+      bottom: 22px;
+      left: 50%;
+      transform: translateX(-50%) translateY(30px);
+      background: #0F172A;
+      color: #FFFFFF;
+      padding: 9px 20px;
+      border-radius: 9999px;
+      font-size: 12.5px;
+      font-weight: 700;
+      opacity: 0;
+      box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.3);
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 1000;
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    #toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* ── Mobile Layout (< 768px) ── */
+    @media (max-width: 767px) {
+      body {
+        padding: 12px;
+      }
+
+      .page-wrapper {
+        max-width: 400px;
+        max-height: calc(100dvh - 24px);
+      }
+
+      .luxury-card {
+        flex-direction: column;
+        border-radius: 24px;
+        max-height: 100%;
+      }
+
+      /* Hide left showcase on mobile to avoid overcrowding */
+      .card-showcase-panel {
+        display: none;
+      }
+
+      .card-content-panel {
+        padding: 24px 20px 20px;
+        gap: 16px;
+        text-align: center;
+      }
+
+      .panel-header {
+        justify-content: space-between;
+      }
+
+      /* Mobile App Icon Row */
+      .mobile-app-row {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        margin: 2px 0;
+      }
+
+      .mobile-app-squircle {
+        width: 52px;
+        height: 52px;
+        border-radius: 14px;
+        background: #FFFFFF;
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        box-shadow: 0 6px 16px -4px rgba(37, 99, 235, 0.2);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        flex-shrink: 0;
+      }
+
+      .mobile-app-img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .mobile-hero-meta {
+        text-align: left;
+      }
+
+      .hero-info {
+        display: none;
+        /* replaced by mobile-app-row for compact breathing space */
+      }
+
+      .ticket-box {
+        padding: 10px 14px;
+      }
+
+      .code-string {
+        font-size: 18px;
+      }
+
+      .panel-footer {
+        flex-direction: row;
+        justify-content: space-between;
+      }
+    }
+
+    /* Micro viewports (height < 640px) */
+    @media (max-height: 640px) {
+      .card-content-panel {
+        padding: 16px 16px 14px;
+        gap: 12px;
+      }
+
+      .mobile-app-squircle {
+        width: 44px;
+        height: 44px;
+      }
+
+      .hero-title {
+        font-size: 18px;
+      }
+
+      .ticket-box {
+        padding: 8px 12px;
+      }
+
+      .btn-primary {
+        padding: 11px 16px;
+      }
     }
   </style>
 </head>
+
 <body>
 
-  <div class="card">
-    <div class="logo-container">
-      <img src="https://gradenvy.com/assets/Images/App_Logo.png" alt="Grad Envy" onerror="this.style.display='none'">
-    </div>
+  <!-- Ambient background glow -->
+  <div class="ambient-glow"></div>
 
-    <h1>Grad<span>Envy</span></h1>
-    <p class="subtitle" id="content-desc">
-      Opening in the Grad Envy app... If the app is not installed, you will be redirected to the Google Play Store.
-    </p>
+  <div class="page-wrapper">
 
-    <a id="store-btn" class="btn-playstore" href="https://play.google.com/store/apps/details?id=com.grad.envy">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M3.609 1.814L13.793 12 3.61 22.186c-.37-.417-.61-.986-.61-1.63V3.444c0-.644.24-1.213.61-1.63zM15.207 13.414l2.42 2.42-12.78 7.378 10.36-9.798zm0-2.828L4.847.788 17.627 8.166l-2.42 2.42zm1.414 1.414l3.155-1.821c.883-.51.883-1.341 0-1.851L16.621 8.33l-2.121 2.121 2.121 2.549z"/>
-      </svg>
-      <span>Download on Google Play</span>
-    </a>
+    <!-- Unified Luxury Card -->
+    <main class="luxury-card">
 
-    <div class="redirect-status" id="redirect-status">
-      <div class="spinner"></div>
-      <span>Redirecting you to Google Play...</span>
-    </div>
+      <!-- Left Column: App Showcase Mockup (Desktop / Tablet) -->
+      <div class="card-showcase-panel">
+        <img src="./assets/phone_mockup.png" alt="Grad Envy Mobile Application Showcase" class="showcase-mockup-img"
+          onerror="if(!this.dataset.retried){this.dataset.retried='1';this.src='/share/assets/phone_mockup.png';}">
+      </div>
+
+      <!-- Right Column: Opportunity Preview & Action Panel -->
+      <div class="card-content-panel">
+
+        <!-- Top Header Bar -->
+        <div class="panel-header">
+          <img src="./assets/gradenvyLogo.png" alt="Grad Envy" class="brand-logo"
+            onerror="if(!this.dataset.retried){this.dataset.retried='1';this.src='/share/assets/gradenvyLogo.png';}">
+          <div class="status-badge">
+            <span class="pulse-dot"></span>
+            <span id="badge-status-text">Community Share</span>
+          </div>
+        </div>
+
+        <!-- Desktop Hero Info -->
+        <div class="hero-info">
+          <h1 class="hero-title">Explore on <span class="highlight">Grad Envy</span></h1>
+          <p class="hero-subtitle">Open this shared opportunity in the app to view full details, connect, and
+            participate.</p>
+        </div>
+
+        <!-- Mobile Hero App Row (Clean, balanced layout on mobile) -->
+        <div class="mobile-app-row">
+          <div class="mobile-app-squircle">
+            <img src="./assets/index_icon.png" alt="Grad Envy App Icon" class="mobile-app-img"
+              onerror="if(!this.dataset.retried){this.dataset.retried='1';this.src='/share/assets/index_icon.png';}">
+          </div>
+          <div class="mobile-hero-meta">
+            <h1 class="hero-title" style="font-size: 19px;">Explore on <span class="highlight">Grad Envy</span></h1>
+            <p style="font-size: 12px; color: var(--text-muted); font-weight: 500;">Tap below to open in app</p>
+          </div>
+        </div>
+
+        <!-- Action CTAs Stack -->
+        <div class="actions-stack">
+          <!-- Main Open App CTA -->
+          <a href="#" id="open-app-btn" class="btn-primary" onclick="launchApp(event)">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path
+                d="M5 13.18V17.18C5 19.94 8.13 22 12 22C15.87 22 19 19.94 19 17.18V13.18L12 17L5 13.18M12 3L1 9L12 15L21 10.09V17H23V9M12 5.18L18.82 9L12 12.82L5.18 9L12 5.18Z" />
+            </svg>
+            Open in Grad Envy App
+          </a>
+
+          <!-- Store Download Badges Grid -->
+          <div class="store-grid">
+            <a href="#" id="play-store-btn" class="store-badge" target="_blank" rel="noopener noreferrer">
+              <img src="./assets/playstore_img.png" alt="Google Play" class="store-icon"
+                onerror="if(!this.dataset.retried){this.dataset.retried='1';this.src='/share/assets/playstore_img.png';}">
+              <div class="store-info">
+                <div class="store-caption">GET IT ON</div>
+                <div class="store-brand">Google Play</div>
+              </div>
+            </a>
+
+            <a href="#" id="app-store-btn" class="store-badge" target="_blank" rel="noopener noreferrer">
+              <img src="./assets/appstore_img.png" alt="App Store" class="store-icon"
+                onerror="if(!this.dataset.retried){this.dataset.retried='1';this.src='/share/assets/appstore_img.png';}">
+              <div class="store-info">
+                <div class="store-caption">DOWNLOAD ON</div>
+                <div class="store-brand">App Store</div>
+              </div>
+            </a>
+          </div>
+        </div>
+
+        <!-- Panel Footer -->
+        <div class="panel-footer">
+          <div class="trust-indicator">
+            <svg viewBox="0 0 24 24">
+              <path
+                d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z" />
+            </svg>
+            Play Protect Verified
+          </div>
+          <div class="redirect-status" id="redirect-notice">
+            <div class="orbit-spinner"></div>
+            <span id="redirect-status-text">Opening app...</span>
+          </div>
+        </div>
+
+      </div>
+
+    </main>
+
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+      <polyline points="20 6 9 17 4 12"></polyline>
+    </svg>
+    <span>Link copied to clipboard!</span>
   </div>
 
   <script>
-    // 1. Parse query and path parameters
-    const url = new URL(window.location.href);
-    let targetParam = '';
+    // 1. Extract shared item parameters from URL query or path
+    function getShareTarget() {
+      const url = new URL(window.location.href);
+      let target = '';
 
-    // Handle format: https://gradenvy.com/share/event_Id=...
-    const pathParts = window.location.pathname.split('/');
-    const lastPart = pathParts[pathParts.length - 1] || pathParts[pathParts.length - 2] || '';
-    if (lastPart.includes('=')) {
-      targetParam = lastPart;
-    } else {
-      // Handle query parameters like ?event_Id=... or ?event_id=...
-      targetParam = url.search ? url.search.substring(1) : '';
+      // Format 1: https://gradenvy.com/share/event_Id=... or /share/job_id=...
+      const segments = window.location.pathname.split('/').filter(Boolean);
+      const shareIndex = segments.indexOf('share');
+      if (shareIndex !== -1 && segments.length > shareIndex + 1) {
+        target = segments.slice(shareIndex + 1).join('/');
+      }
+
+      // Format 2: https://gradenvy.com/share?event_id=... or ?job_id=...
+      if (!target && url.search) {
+        target = url.search.substring(1);
+      }
+
+      return target ? decodeURIComponent(target).trim() : '';
     }
 
-    const packageName = 'com.grad.envy';
-    const playStoreUrl = `https://play.google.com/store/apps/details?id=${packageName}`;
-    const customSchemeUrl = `gradenvy://share/${targetParam}`;
+    const targetParam = getShareTarget();
 
-    // 2. Set button URL
-    const storeBtn = document.getElementById('store-btn');
-    storeBtn.href = playStoreUrl;
+    // Contextual customization based on the parameter type
+    const lowerParam = targetParam.toLowerCase();
+    const categoryTag = document.getElementById('ticket-category-tag');
+    const badgePill = document.getElementById('ticket-badge-pill');
+    const labelText = document.getElementById('code-label-text');
+    const targetDisplay = document.getElementById('target-display');
+
+    if (lowerParam.includes('event')) {
+      if (categoryTag) categoryTag.textContent = 'Live Event';
+      if (badgePill) badgePill.textContent = 'RSVP Available';
+      if (labelText) labelText.textContent = 'Event Details';
+      if (targetDisplay) targetDisplay.textContent = 'EVENT POST';
+    } else if (lowerParam.includes('job')) {
+      if (categoryTag) categoryTag.textContent = 'Career Opening';
+      if (badgePill) badgePill.textContent = 'Now Hiring';
+      if (labelText) labelText.textContent = 'Job Details';
+      if (targetDisplay) targetDisplay.textContent = 'JOB LISTING';
+    } else if (lowerParam.includes('intern')) {
+      if (categoryTag) categoryTag.textContent = 'Internship';
+      if (badgePill) badgePill.textContent = 'Apply Now';
+      if (labelText) labelText.textContent = 'Internship Details';
+      if (targetDisplay) targetDisplay.textContent = 'INTERNSHIP';
+    } else if (lowerParam.includes('comp') || lowerParam.includes('contest')) {
+      if (categoryTag) categoryTag.textContent = 'Competition';
+      if (badgePill) badgePill.textContent = 'Open Entry';
+      if (labelText) labelText.textContent = 'Contest Details';
+      if (targetDisplay) targetDisplay.textContent = 'COMPETITION';
+    } else if (lowerParam.includes('company')) {
+      if (categoryTag) categoryTag.textContent = 'Company Profile';
+      if (badgePill) badgePill.textContent = 'Verified Partner';
+      if (labelText) labelText.textContent = 'Company Details';
+      if (targetDisplay) targetDisplay.textContent = 'COMPANY';
+    } else {
+      if (targetDisplay) targetDisplay.textContent = 'GRAD ENVY APP';
+    }
+
+    // 2. Configure Store & Scheme URLs
+    const packageName = 'com.grad.envy';
+    const appStoreId = '1234567890'; // Apple App Store ID
+
+    const playStoreUrl = `https://play.google.com/store/apps/details?id=${packageName}`;
+    const appStoreUrl = `https://apps.apple.com/app/grad-envy/id${appStoreId}`;
+
+    // Custom deep link scheme
+    const customSchemeUrl = targetParam ? `gradenvy://share/${targetParam}` : 'gradenvy://share';
+
+    // Set buttons
+    const playBtn = document.getElementById('play-store-btn');
+    const appStoreBtn = document.getElementById('app-store-btn');
+    const openAppBtn = document.getElementById('open-app-btn');
+
+    playBtn.href = playStoreUrl;
+    appStoreBtn.href = appStoreUrl;
+    openAppBtn.href = customSchemeUrl;
 
     // 3. Detect Platform
     const userAgent = navigator.userAgent || navigator.vendor || window.opera;
     const isAndroid = /android/i.test(userAgent);
     const isIOS = /iPad|iPhone|iPod/.test(userAgent) && !window.MSStream;
 
+    if (isIOS) {
+      playBtn.style.display = 'none';
+      appStoreBtn.style.display = 'flex';
+    } else if (isAndroid) {
+      playBtn.style.display = 'flex';
+      appStoreBtn.style.display = 'none';
+    } else {
+      // Desktop: Show both stores, hide redirect notice
+      playBtn.style.display = 'flex';
+      appStoreBtn.style.display = 'flex';
+      const redirectNotice = document.getElementById('redirect-notice');
+      if (redirectNotice) redirectNotice.style.display = 'none';
+    }
+
+    // 4. Smart Auto-Redirection Logic
     let appOpened = false;
-    window.addEventListener('blur', () => { appOpened = true; });
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden) appOpened = true;
+
+    window.addEventListener('blur', function () {
+      appOpened = true;
+    });
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden) {
+        appOpened = true;
+      }
     });
 
-    if (isAndroid) {
-      // Android Intent: tries to open the app; if not installed, Chrome falls back to Play Store automatically!
-      const intentUrl = `intent://share/${targetParam}#Intent;scheme=gradenvy;package=${packageName};S.browser_fallback_url=${encodeURIComponent(playStoreUrl)};end;`;
-      
-      // Attempt opening intent immediately
-      window.location.href = intentUrl;
+    function launchApp(e) {
+      if (e) e.preventDefault();
 
-      // Fallback timer in case the browser blocked intent redirection
-      setTimeout(() => {
+      if (isAndroid) {
+        // Android Intent: tries to open native app; if not installed, Chrome falls back to playStoreUrl automatically!
+        const intentUrl = `intent://share/${targetParam}#Intent;scheme=gradenvy;package=${packageName};S.browser_fallback_url=${encodeURIComponent(playStoreUrl)};end;`;
+        window.location.href = intentUrl;
+      } else if (isIOS) {
+        window.location.href = customSchemeUrl;
+        setTimeout(function () {
+          if (!appOpened) {
+            window.location.href = appStoreUrl;
+          }
+        }, 1800);
+      } else {
+        window.location.href = customSchemeUrl;
+      }
+    }
+
+    // Automatic trigger for mobile visitors
+    if (isAndroid || isIOS) {
+      setTimeout(function () {
         if (!appOpened) {
-          window.location.href = playStoreUrl;
+          if (isAndroid) {
+            const intentUrl = `intent://share/${targetParam}#Intent;scheme=gradenvy;package=${packageName};S.browser_fallback_url=${encodeURIComponent(playStoreUrl)};end;`;
+            window.location.href = intentUrl;
+          } else if (isIOS) {
+            window.location.href = customSchemeUrl;
+            setTimeout(function () {
+              if (!appOpened) {
+                window.location.href = appStoreUrl;
+              }
+            }, 1800);
+          }
         }
-      }, 1500);
-    } else if (isIOS) {
-      // iOS: Try custom scheme, fallback to Store
-      window.location.href = customSchemeUrl;
-      setTimeout(() => {
-        if (!appOpened) {
-          window.location.href = playStoreUrl; // or App Store link when published
+      }, 700);
+
+      setTimeout(function () {
+        const noticeText = document.getElementById('redirect-status-text');
+        if (noticeText) {
+          noticeText.textContent = 'Tap store button above to download';
         }
-      }, 1500);
-    } else {
-      // Desktop: User can click the Google Play button
-      document.getElementById('redirect-status').style.display = 'none';
+      }, 3500);
+    }
+
+    // 5. Copy Link Function with feedback animation
+    function copyShareLink() {
+      const copyBtn = document.getElementById('copy-btn');
+      const copyBtnText = document.getElementById('copy-btn-text');
+      const linkToCopy = window.location.href;
+
+      const setCopiedState = () => {
+        copyBtn.classList.add('copied');
+        copyBtnText.textContent = 'Copied!';
+        showToast('Link copied to clipboard!');
+        setTimeout(() => {
+          copyBtn.classList.remove('copied');
+          copyBtnText.textContent = 'Copy Link';
+        }, 2200);
+      };
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(linkToCopy).then(setCopiedState).catch(() => {
+          fallbackCopy(linkToCopy, setCopiedState);
+        });
+      } else {
+        fallbackCopy(linkToCopy, setCopiedState);
+      }
+    }
+
+    function fallbackCopy(text, callback) {
+      const tempInput = document.createElement('input');
+      tempInput.value = text;
+      document.body.appendChild(tempInput);
+      tempInput.select();
+      document.execCommand('copy');
+      document.body.removeChild(tempInput);
+      callback();
+    }
+
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      const toastSpan = toast.querySelector('span');
+      if (toastSpan) toastSpan.textContent = msg;
+      toast.classList.add('show');
+      setTimeout(function () {
+        toast.classList.remove('show');
+      }, 2200);
     }
   </script>
 </body>
+
 </html>

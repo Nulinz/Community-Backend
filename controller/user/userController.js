@@ -27,7 +27,7 @@ import Location from "../../models/locationModel.js";
 import { saveNotification } from "../../helper/saveNotification.js";
 import { sendAndSaveNotification } from "../../helper/sendAndSaveNotification.js";
 import { awardXP, triggerMissionNotification } from "../../services/xpService.js";
-import { calculateLevelInfo } from "../../config/xpConfig.js";
+import { calculateLevelInfo, XP_ACTIONS } from "../../config/xpConfig.js";
 import User from "../../models/userModel.js";
 import JobSuggested from "../../models/jobSuggestedModel.js"
 import { getCollegeByEventId } from "../../helper/collegeDetails.js";
@@ -156,11 +156,13 @@ const userDashboard = async (req, res) => {
 
     preferredInternshipsData = preferredInternshipsData.slice(0, 3);
 
-    // ── Step 5: Record lastActiveDate & Fetch User XP & Level Details ──
+    // ── Step 5: Record lastActiveDate & Fetch User XP, Level, & Subscription ──
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
 
-    const userDoc = await User.findById(userId).select("xp level lastActiveDate fcm_token");
+    const userDoc = await User.findById(userId).select(
+      "xp level lastActiveDate fcm_token subscription"
+    );
     if (userDoc && (!userDoc.lastActiveDate || new Date(userDoc.lastActiveDate) < startOfToday)) {
       userDoc.lastActiveDate = new Date();
       await User.findByIdAndUpdate(userId, { lastActiveDate: userDoc.lastActiveDate });
@@ -173,6 +175,104 @@ const userDashboard = async (req, res) => {
 
     const levelInfo = calculateLevelInfo(userDoc?.xp || 0);
 
+    // ── Step 6: Check Subscription Expiry & 5-Day Renewal Reminder ──
+    // Evaluates whether the active subscription is within the 5-day expiration window.
+    // End-of-Day Standard: Plan remains active until 23:59:59.999 of its expiry date.
+    const now = new Date();
+    const rawExpiry = userDoc?.subscription?.expiryDate;
+    const expiryDate = rawExpiry ? new Date(rawExpiry) : null;
+
+    // Normalizes expiration threshold to the end of the day (23:59:59.999)
+    const endOfDayExpiry = expiryDate ? new Date(expiryDate) : null;
+    if (endOfDayExpiry) {
+      endOfDayExpiry.setHours(23, 59, 59, 999);
+    }
+
+    const isExpired = endOfDayExpiry ? now > endOfDayExpiry : false;
+
+    // Synchronize DB state if subscription duration has elapsed
+    if (isExpired && userDoc?.subscription?.isPlanActive) {
+      if (userDoc.subscription) userDoc.subscription.isPlanActive = false;
+      await User.findByIdAndUpdate(userId, { "subscription.isPlanActive": false });
+    }
+
+    const isPlanActive = Boolean(userDoc?.subscription?.isPlanActive && !isExpired);
+    const planName = userDoc?.subscription?.planName || "Free";
+
+    let remainingDays = 0;
+    let showReminder = false;
+    let formattedEndDate = null;
+    let reminderMessage = null;
+
+    if (isPlanActive && expiryDate && endOfDayExpiry) {
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const startOfExpiry = new Date(
+        endOfDayExpiry.getFullYear(),
+        endOfDayExpiry.getMonth(),
+        endOfDayExpiry.getDate()
+      );
+      remainingDays = Math.max(
+        0,
+        Math.round((startOfExpiry - startOfToday) / (1000 * 60 * 60 * 24))
+      );
+
+      // Trigger reminder popup only when 5 or fewer days remain
+      showReminder = remainingDays <= 5 && remainingDays >= 0;
+
+      formattedEndDate = expiryDate.toLocaleDateString("en-US", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
+
+      const isSameDay = endOfDayExpiry.toDateString() === now.toDateString();
+
+      if (showReminder) {
+        if (isSameDay || remainingDays === 0) {
+          reminderMessage = `Your ${planName} plan expires today (${formattedEndDate}). Renew now to continue enjoying uninterrupted access!`;
+        } else if (remainingDays === 1) {
+          reminderMessage = `Your ${planName} plan expires tomorrow (${formattedEndDate}). Renew now to continue enjoying uninterrupted access!`;
+        } else {
+          reminderMessage = `Your ${planName} plan will end in ${remainingDays} days on ${formattedEndDate}. Renew now to keep your premium benefits!`;
+        }
+      }
+    }
+
+    // ── Determine newUser (Subscription Status) ─────────────────────
+    // Evaluates whether the user has never subscribed to any plan since registration.
+    // Returns true only if there is no active or past subscription tenure and no paid subscription history.
+    let hasEverSubscribed = Boolean(
+      userDoc?.subscription?.startDate ||
+      userDoc?.subscription?.expiryDate ||
+      (userDoc?.subscription?.planName && userDoc.subscription.planName.toLowerCase() !== "free")
+    );
+
+    if (!hasEverSubscribed) {
+      const paymentExists = await Payment.exists({
+        userId,
+        referenceType: "Subscription",
+        paymentStatus: "Success",
+      });
+      if (paymentExists) {
+        hasEverSubscribed = true;
+      }
+    }
+
+    const newUser = !hasEverSubscribed;
+
+    const subscriptionReminder = {
+      newUser,
+      showReminder,
+      planName,
+      isPlanActive,
+      isExpired,
+      remainingDays: isPlanActive ? remainingDays : 0,
+      expiryDate: endOfDayExpiry
+        ? `${endOfDayExpiry.getFullYear()}-${String(endOfDayExpiry.getMonth() + 1).padStart(2, "0")}-${String(endOfDayExpiry.getDate()).padStart(2, "0")}`
+        : null,
+      message: reminderMessage,
+    };
+
     return res.status(200).json({
       status: true,
       data: {
@@ -183,6 +283,7 @@ const userDashboard = async (req, res) => {
           xpForNextLevel: levelInfo.xpForNextLevel,
           xpNeeded: levelInfo.xpNeeded,
         },
+        subscription: subscriptionReminder,
         popularEvents,
         preferredInternships: preferredInternshipsData,
         topCompanies,
@@ -288,6 +389,12 @@ const getJobs = async (req, res) => {
       ? new mongoose.Types.ObjectId(String(userId))
       : userId;
 
+    // 🔔 Track jobs exploration activity for XP mission and trigger claim notification
+    User.findByIdAndUpdate(userId, { lastJobsViewDate: new Date() }).exec();
+    triggerMissionNotification(userId, "INTERNSHIPS_AND_JOBS").catch((err) =>
+      console.error("Jobs view mission notification error:", err.message)
+    );
+
     const [jobs, savedJobs, appliedJobs] = await Promise.all([
       Job.find({ isActive: true, status: "approved" })
         .sort({ createdAt: -1 })
@@ -362,6 +469,12 @@ const getAllInternships = async (req, res) => {
     const userObjectId = mongoose.Types.ObjectId.isValid(userId)
       ? new mongoose.Types.ObjectId(String(userId))
       : userId;
+
+    // 🔔 Track internships exploration activity for XP mission and trigger claim notification
+    User.findByIdAndUpdate(userId, { lastJobsViewDate: new Date() }).exec();
+    triggerMissionNotification(userId, "INTERNSHIPS_AND_JOBS").catch((err) =>
+      console.error("Internships view mission notification error:", err.message)
+    );
 
     const [internships, savedJobs, appliedJobs] = await Promise.all([
       Internship.find({ isActive: true, status: "approved" })
@@ -3260,17 +3373,22 @@ const getSubscriptionStatus = async (req, res, next) => {
       });
     }
 
-    const isExpired = user.subscription?.expiryDate
-      ? new Date() > new Date(user.subscription.expiryDate)
-      : false;
+    const rawExpiry = user.subscription?.expiryDate;
+    const expiryDate = rawExpiry ? new Date(rawExpiry) : null;
+    const endOfDayExpiry = expiryDate ? new Date(expiryDate) : null;
+    if (endOfDayExpiry) {
+      endOfDayExpiry.setHours(23, 59, 59, 999);
+    }
 
-    // Auto-expire only if an explicit expiryDate was set and has passed
+    const isExpired = endOfDayExpiry ? new Date() > endOfDayExpiry : false;
+
+    // Auto-expire only if an explicit expiryDate was set and end-of-day has passed
     if (isExpired && user.subscription?.isPlanActive) {
       user.subscription.isPlanActive = false;
       await user.save();
     }
 
-    const isPlanActive = Boolean(user.subscription?.isPlanActive);
+    const isPlanActive = Boolean(user.subscription?.isPlanActive && !isExpired);
 
     return res.status(200).json({
       success: true,
@@ -3282,7 +3400,7 @@ const getSubscriptionStatus = async (req, res, next) => {
         planName: user.subscription?.planName || "Free",
         isPlanActive,
         startDate: user.subscription?.startDate || null,
-        expiryDate: user.subscription?.expiryDate || null,
+        expiryDate: endOfDayExpiry ? endOfDayExpiry.toISOString() : null,
       },
     });
   } catch (error) {
@@ -3325,10 +3443,119 @@ const getAllRegisteredUsers = async (req, res, next) => {
   }
 };
 
+/**
+ * Controller endpoint to retrieve the list of users registered using the current user's referral link.
+ * 
+ * Why this exists:
+ * Powers the "Refer & Earn" and "My Referral Network" dashboard screens in mobile and web clients.
+ * Aggregates all user accounts linked via the `referredBy` attribute, summarizes total referral XP
+ * earned from verified registration audit logs, and delivers privacy-conscious user summaries.
+ * 
+ * Architectural & Business Rules:
+ * - Ensures legacy users without a referral code are automatically provisioned with a unique code.
+ * - Masks phone numbers (showing first 5 and last 2 digits) to protect user privacy in referral listings.
+ * - Matches referral XP from XPLog reference IDs to show individual XP earned per referral.
+ * - Formats registration date as clean YYYY-MM-DD string without time components.
+ */
+const getMyReferrals = async (req, res, next) => {
+  try {
+    const userId = req.user?._id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Unauthorized user." });
+    }
+
+    // 1. Fetch current user to obtain or ensure referral code
+    const currentUser = await User.findById(userId).select("name referralCode").lean();
+    let referralCode = currentUser?.referralCode || req.user?.referralCode || null;
+
+    // Self-healing: provision unique referral code for legacy accounts created before referral system
+    if (!referralCode) {
+      const cleanName = (currentUser?.name || req.user?.name || "USER")
+        .replace(/[^a-zA-Z]/g, "")
+        .slice(0, 4)
+        .toUpperCase();
+      const prefix = cleanName.padEnd(4, "GRAD");
+      let isUnique = false;
+
+      while (!isUnique) {
+        const randomDigits = Math.floor(1000 + Math.random() * 9000);
+        referralCode = `${prefix}${randomDigits}`;
+        const existing = await User.exists({ referralCode });
+        if (!existing) {
+          isUnique = true;
+        }
+      }
+
+      await User.findByIdAndUpdate(userId, { $set: { referralCode } });
+    }
+
+    // 2. Fetch all user accounts that registered through this user's referral link
+    const referredUsers = await User.find({ referredBy: userId })
+      .select("name email phone profileImage createdAt xp level subscription is_active")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // 3. Aggregate referral XP from audit logs and map by referred user ID
+    const referralXpLogs = await XPLog.find({
+      userId,
+      action: "REFERRAL",
+    })
+      .select("xpEarned referenceId")
+      .lean();
+
+    const xpByRefId = new Map();
+    let totalReferralXp = 0;
+    for (const log of referralXpLogs) {
+      const earned = log.xpEarned || 0;
+      totalReferralXp += earned;
+      if (log.referenceId) {
+        xpByRefId.set(log.referenceId.toString(), earned);
+      }
+    }
+
+    // Helper to format date strictly as YYYY-MM-DD
+    const formatDateOnly = (d) => {
+      if (!d) return null;
+      const dateObj = new Date(d);
+      if (isNaN(dateObj.getTime())) return null;
+      return `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, "0")}-${String(dateObj.getDate()).padStart(2, "0")}`;
+    };
+
+    // 4. Base referral XP reward per single successful referral
+    const singleReferralXp = XP_ACTIONS?.REFERRAL?.xp || 20;
+
+    // 5. Format clean referral items containing only requested attributes
+    const formattedUsers = referredUsers.map((u) => {
+      return {
+        _id: u._id,
+        name: u.name || "User",
+        phone: u.phone || "",
+        isPro: Boolean(u.subscription?.isPlanActive),
+        createdAt: formatDateOnly(u.createdAt),
+      };
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        referralCode,
+        referralLink: referralCode ? `https://gradenvy.com/referral?ref=${referralCode}` : null,
+        referralXp: singleReferralXp,
+        totalReferrals: formattedUsers.length,
+        totalReferralXp,
+        referrals: formattedUsers,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export {
   userDashboard,
   getSubscriptionStatus,
   getAllRegisteredUsers,
+  getMyReferrals,
   getJobs,
   getAllInternships,
   getAllFreelances,

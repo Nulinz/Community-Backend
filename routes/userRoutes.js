@@ -20,11 +20,12 @@ import {
 
 } from "../controller/userController.js";
 import { isAuthenticated, authorizeRoles } from "../middleware/authMiddleware.js";
-import { forgotOtpVerify, getCurrentUser, loginUser, forgotPassword, registerUser, resendOtp, resetPassword, verifyOtp, logout, changePassword, webLoginUser } from "../controller/user/authController.js"
+import { forgotOtpVerify, getCurrentUser, loginUser, forgotPassword, registerUser, resendOtp, resetPassword, verifyOtp, logout, changePassword, webLoginUser, toggleAccountStatus, deactivateAccount } from "../controller/user/authController.js"
 import {
   userDashboard,
   getSubscriptionStatus,
   getAllRegisteredUsers,
+  getMyReferrals,
   getJobs,
   getAllInternships,
   getAllFreelances,
@@ -91,6 +92,20 @@ router.get("/logout", isAuthenticated, logout)
 router.post("/login", uploader.none(), loginUser)
 // Web login
 router.post("/web-login", uploader.none(), webLoginUser);
+
+/**
+ * Toggle user account status between active and inActive.
+ * Supports:
+ * - Logged-in users via Authorization Bearer token (e.g. self-deactivation from settings).
+ * - Logged-out users via body credentials (phone/email + password) to reactivate.
+ */
+router.post("/toggle-status", uploader.none(), toggleAccountStatus);
+
+/**
+ * Deactivate user account with reason payload.
+ * Requires user to be authenticated (Bearer token).
+ */
+router.post("/deactivate-account", uploader.none(), isAuthenticated, deactivateAccount);
 
 
 // 🔹 VERIFY OTP (after register)
@@ -277,5 +292,14 @@ router.post("/xp/claim", uploader.none(), isAuthenticated, claimMission);
 // Static AI Tools Route
 // ─────────────────────────────────────────────
 router.get("/ai-tools", isAuthenticated, getAiTools);
+
+// ─────────────────────────────────────────────
+// User Referral Network Routes
+// ─────────────────────────────────────────────
+/**
+ * Retrieves the current authenticated user's referred friends/users.
+ * Powers the "Refer & Earn" and "My Referrals" list screen in the frontend/mobile app.
+ */
+router.get("/my-referrals", isAuthenticated, getMyReferrals);
 
 export default router;

@@ -46,16 +46,6 @@ export const loginUser = async (req, res) => {
       });
     }
 
-    // // 🔹 3. Check user active
-    // if (!user.is_active) {
-    //   return res.status(400).json({
-    //     status: false,
-    //     message: "Your Account is deactive",
-    //     pending:(user.register_status==="completed" )? false : true, // 👈 key logic
-    //     register_status:user.register_status
-    //   });
-    // }
-
     // 🔹 4. Compare password
     const isMatch = await user.comparePassword(password);
 
@@ -90,13 +80,24 @@ export const loginUser = async (req, res) => {
       });
     }
 
-    // 🔹 5. Update FCM token (optional)
+    // 🔹 5. Account status validation
+    // Inactive accounts cannot log in until explicitly reactivated via the toggle API.
+    if (!user.is_active) {
+      return res.status(403).json({
+        status: false,
+        message: "Your account is inActive. Please reactivate your account.",
+        data: {
+          accountStatus: "inActive",
+          phone: user.phone,
+        },
+      });
+    }
+
+    // 🔹 6. Update FCM token (optional)
     if (fcm_token) {
       user.fcm_token = fcm_token;
       await user.save();
     }
-
-    // 🔹 6. Check UserDetails exists
 
     // 🔹 7. Generate JWT
     const token = jwt.sign(
@@ -120,6 +121,7 @@ export const loginUser = async (req, res) => {
     return res.status(200).json({
       status: true,
       data: {
+        accountStatus: "active",
         details_comp: (userDetails && user.register_status === "completed") ? true : false, // 👈 key logic
         register_status: user.register_status,
         referralCode: userReferralCode || "",
@@ -130,6 +132,7 @@ export const loginUser = async (req, res) => {
           phone: user.phone,
           email: user.email,
           role: user.role || "user",
+          // accountStatus: "active",
           profile_pic: userDetails?.profile_pic,
           referralCode: userReferralCode || "",
         },
@@ -308,14 +311,10 @@ export const verifyOtp = async (req, res) => {
       console.error("FIRST_REGISTERATION notification error:", err.message)
     );
 
-    // 🔹 Award Referral XP to the referrer if this user registered via a referral link
+    // 🔹 Trigger Referral Claim notification for the referrer so they can claim their 20 XP in Missions
     if (user.referredBy) {
-      awardXP({
-        userId: user.referredBy,
-        actionKey: "REFERRAL",
-        referenceId: user._id.toString(),
-      }).catch((err) =>
-        console.error("REFERRAL awardXP error:", err.message)
+      triggerMissionNotification(user.referredBy, "REFERRAL").catch((err) =>
+        console.error("REFERRAL notification error:", err.message)
       );
     }
 
@@ -621,6 +620,7 @@ export const getCurrentUser = async (req, res) => {
           phone: user.phone,
           email: user.email,
           role: user.role,
+          accountStatus: user.is_active ? "active" : "inActive",
           referralCode: userReferralCode,
           register_status: user.register_status,
           xp: levelInfo.totalXP,
@@ -770,9 +770,17 @@ export const webLoginUser = async (req, res) => {
     if (!isMatch)
       return res.status(400).json({ status: false, message: "Invalid credentials" });
 
-    // 🔹 5. Active check
-    if (user.is_active === false)
-      return res.status(403).json({ status: false, message: "Account deactivated. Contact support." });
+    // 🔹 5. Account status validation
+    // Inactive accounts cannot log in until explicitly reactivated via the toggle API.
+    if (user.is_active === false) {
+      return res.status(403).json({
+        status: false,
+        message: "Your account is inActive. Please reactivate your account.",
+        data: {
+          accountStatus: "inActive",
+        },
+      });
+    }
 
     // 🔹 6. JWT with their auto-detected role
     const token = jwt.sign(
@@ -792,6 +800,7 @@ export const webLoginUser = async (req, res) => {
       status: true,
       message: "Login successfully",
       data: {
+        accountStatus: "active",
         token,
         user: {
           _id: user._id,
@@ -799,6 +808,7 @@ export const webLoginUser = async (req, res) => {
           phone: user.phone,
           email: user.email,
           role: user.role, // Sends the correct role back to React
+          accountStatus: "active",
           profile_pic: userDetails?.profile_pic
         }
       }
@@ -809,4 +819,150 @@ export const webLoginUser = async (req, res) => {
     return res.status(500).json({ status: false, message: "Server error" });
   }
 };
+
+/**
+ * Toggles user account status between active and inActive.
+ * Supports:
+ * 1) Authenticated request via Bearer token (when user is logged in, e.g., from Profile / Settings).
+ * 2) Unauthenticated request via credentials in body (phone/email + password)
+ *    so deactivated users who are logged out can reactivate their account.
+ */
+export const toggleAccountStatus = async (req, res) => {
+  try {
+    let user = null;
+
+    // 1. Check if token was provided in Authorization header
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      try {
+        const token = authHeader.split(" ")[1];
+        if (process.env.JWT_SECRET) {
+          const decoded = jwt.verify(token, process.env.JWT_SECRET);
+          user = await User.findById(decoded.id);
+        }
+      } catch {
+        // Token invalid or expired; proceed to check body credentials
+      }
+    }
+
+    // 2. If not authenticated via token, check credentials from body
+    if (!user) {
+      const { phone, email, password } = req.body;
+      const identifier = phone || email;
+
+      if (!identifier || !password) {
+        return res.status(400).json({
+          status: false,
+          message: "Please provide either an authorization token or credentials (phone/email and password).",
+        });
+      }
+
+      user = await User.findOne({
+        $or: [
+          { phone: identifier.trim() },
+          { email: identifier.toLowerCase().trim() },
+        ],
+      });
+
+      if (!user) {
+        return res.status(404).json({
+          status: false,
+          message: "User not found",
+        });
+      }
+
+      const isMatch = await user.comparePassword(password);
+      if (!isMatch) {
+        return res.status(400).json({
+          status: false,
+          message: "Invalid password",
+        });
+      }
+    }
+
+    // 3. Toggle account active/inactive state
+    user.is_active = !user.is_active;
+
+    // If account was activated, clear deactivation metadata; if deactivated, clear FCM token
+    if (user.is_active) {
+      user.deactivation_reason = null;
+      user.deactivated_at = null;
+    } else {
+      user.fcm_token = null;
+    }
+
+    await user.save();
+
+    const accountStatus = user.is_active ? "active" : "inActive";
+
+    return res.status(200).json({
+      status: true,
+      message: `Account ${user.is_active ? "activated" : "deactivated"} successfully`,
+      data: {
+        accountStatus,
+        userId: user._id,
+      },
+    });
+  } catch (error) {
+    console.error("Toggle account status error:", error);
+    return res.status(500).json({
+      status: false,
+      message: "Server error toggling account status",
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * Deactivates the authenticated user's account with an explicit reason.
+ * Requires { reason } in request body.
+ * Sets is_active = false, records deactivation_reason & deactivated_at timestamp,
+ * and clears fcm_token so push notifications are paused.
+ */
+export const deactivateAccount = async (req, res) => {
+  try {
+    const { reason } = req.body;
+
+    if (!reason || !reason.trim()) {
+      return res.status(400).json({
+        status: false,
+        message: "Deactivation reason is required",
+      });
+    }
+
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({
+        status: false,
+        message: "User not found",
+      });
+    }
+
+    user.is_active = false;
+    user.deactivation_reason = reason.trim();
+    user.deactivated_at = new Date();
+    user.fcm_token = null;
+
+    await user.save();
+
+    return res.status(200).json({
+      status: true,
+      message: "Account deactivated successfully",
+      data: {
+        accountStatus: "inActive",
+        userId: user._id,
+        reason: user.deactivation_reason,
+        deactivatedAt: user.deactivated_at,
+      },
+    });
+  } catch (error) {
+    console.error("Deactivate account error:", error);
+    return res.status(500).json({
+      status: false,
+      message: "Server error deactivating account",
+      error: error.message,
+    });
+  }
+};
+
 

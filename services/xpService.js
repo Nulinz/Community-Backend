@@ -138,6 +138,9 @@ export const awardXP = async ({ userId, actionKey, referenceId = null }) => {
   };
 };
 
+// In-memory set to prevent concurrent race conditions from dashboard and mission calls
+const pendingMissionNotifications = new Set();
+
 /**
  * Triggers an FCM notification and saves a Notification record immediately when
  * a mission action is completed and becomes ready to claim.
@@ -148,8 +151,13 @@ export const awardXP = async ({ userId, actionKey, referenceId = null }) => {
  * @param {string} actionKey - Key from XP_ACTIONS (e.g. "AI_STATION", "DAILY_LOGIN", "ACTIVE_30_MIN", etc.)
  */
 export const triggerMissionNotification = async (userId, actionKey) => {
+  if (!userId || !actionKey) return;
+
+  const lockKey = `${userId.toString()}:${actionKey}`;
+  if (pendingMissionNotifications.has(lockKey)) return;
+  pendingMissionNotifications.add(lockKey);
+
   try {
-    if (!userId || !actionKey) return;
     const config = XP_ACTIONS[actionKey];
     if (!config) return;
 
@@ -159,7 +167,12 @@ export const triggerMissionNotification = async (userId, actionKey) => {
     const isDaily = config.isDaily !== false;
 
     // 1. Check if already claimed in XPLog
-    if (isDaily) {
+    if (config.isRepeatable) {
+      // Repeatable actions (e.g. REFERRAL): allow notifications whenever an unclaimed referral is waiting
+      const referredCount = await User.countDocuments({ referredBy: userId });
+      const claimedCount = await XPLog.countDocuments({ userId, action: actionKey });
+      if (claimedCount >= referredCount) return;
+    } else if (isDaily) {
       const alreadyClaimed = await XPLog.exists({
         userId,
         action: actionKey,
@@ -174,14 +187,24 @@ export const triggerMissionNotification = async (userId, actionKey) => {
       if (alreadyClaimed) return;
     }
 
-    // 2. Check if notification was already sent and delivered via FCM push
-    if (isDaily) {
+    // 2. Check if notification was already created in DB
+    // Deduplication should NOT require metadata.fcm_sent: true, because web users or users without
+    // active FCM tokens will have fcm_sent: false, which previously caused infinite duplicate notifications on refresh.
+    if (config.isRepeatable) {
+      const oneMinuteAgo = new Date(Date.now() - 60 * 1000);
+      const recentlyNotified = await Notification.exists({
+        receiver: userId,
+        type: "Claim XP",
+        "metadata.action": actionKey,
+        createdAt: { $gte: oneMinuteAgo },
+      });
+      if (recentlyNotified) return;
+    } else if (isDaily) {
       const alreadyNotified = await Notification.exists({
         receiver: userId,
         type: "Claim XP",
         "metadata.action": actionKey,
         createdAt: { $gte: startOfToday },
-        "metadata.fcm_sent": true,
       });
       if (alreadyNotified) return;
     } else {
@@ -189,7 +212,6 @@ export const triggerMissionNotification = async (userId, actionKey) => {
         receiver: userId,
         type: "Claim XP",
         "metadata.action": actionKey,
-        "metadata.fcm_sent": true,
       });
       if (alreadyNotified) return;
     }
@@ -210,5 +232,7 @@ export const triggerMissionNotification = async (userId, actionKey) => {
     });
   } catch (error) {
     console.error(`triggerMissionNotification error for ${actionKey}:`, error.message);
+  } finally {
+    pendingMissionNotifications.delete(lockKey);
   }
 };

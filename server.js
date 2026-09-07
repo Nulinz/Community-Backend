@@ -48,7 +48,6 @@ const allowedOrigins = [
   "http://192.168.29.221:5173",
   "http://192.168.29.74:5173",
   "https://icy-tree-067e50e10.7.azurestaticapps.net",
-  "https://gradenvy.com",
   "https://salmon-ocean-053a6b810.6.azurestaticapps.net",
   "https://gradenvy.com",
 ].filter(Boolean);

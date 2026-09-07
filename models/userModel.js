@@ -101,6 +101,17 @@ const userSchema = new mongoose.Schema(
       default: true,
     },
 
+    deactivation_reason: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+
+    deactivated_at: {
+      type: Date,
+      default: null,
+    },
+
     last_login: {
       type: Date,
       default: null,
@@ -130,6 +141,11 @@ const userSchema = new mongoose.Schema(
     },
 
     lastAiStationDate: {
+      type: Date,
+      default: null,
+    },
+
+    lastJobsViewDate: {
       type: Date,
       default: null,
     },

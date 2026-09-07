@@ -106,6 +106,8 @@ export const getMissions = async (req, res, next) => {
       hasSavedJob,
       hasCompletedProfile,
       hasCreatedResume,
+      referredUsers,
+      claimedReferralLogs,
     ] = await Promise.all([
       CompanyFollow.exists({ userId }),
       EventRegistration.exists({ userId }),
@@ -125,13 +127,24 @@ export const getMissions = async (req, res, next) => {
         ],
       }),
       Resume.exists({ userId }),
+      User.find({ referredBy: userId }).select("_id").lean(),
+      XPLog.find({ userId, action: "REFERRAL" }).select("referenceId").lean(),
     ]);
+
+    const claimedReferralSet = new Set(
+      claimedReferralLogs.map((l) => String(l.referenceId)).filter(Boolean)
+    );
+    const totalReferrals = referredUsers.length;
+    const unclaimedReferrals = referredUsers.filter(
+      (u) => !claimedReferralSet.has(String(u._id))
+    ).length;
 
     // Build missions list
     const missionKeys = [
       "DAILY_LOGIN",
       activeTimeMissionKey,
       "AI_STATION",
+      "INTERNSHIPS_AND_JOBS",
       "FIRST_REGISTERATION",
       "COMPLETE_PROFILE",
       "FIRST_RESUME_CREATE",
@@ -141,6 +154,7 @@ export const getMissions = async (req, res, next) => {
       "FIRST_COMPETITION_REGISTRATION",
       "FIRST_FREELANCE_APPLICATION",
       "FIRST_SUBSCRIPTION",
+      "REFERRAL",
     ];
 
     const missions = missionKeys.map((key) => {
@@ -148,19 +162,31 @@ export const getMissions = async (req, res, next) => {
       if (!config) return null;
 
       const isDaily = config.isDaily !== false;
-      const isClaimed = isDaily
+      let isClaimed = isDaily
         ? todayClaimedKeys.has(key)
         : lifetimeClaimedKeys.has(key);
 
       // Compute current numerical progress dynamically based on user activity
       let currentProgress = 0;
+      let targetProgress = config.target;
+      let xpReward = config.xp;
 
-      if (isClaimed) {
+      if (key === "REFERRAL") {
+        currentProgress = totalReferrals;
+        targetProgress = totalReferrals > 0 ? totalReferrals : 1;
+        // Repeatable: claimed only if all registered referrals have been collected
+        isClaimed = totalReferrals > 0 && unclaimedReferrals === 0;
+        if (unclaimedReferrals > 0) {
+          xpReward = unclaimedReferrals * (config.xp || 20);
+        }
+      } else if (isClaimed) {
         currentProgress = config.target;
       } else if (key === "DAILY_LOGIN") {
         currentProgress = user.lastActiveDate && new Date(user.lastActiveDate) >= startOfToday ? 1 : 0;
       } else if (key === "AI_STATION") {
         currentProgress = user.lastAiStationDate && new Date(user.lastAiStationDate) >= startOfToday ? 1 : 0;
+      } else if (key === "INTERNSHIPS_AND_JOBS") {
+        currentProgress = user.lastJobsViewDate ? 1 : 0;
       } else if (key.startsWith("ACTIVE_")) {
         currentProgress = Math.min(dailyMins, config.target);
       } else if (key === "FIRST_REGISTERATION") {
@@ -185,13 +211,20 @@ export const getMissions = async (req, res, next) => {
         currentProgress = 0;
       }
 
-      const progressPercentage = Math.min(
-        100,
-        Math.round((currentProgress / config.target) * 100)
-      );
+      const progressPercentage = key === "REFERRAL"
+        ? (totalReferrals > 0 ? 100 : 0)
+        : Math.min(100, Math.round((currentProgress / targetProgress) * 100));
 
       let status = "IN_PROGRESS";
-      if (isClaimed) {
+      if (key === "REFERRAL") {
+        if (unclaimedReferrals > 0) {
+          status = "READY_TO_CLAIM";
+        } else if (totalReferrals > 0) {
+          status = "CLAIMED";
+        } else {
+          status = "IN_PROGRESS";
+        }
+      } else if (isClaimed) {
         status = "CLAIMED";
       } else if (config.requiredLevel && userLevel < config.requiredLevel) {
         status = "LOCKED";
@@ -202,14 +235,15 @@ export const getMissions = async (req, res, next) => {
       return {
         key,
         title: config.label,
-        xpReward: config.xp,
+        xpReward,
         isDaily,
         unit: config.unit || "count",
         currentProgress,
-        targetProgress: config.target,
+        targetProgress,
         progressPercentage,
         requiredLevel: config.requiredLevel || null,
         status, // "IN_PROGRESS" | "READY_TO_CLAIM" | "CLAIMED" | "LOCKED"
+        unclaimedCount: key === "REFERRAL" ? unclaimedReferrals : undefined,
       };
     }).filter(Boolean);
 
@@ -356,6 +390,53 @@ export const claimMission = async (req, res, next) => {
       if (!isSubscribed) {
         return res.status(400).json({ status: false, message: "First subscription mission not completed yet" });
       }
+    } else if (actionKey === "INTERNSHIPS_AND_JOBS") {
+      const hasViewedJobs = Boolean(user.lastJobsViewDate);
+      if (!hasViewedJobs) {
+        return res.status(400).json({ status: false, message: "Explore Internships & Jobs mission not completed yet" });
+      }
+    } else if (actionKey === "REFERRAL") {
+      const referredUsers = await User.find({ referredBy: userId }).select("_id").lean();
+      if (referredUsers.length === 0) {
+        return res.status(400).json({ status: false, message: "No referrals found to claim" });
+      }
+
+      const claimedLogs = await XPLog.find({ userId, action: "REFERRAL" }).select("referenceId").lean();
+      const claimedSet = new Set(claimedLogs.map((l) => String(l.referenceId)).filter(Boolean));
+
+      const unclaimedUsers = referredUsers.filter((u) => !claimedSet.has(String(u._id)));
+      if (unclaimedUsers.length === 0) {
+        return res.status(400).json({ status: false, message: "All referral rewards have already been claimed" });
+      }
+
+      let totalAwarded = 0;
+      let lastXpResult = null;
+      for (const refUser of unclaimedUsers) {
+        const resXP = await awardXP({
+          userId,
+          actionKey: "REFERRAL",
+          referenceId: refUser._id.toString(),
+        });
+        if (resXP.success) {
+          totalAwarded += (resXP.xpAwarded || 20);
+          lastXpResult = resXP;
+        }
+      }
+
+      if (totalAwarded === 0 || !lastXpResult) {
+        return res.status(400).json({ status: false, message: "Failed to claim referral XP" });
+      }
+
+      return res.status(200).json({
+        status: true,
+        message: `Successfully claimed ${totalAwarded} XP for ${unclaimedUsers.length} referral${unclaimedUsers.length > 1 ? "s" : ""}!`,
+        xpAwarded: totalAwarded,
+        claimedCount: unclaimedUsers.length,
+        totalXP: lastXpResult.totalXP,
+        level: lastXpResult.level,
+        isLevelUp: lastXpResult.isLevelUp,
+        levelInfo: lastXpResult.levelInfo,
+      });
     }
 
     // Award XP using defensive service
