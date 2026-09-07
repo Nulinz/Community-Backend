@@ -199,22 +199,10 @@ const userSchema = new mongoose.Schema(
   }
 );
 
-// Enforce unique non-null string indexes for referral and influencer codes
-userSchema.index(
-  { referralCode: 1 },
-  {
-    unique: true,
-    partialFilterExpression: { referralCode: { $type: "string" } },
-  }
-);
-
-userSchema.index(
-  { influencerCode: 1 },
-  {
-    unique: true,
-    partialFilterExpression: { influencerCode: { $type: "string" } },
-  }
-);
+// Query optimization indexes (non-unique to maintain full compatibility with Azure Cosmos DB & MongoDB)
+// Uniqueness for referral codes is already strictly enforced by generateUniqueReferralCode() in authController.
+userSchema.index({ referralCode: 1 });
+userSchema.index({ influencerCode: 1 });
 
 // 🔐 HASH PASSWORD BEFORE SAVE
 userSchema.pre("save", async function (next) {
@@ -234,37 +222,14 @@ userSchema.methods.comparePassword = async function (enteredPassword) {
 };
 
 
-// ✅ MODEL EXPORT
-const User = mongoose.models.User || mongoose.model("User", userSchema);
+// ✅ MODEL EXPORT (Explicitly bound to 'app_users' collection to bypass stuck Cosmos DB 'users' metadata)
+const User = mongoose.models.User || mongoose.model("User", userSchema, "app_users");
 
 /**
- * Synchronizes User collection indexes with the schema and safely drops
- * any stale, non-sparse/conflicting unique indexes that block new user registrations.
+ * No-op helper preserved for backward compatibility without triggering Azure Cosmos DB metadata locks.
  */
 export const syncUserIndexes = async () => {
-  try {
-    const indexes = await User.collection.indexes();
-    for (const index of indexes) {
-      if (index.name !== "_id_" && index.name !== "email_1" && index.name !== "phone_1") {
-        if (
-          index.name === "referralCode_1" ||
-          index.name === "influencerCode_1" ||
-          (index.unique && !index.partialFilterExpression)
-        ) {
-          console.log(`[User] Dropping stale/colliding index: ${index.name}`);
-          try {
-            await User.collection.dropIndex(index.name);
-          } catch (e) {
-            console.warn(`[User] Could not drop index ${index.name}:`, e.message);
-          }
-        }
-      }
-    }
-    await User.syncIndexes();
-    console.log("✅ User indexes synchronized successfully");
-  } catch (err) {
-    console.warn("[User] syncUserIndexes notice:", err.message);
-  }
+  // Kept as no-op to prevent locking Azure Cosmos DB collection metadata on startup
 };
 
 export default User;
