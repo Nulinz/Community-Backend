@@ -242,7 +242,7 @@ export const registerUser = async (req, res) => {
   } catch (error) {
     console.error(error);
     if (error.code === 11000) {
-      const field = Object.keys(error.keyPattern)[0];
+      const field = Object.keys(error.keyPattern || error.keyValue || {})[0] || "User detail";
       return res.status(400).json({
         status: false,
         message: `${field} already exists`,
