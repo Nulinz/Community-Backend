@@ -159,18 +159,22 @@ export const registerUser = async (req, res) => {
         message: "All fields are required",
       });
     }
+    const cleanEmail = email.toLowerCase().trim();
+    const cleanPhone = phone.trim();
+
     // 🔹 Check existing (single query)
     const existingUser = await User.findOne({
-      $or: [{ email }, { phone }],
+      $or: [{ email: cleanEmail }, { phone: cleanPhone }],
     });
 
     if (existingUser) {
-      if (existingUser.email === email) {
+      if (existingUser.email === cleanEmail) {
         return res.status(400).json({ status: false, message: "Email Id already exists" });
       }
-      if (existingUser.phone === phone) {
+      if (existingUser.phone === cleanPhone) {
         return res.status(400).json({ status: false, message: "Mobile Number already exists" });
       }
+      return res.status(400).json({ status: false, message: "User with this email or phone already exists" });
     }
 
     // 🔹 Generate 4-digit OTP
@@ -210,22 +214,30 @@ export const registerUser = async (req, res) => {
       }
     }
 
-    // 🔹 Create user
-    const user = await User.create({
-      name,
-      email,
-      phone,
+    // 🔹 Prepare user document without null/undefined optional fields to avoid index collisions
+    const userData = {
+      name: name.trim(),
+      email: cleanEmail,
+      phone: cleanPhone,
       password,
-      referralCode,
-      referredBy,
-      influencerId,
       otp,
       otp_expire,
-      fcm_token,
-    });
+    };
+
+    if (referralCode && typeof referralCode === "string" && referralCode.trim()) {
+      userData.referralCode = referralCode.trim().toUpperCase();
+    }
+    if (referredBy) userData.referredBy = referredBy;
+    if (influencerId) userData.influencerId = influencerId;
+    if (fcm_token) userData.fcm_token = fcm_token;
+    if (req.body.device_type) userData.device_type = req.body.device_type;
+
+    // 🔹 Create user
+    const user = await User.create(userData);
+
     await otpService.sendOtp(
-      phone,
-      name,
+      cleanPhone,
+      name.trim(),
       otp
     );
     return res.status(200).json({
@@ -240,18 +252,38 @@ export const registerUser = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error(error);
+    console.error("Registration error:", error);
     if (error.code === 11000) {
-      const field = Object.keys(error.keyPattern || error.keyValue || {})[0] || "User detail";
+      // Extract the colliding field name across MongoDB Driver v6 errorResponse, Mongoose, and error.message
+      const keyPatternObj =
+        error.errorResponse?.keyPattern ||
+        error.keyPattern ||
+        error.errorResponse?.keyValue ||
+        error.keyValue;
+
+      let field = keyPatternObj ? Object.keys(keyPatternObj)[0] : null;
+
+      if (!field && error.message) {
+        const match = error.message.match(/index:\s+([^\s]+)/);
+        if (match && match[1]) {
+          field = match[1].replace(/_1$/, "");
+        }
+      }
+
+      const duplicateField = field || "User detail";
+
       return res.status(400).json({
         status: false,
-        message: `${field} already exists`,
+        message: `${duplicateField} already exists`,
+        field: duplicateField,
+        error: error.message,
       });
     }
 
     return res.status(500).json({
       status: false,
       message: "Server error",
+      error: error.message,
     });
   }
 };
