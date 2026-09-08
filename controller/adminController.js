@@ -363,14 +363,19 @@ export const createInfluencer = async (req, res, next) => {
 };
 
 /**
- * Admin gets list of all registered influencers
+ * Admin retrieves the list of all registered influencers.
+ * Note on query design: In-memory sorting by createdAt descending is used
+ * rather than database-level .sort() to ensure seamless compatibility with
+ * Azure Cosmos DB (MongoDB API), which rejects unindexed compound OrderBy queries.
  */
 export const getAllInfluencers = async (req, res, next) => {
   try {
     const influencers = await User.find({ role: "influencer" })
       .select("name email phone influencerCode profileImage instagram youtube linkedin twitter createdAt is_active")
-      .sort({ createdAt: -1 })
       .lean();
+
+    // Reverse-chronological sort in memory
+    influencers.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 
     return res.status(200).json({
       success: true,

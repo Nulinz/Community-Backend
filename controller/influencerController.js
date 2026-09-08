@@ -25,8 +25,10 @@ export const getInfluencerDashboard = async (req, res, next) => {
 
     const registeredUsers = await User.find(query)
       .select("name profileImage createdAt is_active xp level")
-      .sort({ createdAt: -1 })
       .lean();
+
+    // In-memory reverse-chronological sort for Cosmos DB compatibility
+    registeredUsers.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 
     const activeUsersCount = registeredUsers.filter((u) => u.is_active !== false).length;
     const totalXpEarned = registeredUsers.reduce((sum, u) => sum + (u.xp || 0), 0);
@@ -87,8 +89,10 @@ export const getInfluencerReferrals = async (req, res, next) => {
     // Explicitly exclude sensitive fields for user privacy
     const registeredUsers = await User.find(query)
       .select("name profileImage createdAt is_active xp level")
-      .sort({ createdAt: -1 })
       .lean();
+
+    // In-memory reverse-chronological sort for Cosmos DB compatibility
+    registeredUsers.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 
     return res.status(200).json({
       success: true,
@@ -171,8 +175,14 @@ export const getInfluencerSubscribedUsers = async (req, res, next) => {
 
     const subscribedUsers = await User.find(query)
       .select("name profileImage subscription createdAt is_active xp level")
-      .sort({ "subscription.startDate": -1, createdAt: -1 })
       .lean();
+
+    // In-memory sort by subscription start date (or creation date) descending
+    subscribedUsers.sort((a, b) => {
+      const dateA = new Date(a.subscription?.startDate || a.createdAt || 0);
+      const dateB = new Date(b.subscription?.startDate || b.createdAt || 0);
+      return dateB - dateA;
+    });
 
     const formattedData = subscribedUsers.map((u) => ({
       ...u,

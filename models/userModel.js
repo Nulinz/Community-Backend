@@ -203,6 +203,8 @@ const userSchema = new mongoose.Schema(
 // Uniqueness for referral codes is already strictly enforced by generateUniqueReferralCode() in authController.
 userSchema.index({ referralCode: 1 });
 userSchema.index({ influencerCode: 1 });
+userSchema.index({ role: 1, createdAt: -1 });
+userSchema.index({ createdAt: -1 });
 
 // 🔐 HASH PASSWORD BEFORE SAVE
 userSchema.pre("save", async function (next) {

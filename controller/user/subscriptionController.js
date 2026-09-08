@@ -199,7 +199,14 @@ export const getActiveSubscribedUsers = async (req, res, next) => {
 
     const users = await User.find(query)
       .select("name email phone subscription createdAt")
-      .sort({ "subscription.startDate": -1 });
+      .lean();
+
+    // In-memory sort by subscription start date descending for Cosmos DB compatibility
+    users.sort((a, b) => {
+      const dateA = new Date(a.subscription?.startDate || a.createdAt || 0);
+      const dateB = new Date(b.subscription?.startDate || b.createdAt || 0);
+      return dateB - dateA;
+    });
 
     const userIds = users.map((u) => u._id);
 

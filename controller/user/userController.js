@@ -3431,7 +3431,10 @@ const getAllRegisteredUsers = async (req, res, next) => {
       .select(
         "name email phone role register_status is_active is_pending level xp subscription createdAt updatedAt"
       )
-      .sort({ createdAt: -1 });
+      .lean();
+
+    // In-memory reverse-chronological sort for Cosmos DB compatibility
+    users.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 
     return res.status(200).json({
       success: true,
@@ -3492,8 +3495,10 @@ const getMyReferrals = async (req, res, next) => {
     // 2. Fetch all user accounts that registered through this user's referral link
     const referredUsers = await User.find({ referredBy: userId })
       .select("name email phone profileImage createdAt xp level subscription is_active")
-      .sort({ createdAt: -1 })
       .lean();
+
+    // In-memory reverse-chronological sort for Cosmos DB compatibility
+    referredUsers.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 
     // 3. Aggregate referral XP from audit logs and map by referred user ID
     const referralXpLogs = await XPLog.find({
