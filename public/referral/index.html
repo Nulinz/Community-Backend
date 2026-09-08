@@ -780,7 +780,7 @@
     // 1. Extract referral code from URL query parameter or path segment
     function getReferralCode() {
       const urlParams = new URLSearchParams(window.location.search);
-      let ref = urlParams.get('referral_id') || urlParams.get('ref') || urlParams.get('code');
+      let ref = urlParams.get('referral_id') || urlParams.get('ref') || urlParams.get('code') || urlParams.get('influencerCode') || urlParams.get('influencer_code');
       
       if (!ref) {
         const segments = window.location.pathname.split('/').filter(Boolean);

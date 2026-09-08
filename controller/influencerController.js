@@ -39,8 +39,10 @@ export const getInfluencerDashboard = async (req, res, next) => {
         ? "100%"
         : "0%";
 
-    const appDownloadBaseUrl = process.env.APP_DOWNLOAD_URL || "https://community.nulinz.com/download";
-    const referralLink = `${appDownloadBaseUrl}?influencerCode=${influencer.influencerCode || ""}`;
+    const referralBaseUrl = process.env.REFERRAL_BASE_URL || "https://gradenvy.com/referral";
+    const referralLink = influencer.influencerCode
+      ? `${referralBaseUrl}?ref=${influencer.influencerCode}`
+      : `${referralBaseUrl}`;
 
     return res.status(200).json({
       success: true,
@@ -125,8 +127,10 @@ export const getInfluencerProfile = async (req, res, next) => {
 
     const totalReferredCount = await User.countDocuments(query);
 
-    const appDownloadBaseUrl = process.env.APP_DOWNLOAD_URL || "https://community.nulinz.com/download";
-    const referralLink = `${appDownloadBaseUrl}?influencerCode=${influencer.influencerCode || ""}`;
+    const referralBaseUrl = process.env.REFERRAL_BASE_URL || "https://gradenvy.com/referral";
+    const referralLink = influencer.influencerCode
+      ? `${referralBaseUrl}?ref=${influencer.influencerCode}`
+      : `${referralBaseUrl}`;
 
     return res.status(200).json({
       success: true,

@@ -187,8 +187,13 @@ export const registerUser = async (req, res) => {
     const targetRole = req.body.role || "user";
     const referralCode = targetRole === "user" ? await generateUniqueReferralCode(name) : null;
 
-    // 🔹 Process Influencer attribution code if supplied
+    // 🔹 Process Referral & Influencer Attribution
+    // Resolves attribution from shared links (e.g. gradenvy.com/referral?ref=CODE).
+    // Prioritizes regular peer-to-peer referral code; if unmatched and no influencer
+    // has been bound yet, looks up an active influencer with matching influencerCode.
     let influencerId = null;
+    let referredBy = null;
+
     if (req.body.influencerCode && typeof req.body.influencerCode === "string") {
       const influencer = await User.findOne({
         influencerCode: req.body.influencerCode.trim().toUpperCase(),
@@ -199,9 +204,7 @@ export const registerUser = async (req, res) => {
       }
     }
 
-    // 🔹 Process Referral attribution code if supplied (User-to-User referral link)
-    let referredBy = null;
-    const incomingReferralCode = req.body.referralCode || req.body.ref;
+    const incomingReferralCode = req.body.referralCode || req.body.ref || req.body.referral_id;
     if (incomingReferralCode && typeof incomingReferralCode === "string") {
       const cleanReferralCode = incomingReferralCode.trim().toUpperCase();
       const referrer = await User.findOne({
@@ -211,6 +214,15 @@ export const registerUser = async (req, res) => {
       // Guard against self-referral
       if (referrer && referrer.email !== email && referrer.phone !== phone) {
         referredBy = referrer._id;
+      } else if (!influencerId) {
+        // If the code does not belong to a standard peer, check if it belongs to an influencer
+        const influencer = await User.findOne({
+          influencerCode: cleanReferralCode,
+          role: "influencer",
+        });
+        if (influencer && influencer.email !== email && influencer.phone !== phone) {
+          influencerId = influencer._id;
+        }
       }
     }
 
