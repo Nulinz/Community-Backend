@@ -71,6 +71,7 @@ const competitionSchema = new mongoose.Schema(
     industryExposure: { type: String },
     industryExposureDetails: { type: String, trim: true },
     industryPartners: { type: String },
+    industryPartnersDetails: { type: String, trim: true },
     certificateAvailability: { type: String, trim: true, default: "No" },
     signatoryName: { type: String, trim: true, default: "" },
     signatoryDesignation: { type: String, trim: true, default: "" },
@@ -114,7 +115,7 @@ const competitionSchema = new mongoose.Schema(
     teamSizeMaximum: { type: Number },
 
     // Rules & Description
-    ruleBook: { type: String, required: true },
+    ruleBook: { type: String },
     additionalRules: { type: String, trim: true },
     description: { type: String, trim: true },
 

@@ -7,7 +7,8 @@
             "namespace": "android_app",
             "package_name": "com.grad.envy",
             "sha256_cert_fingerprints": [
-                "8E:D2:33:3C:5C:C5:9D:59:FE:2C:F4:6F:58:79:A0:F6:65:26:34:BC:D1:FC:99:62:05:2A:F1:74:BA:C1:30:C0"
+                "8E:D2:33:3C:5C:C5:9D:59:FE:2C:F4:6F:58:79:A0:F6:65:26:34:BC:D1:FC:99:62:05:2A:F1:74:BA:C1:30:C0",
+                "6D:04:3B:D3:D2:6C:A1:23:95:29:72:9D:0F:02:7C:2B:83:98:CA:49:72:C9:5E:71:A0:31:E1:70:CB:7F:6B:E2"
             ]
         }
     }

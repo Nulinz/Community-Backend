@@ -35,6 +35,7 @@ const cleanupUploadedFiles = (fileArray = []) => {
 export const createCompetitionForm = async (req, res, next) => {
     let oldCoverImagePath = null;
     let oldRuleBookPath = null;
+    let oldSignatureUrlPath = null;
 
     try {
         const { id, _id, ...rest } = req.body;
@@ -54,9 +55,13 @@ export const createCompetitionForm = async (req, res, next) => {
             teamFees,
             lateFees,
             internshipOpportunity,
+            internshipOpportunityDetails,
             placementOpportunity,
+            placementOpportunityDetails,
             industryExposure,
+            industryExposureDetails,
             industryPartners,
+            industryPartnersDetails,
             prizesAvailable,
             firstPrize,
             secondPrize,
@@ -120,18 +125,12 @@ export const createCompetitionForm = async (req, res, next) => {
         if (!isUpdate && !coverImageFile) {
             throw Object.assign(new Error("Cover Image is required"), { status: 400 });
         }
-        if (!isUpdate && !ruleBookFile) {
-            throw Object.assign(new Error("Rule Book is required"), { status: 400 });
-        }
 
         const coverImagePath = coverImageFile ? getUploadedFilePath(coverImageFile) : undefined;
         const ruleBookPath = ruleBookFile ? getUploadedFilePath(ruleBookFile) : undefined;
         const signatureUrlPath = signatureUrlFile ? getUploadedFilePath(signatureUrlFile) : undefined;
 
         let competition;
-        let oldCoverImagePath;
-        let oldRuleBookPath;
-        let oldSignatureUrlPath;
 
         if (isUpdate) {
             competition = await Competition.findById(targetId);
