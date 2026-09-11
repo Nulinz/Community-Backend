@@ -17,6 +17,7 @@ const internshipSchema = new mongoose.Schema(
 },
     internshipType: { type: String, required: true },
     jobTitle: { type: String, required: true, trim: true },
+    domain: { type: String, trim: true },
     organizer: { type: String, required: true, trim: true },
     companyName: { type: String, required: true, trim: true },
     location: { type: String, required: true, trim: true },

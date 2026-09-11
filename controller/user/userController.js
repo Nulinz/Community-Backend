@@ -67,7 +67,7 @@ const userDashboard = async (req, res) => {
         .populate({
           path: "jobId",
           select:
-            "jobTitle location c_by companyName duration salary eligibility createdAt isActive mode internshipType description applicationDeadline skill_set totalOpenings",
+            "jobTitle domain location c_by companyName duration salary eligibility createdAt isActive mode internshipType description applicationDeadline skill_set totalOpenings",
           populate: { path: "c_by", select: "role" },
         })
         .sort({ createdAt: -1 }),
@@ -398,7 +398,7 @@ const getJobs = async (req, res) => {
     const [jobs, savedJobs, appliedJobs] = await Promise.all([
       Job.find({ isActive: true, status: "approved" })
         .sort({ createdAt: -1 })
-        .select("jobTitle jobType location companyName duration salary createdAt mode totalOpenings c_by")
+        .select("jobTitle domain jobType location companyName duration salary createdAt mode totalOpenings c_by")
         .populate("c_by", "role"),
       SavedJob.find({
         $or: [{ userId: userObjectId }, { userId: String(userId) }],
@@ -479,7 +479,7 @@ const getAllInternships = async (req, res) => {
     const [internships, savedJobs, appliedJobs] = await Promise.all([
       Internship.find({ isActive: true, status: "approved" })
         .sort({ createdAt: -1 })
-        .select("jobTitle location companyName duration salary eligibility createdAt c_by")
+        .select("jobTitle domain location companyName duration salary eligibility createdAt c_by")
         .populate("c_by", "role"),
       SavedJob.find({
         $or: [{ userId: userObjectId }, { userId: String(userId) }],
@@ -542,6 +542,11 @@ const getAllInternships = async (req, res) => {
     });
   }
 };
+/**
+ * Retrieves all approved active freelance opportunities for the user feed.
+ * Opportunities remain visible regardless of application status, matching
+ * the behavior of jobs and internships, with dynamic is_applied and is_saved flags.
+ */
 const getAllFreelances = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -549,38 +554,35 @@ const getAllFreelances = async (req, res) => {
       ? new mongoose.Types.ObjectId(String(userId))
       : userId;
 
-    // ── Step 1: Get applied job IDs and saved job IDs ─────────────
-    const [appliedJobs, savedJobs] = await Promise.all([
-      AppliedJob.find({
+    // Concurrently fetch active freelances and user interaction states (saved and applied)
+    const [freelances, savedJobs, appliedJobs] = await Promise.all([
+      Freelance.find({
+        isActive: true,
+        status: "approved",
+      })
+        .sort({ createdAt: -1 })
+        .select(
+          "domain eligibility description companyName jobTitle projectType budget budgetType jobStartDate jobEndDate totalOpenings mode salary createdAt c_by"
+        )
+        .populate("c_by", "role"),
+      SavedJob.find({
         $or: [{ userId: userObjectId }, { userId: String(userId) }],
       })
         .select("jobId")
         .lean(),
-      SavedJob.find({
+      AppliedJob.find({
         $or: [{ userId: userObjectId }, { userId: String(userId) }],
       })
         .select("jobId")
         .lean(),
     ]);
 
-    const appliedIds = appliedJobs.map(
-      (a) => new mongoose.Types.ObjectId(a.jobId)
-    );
     const savedSet = new Set(savedJobs.map((s) => String(s.jobId)));
-
-    // ── Step 2: Fetch freelances (exclude applied) ─────────────
-    const freelances = await Freelance.find({
-      _id: { $nin: appliedIds },
-      isActive: true,
-      status: "approved"
-    })
-      .sort({ createdAt: -1 })
-      .select("eligibility description companyName jobTitle projectType budget budgetType jobStartDate jobEndDate totalOpenings mode salary createdAt c_by")
-      .populate("c_by", "role");
+    const appliedSet = new Set(appliedJobs.map((a) => String(a.jobId)));
 
     const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
 
-    // ── Step 3: Enrich ─────────────
+    // Enrich freelance items with company branding and user status indicators
     const data = await Promise.all(
       freelances.map(async (item) => {
         const obj = item.toObject();
@@ -600,6 +602,7 @@ const getAllFreelances = async (req, res) => {
         }
 
         const isSaved = savedSet.has(String(item._id));
+        const isApplied = appliedSet.has(String(item._id));
 
         return {
           ...obj,
@@ -607,9 +610,9 @@ const getAllFreelances = async (req, res) => {
           is_saved: isSaved,
           isSaved: isSaved,
           saved: isSaved,
-          is_applied: false,
-          isApplied: false,
-          applied: false,
+          is_applied: isApplied,
+          isApplied: isApplied,
+          applied: isApplied,
         };
       })
     );
@@ -748,7 +751,7 @@ const getSavedJobs = async (req, res) => {
         path: "jobId",
         match: { isActive: true },
         select:
-          "jobTitle jobType location c_by companyName duration salary createdAt jobStartDate jobEndDate totalOpenings mode eligibility",
+          "jobTitle domain jobType location c_by companyName duration salary createdAt jobStartDate jobEndDate totalOpenings mode eligibility",
         populate: {
           path: "c_by",
           select: "role",
@@ -855,7 +858,7 @@ const getSavedFreelances = async (req, res) => {
         path: "jobId",
         match: { isActive: true },
         select:
-          "jobTitle location c_by companyName duration salary createdAt jobStartDate jobEndDate totalOpenings mode projectType budget budgetType",
+          "jobTitle domain location c_by companyName duration salary createdAt jobStartDate jobEndDate totalOpenings mode projectType budget budgetType",
         populate: {
           path: "c_by",
           select: "role",
@@ -1004,7 +1007,7 @@ const getAppliedJobs = async (req, res) => {
         path: "jobId",
         match: { isActive: true },
         select:
-          "jobTitle location c_by companyName duration salary createdAt jobStartDate jobEndDate totalOpenings mode",
+          "jobTitle domain location c_by companyName duration salary createdAt jobStartDate jobEndDate totalOpenings mode",
         populate: {
           path: "c_by",
           select: "role",
@@ -1079,7 +1082,7 @@ const getAppliedFreelances = async (req, res) => {
         path: "jobId",
         match: { isActive: true },
         select:
-          "jobTitle location c_by companyName duration salary createdAt jobStartDate jobEndDate totalOpenings mode projectType budget budgetType",
+          "jobTitle domain location c_by companyName duration salary createdAt jobStartDate jobEndDate totalOpenings mode projectType budget budgetType",
         populate: {
           path: "c_by",
           select: "role",
@@ -2659,13 +2662,13 @@ const getCompanyProfile = async (req, res) => {
       // ✅ Internships posted by this company
       Internship.find({ isActive: true, c_by: companyUserId })
         .sort({ createdAt: -1 })
-        .select("jobTitle totalOpenings mode description c_by location  companyName duration salary eligibility createdAt")
+        .select("jobTitle domain totalOpenings mode description c_by location companyName duration salary eligibility createdAt")
         .populate("c_by", "role"),
 
       // ✅ Freelance jobs posted by this company
       Freelance.find({ isActive: true, c_by: companyUserId })
         .sort({ createdAt: -1 })
-        .select("jobTitle totalOpenings mode description c_by location companyName duration salary eligibility createdAt")
+        .select("jobTitle domain totalOpenings mode description c_by location companyName duration salary eligibility createdAt")
         .populate("c_by", "role"),
     ]);
 

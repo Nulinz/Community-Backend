@@ -21,6 +21,7 @@ const freelanceSchema = new mongoose.Schema(
   enum: ["pending", "approved", "rejected"],
   default: "pending"
 },
+    domain: { type: String, trim: true },
     jobTitle: { type: String, required: true, trim: true },
     companyName: { type: String, required: true, trim: true },
     mode: { type: String, default: "Online" },

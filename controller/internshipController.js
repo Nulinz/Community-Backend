@@ -21,6 +21,7 @@ export const createInternshipForm = async (req, res, next) => {
         const {
             internshipType,
             jobTitle,
+            domain,
             organizer,
             companyName,
             location,
@@ -71,6 +72,7 @@ internship.status=status
         // Update fields
         internship.internshipType = toCleanString(internshipType);
         internship.jobTitle = toCleanString(jobTitle);
+        internship.domain = toCleanString(domain);
         internship.organizer = resolvedOrganizer;
         internship.companyName = resolvedOrganizer;
         internship.location = toCleanString(location) || (cleanMode === "Remote" || cleanMode === "Online" ? "Remote" : "");

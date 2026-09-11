@@ -28,6 +28,7 @@ export const createFreelanceForm = async (req, res, next) => {
     const isUpdate = !!targetId;
     const status = req?.user?.role === "admin" ? "approved" : "pending"
     const {
+      domain,
       jobTitle,
       companyName,
       projectType,
@@ -88,6 +89,7 @@ export const createFreelanceForm = async (req, res, next) => {
     }
     freelance.status = status
     // Update fields
+    freelance.domain = toCleanString(domain);
     freelance.jobTitle = toCleanString(jobTitle);
     freelance.companyName = toCleanString(companyName);
     freelance.projectType = toCleanString(projectType) || "Small Project";

@@ -16,6 +16,7 @@ export const createJobForm = async (req, res, next) => {
     const status = req?.user?.role === "admin" ? "approved" : "pending";
     const {
       jobCategory,
+      domain,
       jobType,
       jobTitle,
       organizer,
@@ -69,6 +70,7 @@ export const createJobForm = async (req, res, next) => {
 
     job.status = status;
     job.jobCategory = toCleanString(jobCategory);
+    job.domain = toCleanString(domain);
     job.jobType = toCleanString(jobType || "Job");
     job.jobTitle = toCleanString(jobTitle);
     job.organizer = resolvedOrganizer;
