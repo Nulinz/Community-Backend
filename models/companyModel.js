@@ -8,9 +8,9 @@ const companySchema = new mongoose.Schema(
       required: true,
       index: true,
     },
-    is_admin_company:{
-     type:Boolean,
-     default:false 
+    is_admin_company: {
+      type: Boolean,
+      default: false
     },
     userId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -19,40 +19,40 @@ const companySchema = new mongoose.Schema(
       index: true,
     },
     accountHolderName: {
-  type: String,
-  default: "",
-  trim: true,
-},
+      type: String,
+      default: "",
+      trim: true,
+    },
 
-bankName: {
-  type: String,
-  default: "",
-  trim: true,
-},
+    bankName: {
+      type: String,
+      default: "",
+      trim: true,
+    },
 
-branchName: {
-  type: String,
-  default: "",
-  trim: true,
-},
+    branchName: {
+      type: String,
+      default: "",
+      trim: true,
+    },
 
-accountNumber: {
-  type: String,
-  default: "",
-  trim: true,
-},
+    accountNumber: {
+      type: String,
+      default: "",
+      trim: true,
+    },
 
-ifscCode: {
-  type: String,
-  default: "",
-  trim: true,
-},
+    ifscCode: {
+      type: String,
+      default: "",
+      trim: true,
+    },
 
-verificationStatus: {
-  type: String,
-  default: "Pending",
-  trim: true,
-},
+    verificationStatus: {
+      type: String,
+      default: "Pending",
+      trim: true,
+    },
 
 
     companyName: {
@@ -70,14 +70,18 @@ verificationStatus: {
       default: "",
       trim: true,
     },
+    domains: {
+      type: [String],
+      default: [],
+    },
     companyTagLine: {
       type: String,
       default: "",
       trim: true,
     },
     companyCultureTags: {
-     type: [String],
-    default: [],
+      type: [String],
+      default: [],
     },
     yearFounded: {
       type: String,
@@ -94,7 +98,7 @@ verificationStatus: {
       default: "",
       trim: true,
     },
-    
+
     companyLogo: {
       type: String,
       // required: true,
@@ -189,7 +193,7 @@ verificationStatus: {
       type: mongoose.Schema.Types.Mixed,
       default: null,
     },
-     isActive: {
+    isActive: {
       type: Boolean,
       default: true,
       index: true,

@@ -30,6 +30,8 @@ export const XP_ACTIONS = {
   FIRST_COMPETITION_REGISTRATION: { xp: 15, label: "Join your first Envy League competition", isDaily: false, target: 1, unit: "count" },
   INTERNSHIPS_AND_JOBS: { xp: 10, label: "Explore Internships & Jobs", isDaily: false, target: 1, unit: "count" },
   REFERRAL: { xp: 20, label: "Referred a Friend", isDaily: false, target: 1, unit: "count", isRepeatable: true },
+  FOLLOW_INSTAGRAM: { xp: 20, label: "Follow GradEnvy on Instagram", isDaily: false, target: 1, unit: "count" },
+  FOLLOW_YOUTUBE: { xp: 20, label: "Subscribe to GradEnvy on YouTube", isDaily: false, target: 1, unit: "count" },
 };
 
 /**

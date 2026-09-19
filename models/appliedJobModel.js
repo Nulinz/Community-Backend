@@ -32,7 +32,12 @@ const appliedJobSchema = new mongoose.Schema(
       type: String,
       enum: ["applied", "selected", "rejected"],
       default: "applied",
-    }
+    },
+    portfolio: {
+      type: String,
+      trim: true,
+      default: null,
+    },
   },
   { timestamps: true }
 );

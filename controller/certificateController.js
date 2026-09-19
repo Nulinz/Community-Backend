@@ -55,7 +55,7 @@ export const generateCertificate = async (req, res, next) => {
       itemId,
     } = req.body;
 
-    const internshipDomain = domain || course;
+    const internshipDomain = domain || (Array.isArray(domains) ? domains.join(", ") : (typeof domains === "string" ? domains : "")) || course;
     let company = companyName || "Nulinz Community";
 
     if (!name || !internshipDomain) {

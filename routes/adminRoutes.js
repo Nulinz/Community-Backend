@@ -3,6 +3,11 @@ import express from "express";
 import { isAuthenticated } from "../middleware/authMiddleware.js";
 import fileUploader from "../middleware/fileUploader.js";
 import { adminDashBoard, updateEventStatus, updateJobStatus, createInfluencer, getAllInfluencers, setInfluencerPassword, getInfluencerById, toggleInfluencerStatus } from "../controller/adminController.js";
+import {
+  triggerNotificationDispatch,
+  triggerApplicationViewedDispatch,
+  getNotificationAudienceStats,
+} from "../controller/adminNotificationController.js";
 
 const router = express.Router();
 
@@ -24,5 +29,10 @@ router.patch("/event/status",isAuthenticated, updateEventStatus);
 
 // Jobs
 router.patch("/job/status",isAuthenticated, updateJobStatus);
+
+// Notification Dispatch Hub
+router.get("/notifications/preview-counts", isAuthenticated, getNotificationAudienceStats);
+router.post("/notifications/dispatch", isAuthenticated, triggerNotificationDispatch);
+router.post("/notifications/dispatch-application-viewed", isAuthenticated, triggerApplicationViewedDispatch);
 
 export default router;

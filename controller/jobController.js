@@ -4,6 +4,8 @@ import AppliedJob from "../models/appliedJobModel.js";
 import Attendance from "../models/attendanceModel.js";
 import UserDetails from "../models/userDetails.js";
 import PerformanceEvaluation from "../models/performanceEvaluationModel.js";
+import Company from "../models/companyModel.js";
+import User from "../models/userModel.js";
 
 const toCleanString = (value) =>
   typeof value === "string" ? value.trim() : "";
@@ -17,6 +19,7 @@ export const createJobForm = async (req, res, next) => {
     const {
       jobCategory,
       domain,
+      domains,
       jobType,
       jobTitle,
       organizer,
@@ -68,9 +71,11 @@ export const createJobForm = async (req, res, next) => {
 
     const cleanSalaryType = toCleanString(salaryType) || "Fixed amount";
 
+    const resolvedDomains = parseArray(domains || domain);
+
     job.status = status;
     job.jobCategory = toCleanString(jobCategory);
-    job.domain = toCleanString(domain);
+    job.domains = resolvedDomains;
     job.jobType = toCleanString(jobType || "Job");
     job.jobTitle = toCleanString(jobTitle);
     job.organizer = resolvedOrganizer;
@@ -105,11 +110,16 @@ export const createJobForm = async (req, res, next) => {
     job.development_resources = parseArray(development_resources);
 
     const savedJob = await job.save();
+    const jobObj = savedJob.toObject();
+    delete jobObj.domain;
+    jobObj.domains = Array.isArray(jobObj.domains) && jobObj.domains.length
+      ? jobObj.domains
+      : resolvedDomains;
 
     return res.status(isUpdate ? 200 : 201).json({
       status: true,
       message: isUpdate ? "Job updated successfully" : "Job created successfully",
-      data: savedJob,
+      data: jobObj,
     });
   } catch (error) {
     next(error);
@@ -150,7 +160,9 @@ export const getAllJobs = async (req, res, next) => {
           jobId: item._id,
           jobType: "Job",
         });
-        return { ...item, appliedCount };
+        const { domain, ...itemRest } = item;
+        const itemDomains = Array.isArray(itemRest.domains) && itemRest.domains.length ? itemRest.domains : (domain ? domain.split(",").map(s => s.trim()).filter(Boolean) : []);
+        return { ...itemRest, domains: itemDomains, appliedCount };
       })
     );
 
@@ -212,6 +224,7 @@ export const getJobById = async (req, res, next) => {
           appliedAt: app.createdAt,
           location: app.location,
           status: app.status || "applied",
+          portfolio: app.portfolio || null,
           profile_pic: userDetails?.profile_pic || null,
           gender: userDetails?.gender || "",
           currentStatus: userDetails?.currentStatus || "",
@@ -227,13 +240,53 @@ export const getJobById = async (req, res, next) => {
       })
     );
 
+    // Resolve company logo from company profile or admin
+    let companyLogo = null;
+    if (job.c_by) {
+      const company = await Company.findOne({
+        $or: [{ userId: job.c_by }, { c_by: job.c_by }],
+      })
+        .select("companyLogo")
+        .lean();
+      if (company?.companyLogo) {
+        companyLogo = company.companyLogo;
+      }
+    }
+    if (!companyLogo && job.companyName) {
+      const companyByName = await Company.findOne({
+        companyName: new RegExp(`^${job.companyName.trim()}$`, "i"),
+      })
+        .select("companyLogo")
+        .lean();
+      if (companyByName?.companyLogo) {
+        companyLogo = companyByName.companyLogo;
+      }
+    }
+    if (!companyLogo && job.c_by) {
+      const creator = await User.findById(job.c_by).select("role").lean();
+      if (creator?.role === "admin") {
+        companyLogo = "uploads/Nulinz LOGO 3.png";
+      }
+    }
+
+    const { domain, ...jobRest } = job;
+    const itemDomains = Array.isArray(jobRest.domains) && jobRest.domains.length ? jobRest.domains : (domain ? domain.split(",").map(s => s.trim()).filter(Boolean) : []);
+    const enrichedJob = {
+      ...jobRest,
+      domains: itemDomains,
+      companyLogo: companyLogo || "",
+      companyImage: companyLogo || "",
+    };
+
     return res.status(200).json({
       success: true,
       status: true,
       message: "Job fetched successfully",
       data: {
-        internship: job,
-        job,
+        internship: enrichedJob,
+        job: enrichedJob,
+        companyLogo: companyLogo || "",
+        companyImage: companyLogo || "",
         applications: {
           count: appliedList.length,
           list: appliedList,
@@ -257,10 +310,17 @@ export const toggleJobStatus = async (req, res, next) => {
     job.isActive = !job.isActive;
     await job.save();
 
+    const jobObj = job.toObject();
+    const resolvedDomains = Array.isArray(jobObj.domains) && jobObj.domains.length
+      ? jobObj.domains
+      : (jobObj.domain ? jobObj.domain.split(",").map((s) => s.trim()).filter(Boolean) : []);
+    delete jobObj.domain;
+    jobObj.domains = resolvedDomains;
+
     return res.status(200).json({
       status: true,
       message: `Job status updated to ${job.isActive ? "Active" : "Inactive"}`,
-      data: job,
+      data: jobObj,
     });
   } catch (error) {
     next(error);

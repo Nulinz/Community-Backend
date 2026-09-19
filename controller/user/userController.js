@@ -67,7 +67,7 @@ const userDashboard = async (req, res) => {
         .populate({
           path: "jobId",
           select:
-            "jobTitle domain location c_by companyName duration salary eligibility createdAt isActive mode internshipType description applicationDeadline skill_set totalOpenings",
+            "jobTitle domain domains location c_by companyName duration salary paymentAmount eligibility createdAt isActive mode internshipType description applicationDeadline skill_set totalOpenings",
           populate: { path: "c_by", select: "role" },
         })
         .sort({ createdAt: -1 }),
@@ -106,8 +106,11 @@ const userDashboard = async (req, res) => {
             companyImage = company?.companyLogo || null;
           }
 
+          const { domain, ...jobRest } = job.toObject();
+          const itemDomains = Array.isArray(jobRest.domains) && jobRest.domains.length ? jobRest.domains : (domain ? domain.split(",").map(s => s.trim()).filter(Boolean) : []);
           return {
-            ...job.toObject(),
+            ...jobRest,
+            domains: itemDomains,
             companyImage,
             is_applied: false,                                      // guaranteed not applied
             is_saved: await checkIsSaved(userId, job._id, "Internship"),
@@ -145,8 +148,11 @@ const userDashboard = async (req, res) => {
           companyImage = company?.companyLogo || null;
         }
 
+        const { domain, ...fallbackRest } = jobItem.toObject();
+        const itemDomains = Array.isArray(fallbackRest.domains) && fallbackRest.domains.length ? fallbackRest.domains : (domain ? domain.split(",").map(s => s.trim()).filter(Boolean) : []);
         preferredInternshipsData.push({
-          ...jobItem.toObject(),
+          ...fallbackRest,
+          domains: itemDomains,
           companyImage,
           is_applied: false,
           is_saved: await checkIsSaved(userId, jobItem._id, "Internship"),
@@ -398,7 +404,7 @@ const getJobs = async (req, res) => {
     const [jobs, savedJobs, appliedJobs] = await Promise.all([
       Job.find({ isActive: true, status: "approved" })
         .sort({ createdAt: -1 })
-        .select("jobTitle domain jobType location companyName duration salary createdAt mode totalOpenings c_by")
+        .select("jobTitle domain domains jobType location companyName duration salary createdAt mode totalOpenings c_by")
         .populate("c_by", "role"),
       SavedJob.find({
         $or: [{ userId: userObjectId }, { userId: String(userId) }],
@@ -419,7 +425,8 @@ const getJobs = async (req, res) => {
 
     const data = await Promise.all(
       jobs.map(async (item) => {
-        const obj = item.toObject();
+        const { domain, ...restObj } = item.toObject();
+        const itemDomains = Array.isArray(restObj.domains) && restObj.domains.length ? restObj.domains : (domain ? domain.split(",").map(s => s.trim()).filter(Boolean) : []);
         let companyImage = null;
         if (item.c_by?.role === "admin") {
           companyImage = STATIC_ADMIN_IMAGE;
@@ -437,7 +444,8 @@ const getJobs = async (req, res) => {
         const isApplied = appliedSet.has(String(item._id));
 
         return {
-          ...obj,
+          ...restObj,
+          domains: itemDomains,
           companyImage,
           is_saved: isSaved,
           // isSaved: isSaved,
@@ -479,7 +487,7 @@ const getAllInternships = async (req, res) => {
     const [internships, savedJobs, appliedJobs] = await Promise.all([
       Internship.find({ isActive: true, status: "approved" })
         .sort({ createdAt: -1 })
-        .select("jobTitle domain location companyName duration salary eligibility createdAt c_by")
+        .select("jobTitle domain domains location companyName duration salary paymentAmount internshipType eligibility createdAt c_by")
         .populate("c_by", "role"),
       SavedJob.find({
         $or: [{ userId: userObjectId }, { userId: String(userId) }],
@@ -500,7 +508,8 @@ const getAllInternships = async (req, res) => {
 
     const data = await Promise.all(
       internships.map(async (item) => {
-        const obj = item.toObject();
+        const { domain, ...restObj } = item.toObject();
+        const itemDomains = Array.isArray(restObj.domains) && restObj.domains.length ? restObj.domains : (domain ? domain.split(",").map(s => s.trim()).filter(Boolean) : []);
         let companyImage = null;
         if (item.c_by?.role === "admin") {
           companyImage = STATIC_ADMIN_IMAGE;
@@ -516,7 +525,8 @@ const getAllInternships = async (req, res) => {
         const isApplied = appliedSet.has(String(item._id));
 
         return {
-          ...obj,
+          ...restObj,
+          domains: itemDomains,
           companyImage,
           is_saved: isSaved,
           isSaved: isSaved,
@@ -562,7 +572,7 @@ const getAllFreelances = async (req, res) => {
       })
         .sort({ createdAt: -1 })
         .select(
-          "domain eligibility description companyName jobTitle projectType budget budgetType jobStartDate jobEndDate totalOpenings mode salary createdAt c_by"
+          "domain domains eligibility description companyName jobTitle projectType budget budgetType jobStartDate jobEndDate totalOpenings mode salary createdAt c_by"
         )
         .populate("c_by", "role"),
       SavedJob.find({
@@ -580,42 +590,80 @@ const getAllFreelances = async (req, res) => {
     const savedSet = new Set(savedJobs.map((s) => String(s.jobId)));
     const appliedSet = new Set(appliedJobs.map((a) => String(a.jobId)));
 
-    const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
+    const STATIC_ADMIN_IMAGE = "public/referral/assets/gradenvyLogo.png";
 
-    // Enrich freelance items with company branding and user status indicators
-    const data = await Promise.all(
-      freelances.map(async (item) => {
-        const obj = item.toObject();
+    // ── Batch lookup company logos to maximize performance and avoid N+1 queries ──
+    const creatorUserIds = freelances
+      .map((item) => item.c_by?._id)
+      .filter(Boolean);
+    const companyNames = freelances
+      .map((item) => item.companyName?.trim())
+      .filter(Boolean);
 
-        let companyImage = null;
-
-        if (item.c_by?.role === "admin") {
-          companyImage = STATIC_ADMIN_IMAGE;
-        } else if (item.c_by?.role === "company") {
-          const company = await Company.findOne({
-            userId: item.c_by._id,
+    const [companiesByCreator, companiesByName] = await Promise.all([
+      creatorUserIds.length > 0
+        ? Company.find({
+            $or: [{ userId: { $in: creatorUserIds } }, { c_by: { $in: creatorUserIds } }],
           })
-            .select("companyLogo")
-            .lean();
+            .select("userId c_by companyLogo companyName")
+            .lean()
+        : [],
+      companyNames.length > 0
+        ? Company.find({
+            companyName: { $in: companyNames.map((n) => new RegExp(`^${n}$`, "i")) },
+          })
+            .select("companyLogo companyName")
+            .lean()
+        : [],
+    ]);
 
-          companyImage = company?.companyLogo || null;
-        }
+    const companyByCreatorMap = new Map();
+    companiesByCreator.forEach((c) => {
+      if (c.companyLogo) {
+        if (c.userId) companyByCreatorMap.set(String(c.userId), c.companyLogo);
+        if (c.c_by) companyByCreatorMap.set(String(c.c_by), c.companyLogo);
+      }
+    });
 
-        const isSaved = savedSet.has(String(item._id));
-        const isApplied = appliedSet.has(String(item._id));
+    const companyByNameMap = new Map();
+    companiesByName.forEach((c) => {
+      if (c.companyLogo && c.companyName) {
+        companyByNameMap.set(c.companyName.toLowerCase().trim(), c.companyLogo);
+      }
+    });
 
-        return {
-          ...obj,
-          companyImage,
-          is_saved: isSaved,
-          isSaved: isSaved,
-          saved: isSaved,
-          is_applied: isApplied,
-          isApplied: isApplied,
-          applied: isApplied,
-        };
-      })
-    );
+    // Enrich freelance items with company logo and interaction states
+    const data = freelances.map((item) => {
+      const { domain, ...restObj } = item.toObject();
+      const itemDomains = Array.isArray(restObj.domains) && restObj.domains.length
+        ? restObj.domains
+        : (domain ? domain.split(",").map((s) => s.trim()).filter(Boolean) : []);
+
+      const creatorIdStr = item.c_by?._id ? String(item.c_by._id) : null;
+      const normalizedName = item.companyName ? item.companyName.toLowerCase().trim() : null;
+
+      // Resolve logo: first by company creator ID, then by matching companyName, then fallback to admin static logo if admin
+      const resolvedLogo =
+        (creatorIdStr && companyByCreatorMap.get(creatorIdStr)) ||
+        (normalizedName && companyByNameMap.get(normalizedName)) ||
+        (item.c_by?.role === "admin" ? STATIC_ADMIN_IMAGE : null) ||
+        null;
+
+      const isSaved = savedSet.has(String(item._id));
+      const isApplied = appliedSet.has(String(item._id));
+
+      return {
+        ...restObj,
+        domains: itemDomains,
+        companyImage: resolvedLogo,
+        is_saved: isSaved,
+        isSaved: isSaved,
+        saved: isSaved,
+        is_applied: isApplied,
+        isApplied: isApplied,
+        applied: isApplied,
+      };
+    });
 
     return res.status(200).json({
       status: true,
@@ -751,7 +799,7 @@ const getSavedJobs = async (req, res) => {
         path: "jobId",
         match: { isActive: true },
         select:
-          "jobTitle domain jobType location c_by companyName duration salary createdAt jobStartDate jobEndDate totalOpenings mode eligibility",
+          "jobTitle domain domains jobType location c_by companyName duration salary createdAt jobStartDate jobEndDate totalOpenings mode eligibility",
         populate: {
           path: "c_by",
           select: "role",
@@ -783,7 +831,9 @@ const getSavedJobs = async (req, res) => {
           companyImage = company?.companyLogo || null;
         }
 
-        const jobObj = job.toObject();
+        const { domain, ...rawJobObj } = job.toObject();
+        const itemDomains = Array.isArray(rawJobObj.domains) && rawJobObj.domains.length ? rawJobObj.domains : (domain ? domain.split(",").map(s => s.trim()).filter(Boolean) : []);
+        const jobObj = { ...rawJobObj, domains: itemDomains };
         // Use actual jobType from Job (e.g. "Full Time") or fallback to "Internship"
         const actualJobType = jobObj.jobType || (item.jobType === "Internship" ? "Internship" : "Full Time");
 
@@ -858,7 +908,7 @@ const getSavedFreelances = async (req, res) => {
         path: "jobId",
         match: { isActive: true },
         select:
-          "jobTitle domain location c_by companyName duration salary createdAt jobStartDate jobEndDate totalOpenings mode projectType budget budgetType",
+          "jobTitle domain domains location c_by companyName duration salary createdAt jobStartDate jobEndDate totalOpenings mode projectType budget budgetType",
         populate: {
           path: "c_by",
           select: "role",
@@ -891,10 +941,14 @@ const getSavedFreelances = async (req, res) => {
             companyImage = company?.companyLogo || null;
           }
 
+          const { domain, ...rawFreelanceObj } = freelance.toObject();
+          const itemDomains = Array.isArray(rawFreelanceObj.domains) && rawFreelanceObj.domains.length ? rawFreelanceObj.domains : (domain ? domain.split(",").map(s => s.trim()).filter(Boolean) : []);
+          const freelanceObj = { ...rawFreelanceObj, domains: itemDomains };
+
           return {
             ...item.toObject(),
             jobId: {
-              ...freelance.toObject(),
+              ...freelanceObj,
               companyImage,
               is_saved: true,
               is_applied: await checkIsApplied(userId, freelance._id),
@@ -921,7 +975,7 @@ const getSavedFreelances = async (req, res) => {
 const applyJob = async (req, res) => {
   try {
     const userId = req.user._id;
-    const { jobId, jobType, resumeId } = req.body;
+    const { jobId, jobType, resumeId, portfolio } = req.body;
 
     // Validate required fields
     if (!jobId || !jobType) {
@@ -971,6 +1025,7 @@ const applyJob = async (req, res) => {
       jobId,
       jobType,
       resumeId,
+      portfolio: typeof portfolio === "string" ? portfolio.trim() : null,
       c_by: job.c_by,
     });
 
@@ -1007,7 +1062,7 @@ const getAppliedJobs = async (req, res) => {
         path: "jobId",
         match: { isActive: true },
         select:
-          "jobTitle domain location c_by companyName duration salary createdAt jobStartDate jobEndDate totalOpenings mode",
+          "jobTitle domain domains location c_by companyName duration salary createdAt jobStartDate jobEndDate totalOpenings mode",
         populate: {
           path: "c_by",
           select: "role",
@@ -1038,10 +1093,14 @@ const getAppliedJobs = async (req, res) => {
             companyImage = company?.companyLogo || null;
           }
 
+          const { domain, ...rawJobObj } = job.toObject();
+          const itemDomains = Array.isArray(rawJobObj.domains) && rawJobObj.domains.length ? rawJobObj.domains : (domain ? domain.split(",").map(s => s.trim()).filter(Boolean) : []);
+
           return {
             ...item.toObject(),
             jobId: {
-              ...job.toObject(),
+              ...rawJobObj,
+              domains: itemDomains,
               companyImage,
               is_applied: true,
               is_saved: await checkIsSaved(userId, job._id, item.jobType),
@@ -1082,7 +1141,7 @@ const getAppliedFreelances = async (req, res) => {
         path: "jobId",
         match: { isActive: true },
         select:
-          "jobTitle domain location c_by companyName duration salary createdAt jobStartDate jobEndDate totalOpenings mode projectType budget budgetType",
+          "jobTitle domain domains location c_by companyName duration salary createdAt jobStartDate jobEndDate totalOpenings mode projectType budget budgetType",
         populate: {
           path: "c_by",
           select: "role",
@@ -1113,10 +1172,14 @@ const getAppliedFreelances = async (req, res) => {
             companyImage = company?.companyLogo || null;
           }
 
+          const { domain, ...rawFreelanceObj } = freelance.toObject();
+          const itemDomains = Array.isArray(rawFreelanceObj.domains) && rawFreelanceObj.domains.length ? rawFreelanceObj.domains : (domain ? domain.split(",").map(s => s.trim()).filter(Boolean) : []);
+
           return {
             ...item.toObject(),
             jobId: {
-              ...freelance.toObject(),
+              ...rawFreelanceObj,
+              domains: itemDomains,
               companyImage,
               is_applied: true,
               is_saved: await checkIsSaved(userId, freelance._id, "Freelance"),
@@ -1300,11 +1363,15 @@ const getJobProfile = async (req, res) => {
       }),
     ]);
 
+    const { domain, ...rawJobObj } = job.toObject();
+    const itemDomains = Array.isArray(rawJobObj.domains) && rawJobObj.domains.length ? rawJobObj.domains : (domain ? domain.split(",").map(s => s.trim()).filter(Boolean) : []);
+
     return res.status(200).json({
       status: true,
       jobType,
       data: {
-        ...job.toObject(),
+        ...rawJobObj,
+        domains: itemDomains,
 
         // ✅ attach company info
         company: companyDetails,
@@ -2662,13 +2729,13 @@ const getCompanyProfile = async (req, res) => {
       // ✅ Internships posted by this company
       Internship.find({ isActive: true, c_by: companyUserId })
         .sort({ createdAt: -1 })
-        .select("jobTitle domain totalOpenings mode description c_by location companyName duration salary eligibility createdAt")
+        .select("jobTitle domain domains totalOpenings mode description c_by location companyName duration salary paymentAmount internshipType eligibility createdAt")
         .populate("c_by", "role"),
 
       // ✅ Freelance jobs posted by this company
       Freelance.find({ isActive: true, c_by: companyUserId })
         .sort({ createdAt: -1 })
-        .select("jobTitle domain totalOpenings mode description c_by location companyName duration salary eligibility createdAt")
+        .select("jobTitle domain domains totalOpenings mode description c_by location companyName duration salary eligibility createdAt")
         .populate("c_by", "role"),
     ]);
 
@@ -2677,7 +2744,8 @@ const getCompanyProfile = async (req, res) => {
     // ── Enrich internships ──────────────────────────────────────
     const internships = await Promise.all(
       internshipsRaw.map(async (item) => {
-        const obj = item.toObject();
+        const { domain, ...rawObj } = item.toObject();
+        const itemDomains = Array.isArray(rawObj.domains) && rawObj.domains.length ? rawObj.domains : (domain ? domain.split(",").map(s => s.trim()).filter(Boolean) : []);
 
         let companyImage = null;
         if (item.c_by?.role === "admin") {
@@ -2690,7 +2758,8 @@ const getCompanyProfile = async (req, res) => {
         }
 
         return {
-          ...obj,
+          ...rawObj,
+          domains: itemDomains,
           companyImage,
           is_saved: await checkIsSaved(userId, item._id, "Internship"),
           is_applied: await checkIsApplied(userId, item._id),
@@ -2701,7 +2770,8 @@ const getCompanyProfile = async (req, res) => {
     // ── Enrich freelance jobs ───────────────────────────────────
     const freelances = await Promise.all(
       freelancesRaw.map(async (item) => {
-        const obj = item.toObject();
+        const { domain, ...rawObj } = item.toObject();
+        const itemDomains = Array.isArray(rawObj.domains) && rawObj.domains.length ? rawObj.domains : (domain ? domain.split(",").map(s => s.trim()).filter(Boolean) : []);
 
         let companyImage = null;
         if (item.c_by?.role === "admin") {
@@ -2714,7 +2784,8 @@ const getCompanyProfile = async (req, res) => {
         }
 
         return {
-          ...obj,
+          ...rawObj,
+          domains: itemDomains,
           companyImage,
           is_saved: await checkIsSaved(userId, item._id, "Freelance"),
           is_applied: await checkIsApplied(userId, item._id),

@@ -234,9 +234,8 @@ export const getActiveSubscribedUsers = async (req, res, next) => {
     });
 
     // Calculate plan duration, remaining days, and amount for each user
-    const formattedUsers = users.map((userDoc) => {
-      const user = userDoc.toObject();
-      const sub = user.subscription || {};
+    const formattedUsers = users.map((user) => {
+      const sub = user?.subscription || {};
 
       let durationDays = 0;
       let remainingDays = 0;

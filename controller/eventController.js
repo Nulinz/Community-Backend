@@ -4,6 +4,7 @@ import path from "path";
 import mongoose from "mongoose";
 import EventRegistration from "../models/eventRegistrationModel.js";
 import { getEventFinancials } from "../helper/getEventFinancials.js";
+import { validateOrganizerPayout } from "../helper/payoutValidator.js";
 
 const toCleanString = (value) =>
     typeof value === "string" ? value.trim() : "";
@@ -102,6 +103,13 @@ export const createEventForm = async (req, res, next) => {
         if (!mode) throw Object.assign(new Error("Mode is required"), { status: 400 });
         if (!eventDate) throw Object.assign(new Error("Event Date is required"), { status: 400 });
         if (!registrationType) throw Object.assign(new Error("Registration Type is required"), { status: 400 });
+
+        if (toCleanString(registrationType).toLowerCase() === "paid") {
+            const payoutCheck = await validateOrganizerPayout(req.user);
+            if (!payoutCheck.hasPayout) {
+                throw Object.assign(new Error(payoutCheck.message), { status: 400 });
+            }
+        }
 
         const coverImageFile = req.files?.coverImage?.[0];
         const signatureUrlFile = req.files?.signatureUrl?.[0];

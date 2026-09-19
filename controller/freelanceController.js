@@ -2,6 +2,8 @@ import Freelance from "../models/freelanceModel.js";
 import AppliedJob from "../models/appliedJobModel.js";
 import UserDetails from "../models/userDetails.js";
 import { notifyJobAudience } from "../helper/jobNotification.js";
+import Company from "../models/companyModel.js";
+import User from "../models/userModel.js";
 
 const toCleanString = (value) =>
   typeof value === "string" ? value.trim() : "";
@@ -29,6 +31,7 @@ export const createFreelanceForm = async (req, res, next) => {
     const status = req?.user?.role === "admin" ? "approved" : "pending"
     const {
       domain,
+      domains,
       jobTitle,
       companyName,
       projectType,
@@ -87,9 +90,10 @@ export const createFreelanceForm = async (req, res, next) => {
       freelance = new Freelance({ c_by: req.user._id });
       freelance.status = status
     }
-    freelance.status = status
+    const resolvedDomains = parseArray(domains || domain);
+
     // Update fields
-    freelance.domain = toCleanString(domain);
+    freelance.domains = resolvedDomains;
     freelance.jobTitle = toCleanString(jobTitle);
     freelance.companyName = toCleanString(companyName);
     freelance.projectType = toCleanString(projectType) || "Small Project";
@@ -125,16 +129,17 @@ export const createFreelanceForm = async (req, res, next) => {
     freelance.payment_structure = parseArray(payment_structure);
     freelance.supporting_files = parseArray(supporting_files);
     freelance.eligibility_criteria = parseArray(eligibility_criteria);
-    await freelance.save();
-    // if(!isUpdate){
-    //           notifyJobAudience(freelance, req.user._id, isUpdate, "Freelance").catch((e) =>
-    //     console.error("Freelance notification error:", e.message)
-    //   );
-    // }
+    const savedFreelance = await freelance.save();
+    const freelanceObj = savedFreelance.toObject();
+    delete freelanceObj.domain;
+    freelanceObj.domains = Array.isArray(freelanceObj.domains) && freelanceObj.domains.length
+      ? freelanceObj.domains
+      : resolvedDomains;
+
     res.status(isUpdate ? 200 : 201).json({
       success: true,
       message: `Freelance ${isUpdate ? "updated" : "created"} successfully`,
-      data: freelance,
+      data: freelanceObj,
     });
 
   } catch (error) {
@@ -173,7 +178,9 @@ export const getAllFreelances = async (req, res, next) => {
           jobId: item._id,
           jobType: "Freelance",
         });
-        return { ...item, appliedCount };
+        const { domain, ...itemRest } = item;
+        const itemDomains = Array.isArray(itemRest.domains) && itemRest.domains.length ? itemRest.domains : (domain ? domain.split(",").map(s => s.trim()).filter(Boolean) : []);
+        return { ...itemRest, domains: itemDomains, appliedCount };
       })
     );
 
@@ -233,6 +240,8 @@ export const getFreelanceById = async (req, res, next) => {
           contact: app.userId?.phone || "",
           appliedAt: app.createdAt,
           location: app.location,
+          status: app.status || "applied",
+          portfolio: app.portfolio || null,
           // UserDetails
           profile_pic: userDetails?.profile_pic || null,
           gender: userDetails?.gender || "",
@@ -249,10 +258,50 @@ export const getFreelanceById = async (req, res, next) => {
       })
     );
 
+    // Resolve company logo from company profile or admin
+    let companyLogo = null;
+    if (freelance.c_by) {
+      const company = await Company.findOne({
+        $or: [{ userId: freelance.c_by }, { c_by: freelance.c_by }],
+      })
+        .select("companyLogo")
+        .lean();
+      if (company?.companyLogo) {
+        companyLogo = company.companyLogo;
+      }
+    }
+    if (!companyLogo && freelance.companyName) {
+      const companyByName = await Company.findOne({
+        companyName: new RegExp(`^${freelance.companyName.trim()}$`, "i"),
+      })
+        .select("companyLogo")
+        .lean();
+      if (companyByName?.companyLogo) {
+        companyLogo = companyByName.companyLogo;
+      }
+    }
+    if (!companyLogo && freelance.c_by) {
+      const creator = await User.findById(freelance.c_by).select("role").lean();
+      if (creator?.role === "admin") {
+        companyLogo = "uploads/Nulinz LOGO 3.png";
+      }
+    }
+
+    const { domain, ...freelanceRest } = freelance;
+    const itemDomains = Array.isArray(freelanceRest.domains) && freelanceRest.domains.length ? freelanceRest.domains : (domain ? domain.split(",").map(s => s.trim()).filter(Boolean) : []);
+    const enrichedFreelance = {
+      ...freelanceRest,
+      domains: itemDomains,
+      companyLogo: companyLogo || "",
+      companyImage: companyLogo || "",
+    };
+
     return res.status(200).json({
       success: true,
       data: {
-        freelance,
+        freelance: enrichedFreelance,
+        companyLogo: companyLogo || "",
+        companyImage: companyLogo || "",
         applications: {
           count: appliedList.length,
           list: appliedList,
@@ -279,10 +328,17 @@ export const toggleFreelanceStatus = async (req, res, next) => {
     freelance.isActive = !freelance.isActive;
     await freelance.save();
 
+    const freelanceObj = freelance.toObject();
+    const resolvedDomains = Array.isArray(freelanceObj.domains) && freelanceObj.domains.length
+      ? freelanceObj.domains
+      : (freelanceObj.domain ? freelanceObj.domain.split(",").map((s) => s.trim()).filter(Boolean) : []);
+    delete freelanceObj.domain;
+    freelanceObj.domains = resolvedDomains;
+
     res.status(200).json({
       success: true,
       message: `Freelance ${freelance.isActive ? "activated" : "deactivated"} successfully`,
-      data: freelance,
+      data: freelanceObj,
     });
   } catch (error) {
     next(error);

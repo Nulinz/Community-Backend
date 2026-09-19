@@ -1,6 +1,8 @@
-import User from "../../models/userModel.js"
+import User from "../../models/userModel.js";
 import jwt from "jsonwebtoken";
 import UserDetails from "../../models/userDetails.js";
+import Company from "../../models/companyModel.js";
+import College from "../../models/collegeModel.js";
 import otpService from "../../config/sendSMS.js";
 import { awardXP, triggerMissionNotification } from "../../services/xpService.js";
 import { calculateLevelInfo } from "../../config/xpConfig.js";
@@ -651,6 +653,25 @@ export const getCurrentUser = async (req, res) => {
       }
     }
 
+    let companyLogo = null;
+    let companyName = null;
+    let collegeLogo = null;
+    let collegeName = null;
+
+    if (user.role === "company") {
+      const comp = await Company.findOne({ userId: user._id }).select("companyLogo companyName");
+      if (comp) {
+        companyLogo = comp.companyLogo || null;
+        companyName = comp.companyName || null;
+      }
+    } else if (user.role === "college") {
+      const col = await College.findOne({ userId: user._id }).select("collegeLogo collegeName");
+      if (col) {
+        collegeLogo = col.collegeLogo || null;
+        collegeName = col.collegeName || null;
+      }
+    }
+
     const levelInfo = calculateLevelInfo(user.xp || 0);
 
     return res.status(200).json({
@@ -660,10 +681,14 @@ export const getCurrentUser = async (req, res) => {
         details_comp,
         user: {
           _id: user._id,
-          name: user.name,
+          name: companyName || collegeName || user.name,
           phone: user.phone,
           email: user.email,
           role: user.role,
+          companyLogo,
+          collegeLogo,
+          companyName,
+          collegeName,
           accountStatus: user.is_active ? "active" : "inActive",
           referralCode: userReferralCode,
           register_status: user.register_status,
@@ -840,6 +865,25 @@ export const webLoginUser = async (req, res) => {
 
     const userDetails = await UserDetails.findOne({ userId: user._id });
 
+    let companyLogo = null;
+    let companyName = null;
+    let collegeLogo = null;
+    let collegeName = null;
+
+    if (user.role === "company") {
+      const comp = await Company.findOne({ userId: user._id }).select("companyLogo companyName");
+      if (comp) {
+        companyLogo = comp.companyLogo || null;
+        companyName = comp.companyName || null;
+      }
+    } else if (user.role === "college") {
+      const col = await College.findOne({ userId: user._id }).select("collegeLogo collegeName");
+      if (col) {
+        collegeLogo = col.collegeLogo || null;
+        collegeName = col.collegeName || null;
+      }
+    }
+
     return res.status(200).json({
       status: true,
       message: "Login successfully",
@@ -848,10 +892,14 @@ export const webLoginUser = async (req, res) => {
         token,
         user: {
           _id: user._id,
-          name: user.name,
+          name: companyName || collegeName || user.name,
           phone: user.phone,
           email: user.email,
           role: user.role, // Sends the correct role back to React
+          companyLogo,
+          collegeLogo,
+          companyName,
+          collegeName,
           accountStatus: "active",
           profile_pic: userDetails?.profile_pic
         }

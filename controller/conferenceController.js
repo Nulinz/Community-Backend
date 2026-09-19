@@ -4,6 +4,7 @@ import path from "path";
 import mongoose from "mongoose";
 import EventRegistration from "../models/eventRegistrationModel.js";
 import { getEventFinancials } from "../helper/getEventFinancials.js";
+import { validateOrganizerPayout } from "../helper/payoutValidator.js";
 const toCleanString = (value) =>
     typeof value === "string" ? value.trim() : "";
 
@@ -99,6 +100,13 @@ export const createConferenceForm = async (req, res, next) => {
         if (!mode) throw Object.assign(new Error("Mode is required"), { status: 400 });
         if (!eventDate) throw Object.assign(new Error("Event Date is required"), { status: 400 });
         if (!registrationType) throw Object.assign(new Error("Registration Type is required"), { status: 400 });
+
+        if (toCleanString(registrationType).toLowerCase() === "paid") {
+            const payoutCheck = await validateOrganizerPayout(req.user);
+            if (!payoutCheck.hasPayout) {
+                throw Object.assign(new Error(payoutCheck.message), { status: 400 });
+            }
+        }
 
         if ((mode === "Online" || mode === "Hybrid") && !onlinePlatformLink) {
             throw Object.assign(new Error("Online Platform / Meeting Link is required for Online/Hybrid mode"), { status: 400 });

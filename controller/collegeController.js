@@ -317,7 +317,7 @@ export const createCollegeForm = async (req, res, next) => {
     if (!city) throw Object.assign(new Error("City is required"), { status: 400 });
     if (!state) throw Object.assign(new Error("State is required"), { status: 400 });
     if (!pincode) throw Object.assign(new Error("Pincode is required"), { status: 400 });
-    if (departments.length < 3) throw Object.assign(new Error("At least 3 Departments values are required"), { status: 400 });
+    if (departments.length < 1) throw Object.assign(new Error("At least 3 Departments values are required"), { status: 400 });
     if (coursesAvailable.length < 1) throw Object.assign(new Error("At least 1 Course values are required"), { status: 400 });
     if (!totalStudents) throw Object.assign(new Error("Total Students is required"), { status: 400 });
     if (!placementAvailable) throw Object.assign(new Error("Placement Available is required"), { status: 400 });

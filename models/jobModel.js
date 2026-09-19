@@ -16,7 +16,7 @@ const jobSchema = new mongoose.Schema(
       default: "pending",
     },
     jobCategory: { type: String },
-    domain: { type: String, trim: true },
+    domains: [{ type: String, trim: true }],
     jobType: { type: String },
     jobTitle: { type: String, required: true, trim: true },
     organizer: { type: String, required: true, trim: true },

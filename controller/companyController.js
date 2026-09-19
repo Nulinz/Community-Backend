@@ -11,6 +11,8 @@ import Internship from "../models/internshipModel.js";
 import Freelance from "../models/freelanceModel.js";
 import Job from "../models/jobModel.js";
 import AppliedJob from "../models/appliedJobModel.js";
+import Event from "../models/eventModel.js";
+import Competition from "../models/competitionModel.js";
 
 
 
@@ -84,18 +86,66 @@ export const getCompanyDashboard = async (req, res) => {
 
     const companyId = company._id;
 
+    // ── Date boundaries for live vs upcoming classification ───
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+
+    // Queries scoped to company user or company ID
+    const ownerQuery = { $in: [userId, companyId] };
+
     // ── All stats in parallel ──────────────────────────────────
     const [
       totalFollowers,
       activeInternships,
       activeFreelances,
       activeJobs,
+      liveEvents,
+      upcomingEvents,
+      liveCompetitions,
+      upcomingCompetitions,
       lastApplied,
     ] = await Promise.all([
       CompanyFollow.countDocuments({ companyId: userId }),
       Internship.countDocuments({ c_by: userId, isActive: true }),
       Freelance.countDocuments({ c_by: userId, isActive: true }),
       Job.countDocuments({ c_by: userId, isActive: true }),
+
+      // Live Events: occurring today and active
+      Event.countDocuments({
+        c_by: ownerQuery,
+        eventDate: { $gte: startOfToday, $lte: endOfToday },
+        isActive: { $ne: false },
+      }),
+
+      // Upcoming Events: scheduled after today and active
+      Event.countDocuments({
+        c_by: ownerQuery,
+        eventDate: { $gt: endOfToday },
+        isActive: { $ne: false },
+      }),
+
+      // Live Competitions / Hackathons: active today (single-day or multi-day range)
+      Competition.countDocuments({
+        c_by: ownerQuery,
+        isActive: { $ne: false },
+        $or: [
+          { eventDate: { $gte: startOfToday, $lte: endOfToday } },
+          {
+            eventDate: { $lte: endOfToday },
+            eventEndDate: { $gte: startOfToday },
+          },
+        ],
+      }),
+
+      // Upcoming Competitions / Hackathons: starting after today and active
+      Competition.countDocuments({
+        c_by: ownerQuery,
+        eventDate: { $gt: endOfToday },
+        isActive: { $ne: false },
+      }),
 
       // Last 5 applied jobs under this company
       AppliedJob.find({ c_by: userId })
@@ -117,6 +167,10 @@ export const getCompanyDashboard = async (req, res) => {
           activeInternships: { total: activeInternships },
           activeFreelances: { total: activeFreelances },
           activeJobs: { total: activeJobs },
+          liveEvents: { total: liveEvents },
+          upcomingEvents: { total: upcomingEvents },
+          liveCompetitions: { total: liveCompetitions },
+          upcomingCompetitions: { total: upcomingCompetitions },
         },
 
         // lastApplied — column keys match frontend table exactly
@@ -161,6 +215,7 @@ export const createCompanyForm = async (req, res, next) => {
     const companyName = toCleanString(req.body?.companyName);
     const companyType = toCleanString(req.body?.companyType);
     const industry = toCleanString(req.body?.industry || req.body?.sector);
+    const domains = toCleanStringArray(req.body?.domains || req.body?.domain);
     const companyTagLine = toCleanString(req.body?.companyTagLine);
     const companyCultureTags = toCleanStringArray(req.body?.companyCultureTags);
     const yearFounded = toCleanString(req.body?.yearFounded);
@@ -220,8 +275,8 @@ export const createCompanyForm = async (req, res, next) => {
     if (!state) throw Object.assign(new Error("State is required"), { status: 400 });
     if (!pincode) throw Object.assign(new Error("Pincode is required"), { status: 400 });
 
-    if (technologies.length < 3) throw Object.assign(new Error("At least 3 Technologies / Tools values are required"), { status: 400 });
-    if (whatWeDo.length < 3) throw Object.assign(new Error("At least 3 What We Do (Core Areas) values are required"), { status: 400 });
+    // if (technologies.length < 3) throw Object.assign(new Error("At least 3 Technologies / Tools values are required"), { status: 400 });
+    // if (whatWeDo.length < 3) throw Object.assign(new Error("At least 3 What We Do (Core Areas) values are required"), { status: 400 });
 
     if (!aboutUs) throw Object.assign(new Error("About the Company is required"), { status: 400 });
 
@@ -309,6 +364,7 @@ export const createCompanyForm = async (req, res, next) => {
       company.companyName = companyName;
       company.companyType = companyType;
       company.industry = industry;
+      company.domains = domains;
       company.companyTagLine = companyTagLine;
       company.companyCultureTags = companyCultureTags || "";
       company.yearFounded = yearFounded || "";
@@ -347,6 +403,7 @@ export const createCompanyForm = async (req, res, next) => {
         companyName,
         companyType,
         industry,
+        domains,
         companyTagLine,
         companyCultureTags: companyCultureTags || "",
         yearFounded: yearFounded || "",
@@ -383,10 +440,17 @@ export const createCompanyForm = async (req, res, next) => {
     if (oldLogoPath) fs.unlink(path.join(process.cwd(), oldLogoPath), () => { });
     if (oldCoverPath) fs.unlink(path.join(process.cwd(), oldCoverPath), () => { });
 
+    const companyObj = company.toObject ? company.toObject() : { ...company };
+    const resolvedDomains = Array.isArray(companyObj.domains) && companyObj.domains.length
+      ? companyObj.domains
+      : (companyObj.domain ? companyObj.domain.split(",").map((s) => s.trim()).filter(Boolean) : []);
+    delete companyObj.domain;
+    companyObj.domains = resolvedDomains;
+
     res.status(isUpdate ? 200 : 201).json({
       success: true,
       message: `Company  ${isUpdate ? "updated" : "created"} successfully`,
-      data: company,
+      data: companyObj,
     });
   } catch (error) {
     // Cleanup newly uploaded files on failure
@@ -405,9 +469,11 @@ export const getAllCompany = async (req, res, next) => {
     const companies = await Company.find({}).populate("userId", "email phone role is_active").lean();
 
     const flattenedCompanies = companies.map(company => {
-      const { userId, ...rest } = company;
+      const { userId, domain, ...rest } = company;
+      const resolvedDomains = Array.isArray(rest.domains) && rest.domains.length ? rest.domains : (domain ? domain.split(",").map(s => s.trim()).filter(Boolean) : []);
       return {
         ...rest,
+        domains: resolvedDomains,
         email: userId?.email || "",
         phone: userId?.phone || "",
         role: userId?.role || "",
@@ -455,9 +521,11 @@ export const getMyCompany = async (req, res, next) => {
       throw error;
     }
 
-    const { userId, ...rest } = company.toObject();
+    const { userId, domain, ...rest } = company.toObject();
+    const resolvedDomains = Array.isArray(rest.domains) && rest.domains.length ? rest.domains : (domain ? domain.split(",").map(s => s.trim()).filter(Boolean) : []);
     const flattenedCompany = {
       ...rest,
+      domains: resolvedDomains,
       email: userId?.email || "",
       phone: userId?.phone || "",
       role: userId?.role || "",
@@ -465,16 +533,28 @@ export const getMyCompany = async (req, res, next) => {
     };
 
     // ── 2. Get Internships (c_by = companyUserId) ──────────────
-    const internships = await Internship.find({ c_by: companyUserId })
+    const rawInternships = await Internship.find({ c_by: companyUserId })
       .sort({ createdAt: -1 })
-      .select("jobTitle location companyName duration salary eligibility createdAt")
+      .select("jobTitle domain domains location companyName duration salary paymentAmount internshipType eligibility createdAt")
       .lean();
 
+    const internships = rawInternships.map(item => {
+      const { domain: itemDomain, ...itemRest } = item;
+      const itemDomains = Array.isArray(itemRest.domains) && itemRest.domains.length ? itemRest.domains : (itemDomain ? itemDomain.split(",").map(s => s.trim()).filter(Boolean) : []);
+      return { ...itemRest, domains: itemDomains };
+    });
+
     // ── 3. Get Freelances (c_by = companyUserId) ───────────────
-    const freelances = await Freelance.find({ c_by: companyUserId })
+    const rawFreelances = await Freelance.find({ c_by: companyUserId })
       .sort({ createdAt: -1 })
-      .select("jobTitle location companyName eligibility jobStartDate jobEndDate duration totalOpenings mode salary createdAt")
+      .select("jobTitle domain domains location companyName eligibility jobStartDate jobEndDate duration totalOpenings mode salary createdAt")
       .lean();
+
+    const freelances = rawFreelances.map(item => {
+      const { domain: itemDomain, ...itemRest } = item;
+      const itemDomains = Array.isArray(itemRest.domains) && itemRest.domains.length ? itemRest.domains : (itemDomain ? itemDomain.split(",").map(s => s.trim()).filter(Boolean) : []);
+      return { ...itemRest, domains: itemDomains };
+    });
 
     // ── 4. Get Followers ───────────────────────────────────────
     const followers = await CompanyFollow.find({ companyId: companyUserId })
@@ -570,11 +650,13 @@ export const getCompanyById = async (req, res, next) => {
       throw error;
     }
 
-    const { userId, ...rest } = company;
+    const { userId, domain, ...rest } = company;
     const companyUserId = userId?._id; // this is the c_by value in internship/freelance
 
+    const resolvedDomains = Array.isArray(rest.domains) && rest.domains.length ? rest.domains : (domain ? domain.split(",").map(s => s.trim()).filter(Boolean) : []);
     const flattenedCompany = {
       ...rest,
+      domains: resolvedDomains,
       email: userId?.email || "",
       phone: userId?.phone || "",
       role: userId?.role || "",
@@ -582,16 +664,28 @@ export const getCompanyById = async (req, res, next) => {
     };
 
     // ── 2. Get Internships (c_by = companyUserId) ──────────────
-    const internships = await Internship.find({ c_by: companyUserId })
+    const rawInternships = await Internship.find({ c_by: companyUserId })
       .sort({ createdAt: -1 })
-      .select("jobTitle location companyName duration salary eligibility createdAt")
+      .select("jobTitle domain domains location companyName duration salary paymentAmount internshipType eligibility createdAt")
       .lean();
 
+    const internships = rawInternships.map(item => {
+      const { domain: itemDomain, ...itemRest } = item;
+      const itemDomains = Array.isArray(itemRest.domains) && itemRest.domains.length ? itemRest.domains : (itemDomain ? itemDomain.split(",").map(s => s.trim()).filter(Boolean) : []);
+      return { ...itemRest, domains: itemDomains };
+    });
+
     // ── 3. Get Freelances (c_by = companyUserId) ───────────────
-    const freelances = await Freelance.find({ c_by: companyUserId })
+    const rawFreelances = await Freelance.find({ c_by: companyUserId })
       .sort({ createdAt: -1 })
-      .select("jobTitle location companyName eligibility jobStartDate jobEndDate duration totalOpenings mode salary createdAt")
+      .select("jobTitle domain domains location companyName eligibility jobStartDate jobEndDate duration totalOpenings mode salary createdAt")
       .lean();
+
+    const freelances = rawFreelances.map(item => {
+      const { domain: itemDomain, ...itemRest } = item;
+      const itemDomains = Array.isArray(itemRest.domains) && itemRest.domains.length ? itemRest.domains : (itemDomain ? itemDomain.split(",").map(s => s.trim()).filter(Boolean) : []);
+      return { ...itemRest, domains: itemDomains };
+    });
 
     // ── 4. Get Followers ───────────────────────────────────────
     const followers = await CompanyFollow.find({ companyId: companyUserId })
@@ -749,10 +843,17 @@ export const toggleCompanyStatus = async (req, res, next) => {
     user.is_active = !user.is_active;
     await user.save();
     console.log(user)
+    const companyObj = company.toObject();
+    const resolvedDomains = Array.isArray(companyObj.domains) && companyObj.domains.length
+      ? companyObj.domains
+      : (companyObj.domain ? companyObj.domain.split(",").map((s) => s.trim()).filter(Boolean) : []);
+    delete companyObj.domain;
+    companyObj.domains = resolvedDomains;
+
     res.status(200).json({
       success: true,
       message: `Account ${user.is_active ? "activated" : "deactivated"} successfully`,
-      data: { ...company.toObject(), is_active: user.is_active }
+      data: { ...companyObj, is_active: user.is_active }
     });
   } catch (error) {
     next(error);

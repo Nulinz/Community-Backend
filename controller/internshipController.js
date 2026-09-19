@@ -5,6 +5,8 @@ import Attendance from "../models/attendanceModel.js";
 import UserDetails from "../models/userDetails.js";
 import PerformanceEvaluation from "../models/performanceEvaluationModel.js";
 import { notifyJobAudience } from "../helper/jobNotification.js";
+import Company from "../models/companyModel.js";
+import User from "../models/userModel.js";
 
 const toCleanString = (value) =>
     typeof value === "string" ? value.trim() : "";
@@ -22,6 +24,7 @@ export const createInternshipForm = async (req, res, next) => {
             internshipType,
             jobTitle,
             domain,
+            domains,
             organizer,
             companyName,
             location,
@@ -31,6 +34,7 @@ export const createInternshipForm = async (req, res, next) => {
             internStartDate,
             applicationDeadline,
             salary,
+            paymentAmount,
             responsibilities,
             eligibility,
             description,
@@ -54,6 +58,15 @@ export const createInternshipForm = async (req, res, next) => {
             throw Object.assign(new Error("Location is required for On-site or Hybrid mode"), { status: 400 });
         }
 
+        // Handle dynamic arrays (sent as JSON strings or raw arrays depending on frontend)
+        const parseArray = (val) => {
+            if (Array.isArray(val)) return val;
+            if (typeof val === "string") {
+                try { return JSON.parse(val); } catch (e) { return [val]; }
+            }
+            return [];
+        };
+
         let internship;
 
         if (isUpdate) {
@@ -68,11 +81,13 @@ export const createInternshipForm = async (req, res, next) => {
             internship = new Internship({ c_by: req.user._id });
             internship.status=status
         }
-internship.status=status
+        const resolvedDomains = parseArray(domains || domain);
+
         // Update fields
-        internship.internshipType = toCleanString(internshipType);
+        const cleanType = toCleanString(internshipType);
+        internship.internshipType = cleanType;
         internship.jobTitle = toCleanString(jobTitle);
-        internship.domain = toCleanString(domain);
+        internship.domains = resolvedDomains;
         internship.organizer = resolvedOrganizer;
         internship.companyName = resolvedOrganizer;
         internship.location = toCleanString(location) || (cleanMode === "Remote" || cleanMode === "Online" ? "Remote" : "");
@@ -81,18 +96,22 @@ internship.status=status
         internship.duration = toCleanString(duration);
         internship.internStartDate = internStartDate || undefined;
         internship.applicationDeadline = applicationDeadline || undefined;
-        internship.salary = toCleanString(internshipType) === "Unpaid" ? 0 : (Number(salary) || 0);
+
+        // Financials: Stipend (monthly amount) vs Paid (fee amount) vs Unpaid
+        if (cleanType === "Stipend") {
+            internship.salary = Number(salary) || 0;
+            internship.paymentAmount = 0;
+        } else if (cleanType === "Paid") {
+            internship.paymentAmount = Number(paymentAmount) || Number(salary) || 0;
+            internship.salary = 0;
+        } else {
+            // Unpaid
+            internship.salary = 0;
+            internship.paymentAmount = 0;
+        }
+
         internship.description = toCleanString(description);
         internship.certificateAvailability = toCleanString(certificateAvailability);
-        
-        // Handle dynamic arrays (sent as JSON strings or raw arrays depending on frontend)
-        const parseArray = (val) => {
-            if (Array.isArray(val)) return val;
-            if (typeof val === "string") {
-                try { return JSON.parse(val); } catch (e) { return [val]; }
-            }
-            return [];
-        };
 
         internship.responsibilities = parseArray(responsibilities);
         internship.eligibility = parseArray(eligibility);
@@ -103,17 +122,17 @@ internship.status=status
         internship.development_resources=parseArray(development_resources)
 
 
-        await internship.save();
-  //       if(!isUpdate){
-  //         notifyJobAudience(internship, req.user._id, isUpdate, "Internship").catch((e) =>
-  //   console.error("Freelance notification error:", e.message)
-  // );
-        // }
-        
+        const savedInternship = await internship.save();
+        const internshipObj = savedInternship.toObject();
+        delete internshipObj.domain;
+        internshipObj.domains = Array.isArray(internshipObj.domains) && internshipObj.domains.length
+          ? internshipObj.domains
+          : resolvedDomains;
+
         res.status(isUpdate ? 200 : 201).json({
             success: true,
             message: `Internship ${isUpdate ? "updated" : "created"} successfully`,
-            data: internship,
+            data: internshipObj,
         });
 
     } catch (error) {
@@ -152,7 +171,9 @@ export const getAllInternships = async (req, res, next) => {
           jobId: item._id,
           jobType: "Internship",
         });
-        return { ...item, appliedCount };
+        const { domain, ...itemRest } = item;
+        const itemDomains = Array.isArray(itemRest.domains) && itemRest.domains.length ? itemRest.domains : (domain ? domain.split(",").map(s => s.trim()).filter(Boolean) : []);
+        return { ...itemRest, domains: itemDomains, appliedCount };
       })
     );
 
@@ -215,6 +236,7 @@ export const getInternshipById = async (req, res, next) => {
           appliedAt: app.createdAt,
           location:app.location,
           status: app.status || "applied",
+          portfolio: app.portfolio || null,
           // UserDetails
           profile_pic: userDetails?.profile_pic || null,
           gender: userDetails?.gender || "",
@@ -231,10 +253,50 @@ export const getInternshipById = async (req, res, next) => {
       })
     );
 
+    // Resolve company logo from company profile or admin
+    let companyLogo = null;
+    if (internship.c_by) {
+      const company = await Company.findOne({
+        $or: [{ userId: internship.c_by }, { c_by: internship.c_by }],
+      })
+        .select("companyLogo")
+        .lean();
+      if (company?.companyLogo) {
+        companyLogo = company.companyLogo;
+      }
+    }
+    if (!companyLogo && internship.companyName) {
+      const companyByName = await Company.findOne({
+        companyName: new RegExp(`^${internship.companyName.trim()}$`, "i"),
+      })
+        .select("companyLogo")
+        .lean();
+      if (companyByName?.companyLogo) {
+        companyLogo = companyByName.companyLogo;
+      }
+    }
+    if (!companyLogo && internship.c_by) {
+      const creator = await User.findById(internship.c_by).select("role").lean();
+      if (creator?.role === "admin") {
+        companyLogo = "uploads/Nulinz LOGO 3.png";
+      }
+    }
+
+    const { domain, ...internshipRest } = internship;
+    const itemDomains = Array.isArray(internshipRest.domains) && internshipRest.domains.length ? internshipRest.domains : (domain ? domain.split(",").map(s => s.trim()).filter(Boolean) : []);
+    const enrichedInternship = {
+      ...internshipRest,
+      domains: itemDomains,
+      companyLogo: companyLogo || "",
+      companyImage: companyLogo || "",
+    };
+
     return res.status(200).json({
       success: true,
       data: {
-        internship,
+        internship: enrichedInternship,
+        companyLogo: companyLogo || "",
+        companyImage: companyLogo || "",
         applications: {
           count: appliedList.length,
           list: appliedList,
@@ -261,10 +323,17 @@ export const toggleInternshipStatus = async (req, res, next) => {
         internship.isActive = !internship.isActive;
         await internship.save();
 
+        const internshipObj = internship.toObject();
+        const resolvedDomains = Array.isArray(internshipObj.domains) && internshipObj.domains.length
+          ? internshipObj.domains
+          : (internshipObj.domain ? internshipObj.domain.split(",").map((s) => s.trim()).filter(Boolean) : []);
+        delete internshipObj.domain;
+        internshipObj.domains = resolvedDomains;
+
         res.status(200).json({
             success: true,
             message: `Internship ${internship.isActive ? "activated" : "deactivated"} successfully`,
-            data: internship,
+            data: internshipObj,
         });
     } catch (error) {
         next(error);

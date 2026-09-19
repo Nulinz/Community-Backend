@@ -464,3 +464,73 @@ export const claimMission = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * Claim one-time XP for following on social platforms (Instagram / YouTube)
+ * POST /api/users/xp/social-follow
+ * Body: { platform: "instagram" | "youtube" }
+ */
+export const claimSocialFollowXP = async (req, res, next) => {
+  try {
+    const userId = req.user?._id;
+    if (!userId) {
+      return res.status(401).json({ success: false, status: false, message: "Unauthorized user." });
+    }
+
+    const { platform } = req.body;
+    if (!platform) {
+      return res.status(400).json({
+        success: false,
+        status: false,
+        message: "Platform is required (e.g. 'instagram' or 'youtube').",
+      });
+    }
+
+    const normalizedPlatform = String(platform).trim().toLowerCase();
+    let actionKey = null;
+
+    if (normalizedPlatform === "instagram") {
+      actionKey = "FOLLOW_INSTAGRAM";
+    } else if (normalizedPlatform === "youtube") {
+      actionKey = "FOLLOW_YOUTUBE";
+    } else {
+      return res.status(400).json({
+        success: false,
+        status: false,
+        message: "Invalid platform. Allowed values: 'instagram', 'youtube'.",
+      });
+    }
+
+    // Award XP (awardXP checks duplicate claims atomically and prevents double reward)
+    const xpResult = await awardXP({ userId, actionKey });
+
+    if (!xpResult.success) {
+      if (xpResult.reason === "ALREADY_CLAIMED") {
+        return res.status(400).json({
+          success: false,
+          status: false,
+          message: `You have already claimed XP for following on ${normalizedPlatform}.`,
+        });
+      }
+      return res.status(400).json({
+        success: false,
+        status: false,
+        message: xpResult.reason || "Failed to award XP.",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      status: true,
+      message: `Successfully earned ${xpResult.xpAwarded} XP for following on ${normalizedPlatform}!`,
+      xpAwarded: xpResult.xpAwarded,
+      totalXP: xpResult.totalXP,
+      level: xpResult.level,
+      isLevelUp: xpResult.isLevelUp,
+      levelInfo: xpResult.levelInfo,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+

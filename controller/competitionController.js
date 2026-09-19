@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import EventRegistration from "../models/eventRegistrationModel.js";
 import { getEventFinancials } from "../helper/getEventFinancials.js";
+import { validateOrganizerPayout } from "../helper/payoutValidator.js";
 const toCleanString = (value) =>
     typeof value === "string" ? value.trim() : "";
 
@@ -107,6 +108,13 @@ export const createCompetitionForm = async (req, res, next) => {
         if (!eventDate) throw Object.assign(new Error("Event Date is required"), { status: 400 });
         if (!eventStartTime) throw Object.assign(new Error("Event Start Time is required"), { status: 400 });
         if (!registrationType) throw Object.assign(new Error("Registration Type is required"), { status: 400 });
+
+        if (toCleanString(registrationType).toLowerCase() === "paid") {
+            const payoutCheck = await validateOrganizerPayout(req.user);
+            if (!payoutCheck.hasPayout) {
+                throw Object.assign(new Error(payoutCheck.message), { status: 400 });
+            }
+        }
         if (!registrationStartDate) throw Object.assign(new Error("Registration Start Date is required"), { status: 400 });
         if (!registrationEndDate) throw Object.assign(new Error("Registration End Date is required"), { status: 400 });
 
