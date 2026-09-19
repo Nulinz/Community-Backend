@@ -32,6 +32,7 @@ import { seedTamilNaduLocations } from "./services/uploadLocation.js";
 import { startEventReminderCron } from "./jobs/eventRemainder.js";
 import { startJobSuggestionCron } from "./jobs/jobSuggested.js";
 import { startUnappliedOpportunityReminderCron } from "./jobs/unappliedOpportunityReminder.js";
+import { startDailyLoginReminderCron } from "./jobs/dailyLoginReminder.js";
 import { seedConferences } from "./services/uploadConference.js";
 import { seedSeminars } from "./services/uploadSeminar.js";
 import { seedCompanyByUserId } from "./services/companyCreate.js";
@@ -140,6 +141,7 @@ app.get("/", (req, res) => {
 startEventReminderCron();
 startJobSuggestionCron();
 startUnappliedOpportunityReminderCron();
+startDailyLoginReminderCron();
 /*------------------------------ */
 app.use("/api/users", userRoutes);
 app.use("/api/userDetails", userDetailsRoutes);

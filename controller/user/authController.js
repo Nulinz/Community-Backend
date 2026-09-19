@@ -95,11 +95,12 @@ export const loginUser = async (req, res) => {
       });
     }
 
-    // 🔹 6. Update FCM token (optional)
+    // 🔹 6. Update FCM token (optional) & record lastActiveDate
     if (fcm_token) {
       user.fcm_token = fcm_token;
-      await user.save();
     }
+    user.lastActiveDate = new Date();
+    await user.save();
 
     // 🔹 7. Generate JWT
     const token = jwt.sign(
