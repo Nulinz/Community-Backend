@@ -10,6 +10,22 @@ import User from "../models/userModel.js";
 const toCleanString = (value) =>
   typeof value === "string" ? value.trim() : "";
 
+/**
+ * Normalizes input arrays that may arrive either as native arrays,
+ * serialized JSON strings, or single raw values.
+ */
+const parseArray = (val) => {
+  if (Array.isArray(val)) return val;
+  if (typeof val === "string") {
+    try {
+      return JSON.parse(val);
+    } catch (e) {
+      return [val];
+    }
+  }
+  return [];
+};
+
 export const createJobForm = async (req, res, next) => {
   try {
     const { id, _id, ...rest } = req.body;
@@ -92,14 +108,6 @@ export const createJobForm = async (req, res, next) => {
     job.salary = cleanSalaryType === "Fixed amount" ? (Number(salary) || 0) : (cleanSalaryType === "Range" ? (Number(salaryMin) || 0) : 0);
     job.description = toCleanString(description);
     job.certificateAvailability = toCleanString(certificateAvailability);
-
-    const parseArray = (val) => {
-      if (Array.isArray(val)) return val;
-      if (typeof val === "string") {
-        try { return JSON.parse(val); } catch (e) { return [val]; }
-      }
-      return [];
-    };
 
     job.responsibilities = parseArray(responsibilities);
     job.eligibility = parseArray(eligibility);
