@@ -14,21 +14,73 @@ const serviceAccountPath = path.join(
   "grad-envy-95e6254955fe.json"
 );
 
+/**
+ * Resolves Firebase service account credentials.
+ * Prioritizes Azure Key Vault environment variables injected by App Service,
+ * with fallback to the local service account JSON file for offline/local development.
+ */
+const getServiceAccountCredentials = () => {
+  // 1. Check if Azure Environment Variables are populated
+  if (process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL) {
+    const rawPrivateKey = process.env.FIREBASE_PRIVATE_KEY.trim();
+
+    // Guard against unresolved Azure Key Vault references (missing Managed Identity permissions)
+    if (rawPrivateKey.startsWith("@Microsoft.KeyVault")) {
+      throw new Error(
+        "Azure Key Vault reference for FIREBASE_PRIVATE_KEY was not resolved by App Service. Ensure the Managed Identity has 'Key Vault Secrets User' role."
+      );
+    }
+
+    // Format private key by removing accidental quotes and converting escaped newlines
+    const formattedPrivateKey = rawPrivateKey
+      .replace(/^"|"$/g, "")
+      .replace(/\\n/g, "\n");
+
+    return {
+      type: "service_account",
+      projectId: process.env.FIREBASE_PROJECT_ID,
+      project_id: process.env.FIREBASE_PROJECT_ID,
+      privateKeyId: process.env.FIREBASE_PRIVATE_KEY_ID,
+      private_key_id: process.env.FIREBASE_PRIVATE_KEY_ID,
+      privateKey: formattedPrivateKey,
+      private_key: formattedPrivateKey,
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      client_email: process.env.FIREBASE_CLIENT_EMAIL,
+      clientId: process.env.FIREBASE_CLIENT_ID,
+      client_id: process.env.FIREBASE_CLIENT_ID,
+      authUri: "https://accounts.google.com/o/oauth2/auth",
+      tokenUri: "https://oauth2.googleapis.com/token",
+      authProviderX509CertUrl: "https://www.googleapis.com/oauth2/v1/certs",
+      clientX509CertUrl: process.env.FIREBASE_CLIENT_CERT_URL,
+      client_x509_cert_url: process.env.FIREBASE_CLIENT_CERT_URL,
+      universeDomain: process.env.FIREBASE_UNIVERSE_DOMAIN || "googleapis.com",
+    };
+  }
+
+  // 2. Fallback to local JSON file for local development
+  if (fs.existsSync(serviceAccountPath)) {
+    return JSON.parse(fs.readFileSync(serviceAccountPath, "utf8"));
+  }
+
+  throw new Error(
+    "Firebase credentials not found in environment variables (Azure) or local file (grad-envy-*.json)."
+  );
+};
+
 const getFirebaseApp = () => {
-  // ⭐ If app already exists, reuse it (IMPORTANT)
+  // Reuse existing app instance to prevent duplicate app initialization errors
   if (admin.apps.length > 0) {
     return admin.app();
   }
-  if (!fs.existsSync(serviceAccountPath)) {
-    throw new Error("Service account not found");
-  }
-  const serviceAccount = JSON.parse(
-    fs.readFileSync(serviceAccountPath, "utf8")
-  );
-console.log("Using Firebase project:", serviceAccount.project_id);
-return admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-    projectId:serviceAccount?.project_id
+
+  const credentials = getServiceAccountCredentials();
+  const projectId = credentials.projectId || credentials.project_id;
+
+  console.log("Using Firebase project:", projectId);
+
+  return admin.initializeApp({
+    credential: admin.credential.cert(credentials),
+    projectId,
   });
 };
 
