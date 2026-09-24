@@ -16,16 +16,79 @@ const serviceAccountPath = path.join(
 
 /**
  * Resolves Firebase service account credentials.
- * Prioritizes Azure Key Vault environment variables injected by App Service,
- * with fallback to the local service account JSON file for offline/local development.
+ * Prioritizes:
+ * 1. FIREBASE_SERVICE_ACCOUNT environment variable (JSON string or Base64 string from Azure)
+ * 2. Individual Azure environment variables (FIREBASE_PRIVATE_KEY, etc.)
+ * 3. Local service account JSON file for local development
  */
 const getServiceAccountCredentials = () => {
-  // 1. Check if Azure Environment Variables are populated
+  // 1. Check if whole JSON service account is provided in environment variables (Azure App Service / Key Vault)
+  const envKey = process.env.FIREBASE_SERVICE_ACCOUNT
+    ? "FIREBASE_SERVICE_ACCOUNT"
+    : process.env.FIREBASE_CREDENTIALS
+    ? "FIREBASE_CREDENTIALS"
+    : process.env.FIREBASE_SERVICE_ACCOUNT_KEY
+    ? "FIREBASE_SERVICE_ACCOUNT_KEY"
+    : null;
+
+  if (envKey) {
+    console.log(`[Firebase Admin] Found credentials in process.env.${envKey}`);
+    const rawServiceAccountEnv = process.env[envKey];
+    const rawConfig = typeof rawServiceAccountEnv === "string" ? rawServiceAccountEnv.trim() : rawServiceAccountEnv;
+
+    // Guard against unresolved Azure Key Vault references
+    if (typeof rawConfig === "string" && rawConfig.startsWith("@Microsoft.KeyVault")) {
+      console.error(
+        "[Firebase Admin] Azure Key Vault reference was NOT resolved! Verify App Service Managed Identity has 'Key Vault Secrets User' role."
+      );
+      throw new Error(
+        "Azure Key Vault reference for Firebase credentials was not resolved by App Service. Ensure Managed Identity has 'Key Vault Secrets User' role."
+      );
+    }
+
+    try {
+      let serviceAccount;
+      if (typeof rawConfig === "object" && rawConfig !== null) {
+        serviceAccount = rawConfig;
+      } else {
+        // Handle both raw JSON string and base64-encoded JSON string
+        const jsonString = rawConfig.startsWith("{")
+          ? rawConfig
+          : Buffer.from(rawConfig, "base64").toString("utf-8");
+        serviceAccount = JSON.parse(jsonString);
+      }
+
+      // Critical for Azure: Ensure escaped newlines in private key are converted to actual newlines
+      if (serviceAccount.private_key) {
+        serviceAccount.private_key = serviceAccount.private_key
+          .replace(/^"|"$/g, "")
+          .replace(/\\n/g, "\n");
+      }
+
+      const resolvedProjectId = serviceAccount.project_id || serviceAccount.projectId;
+      console.log(
+        `[Firebase Admin] Credentials loaded successfully for project: "${resolvedProjectId}" (Client: ${serviceAccount.client_email})`
+      );
+
+      return serviceAccount;
+    } catch (parseError) {
+      console.error("[Firebase Admin] Failed to parse JSON credentials:", parseError.message);
+      throw new Error(
+        `Failed to parse FIREBASE_SERVICE_ACCOUNT JSON: ${parseError.message}`
+      );
+    }
+  }
+
+  // 2. Check if individual Azure Environment Variables are populated
   if (process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL) {
+    console.log("[Firebase Admin] Loading credentials from individual environment variables");
     const rawPrivateKey = process.env.FIREBASE_PRIVATE_KEY.trim();
 
     // Guard against unresolved Azure Key Vault references (missing Managed Identity permissions)
     if (rawPrivateKey.startsWith("@Microsoft.KeyVault")) {
+      console.error(
+        "[Firebase Admin] Azure Key Vault reference for FIREBASE_PRIVATE_KEY was not resolved!"
+      );
       throw new Error(
         "Azure Key Vault reference for FIREBASE_PRIVATE_KEY was not resolved by App Service. Ensure the Managed Identity has 'Key Vault Secrets User' role."
       );
@@ -35,6 +98,10 @@ const getServiceAccountCredentials = () => {
     const formattedPrivateKey = rawPrivateKey
       .replace(/^"|"$/g, "")
       .replace(/\\n/g, "\n");
+
+    console.log(
+      `[Firebase Admin] Individual env credentials loaded for project: "${process.env.FIREBASE_PROJECT_ID}"`
+    );
 
     return {
       type: "service_account",
@@ -57,11 +124,17 @@ const getServiceAccountCredentials = () => {
     };
   }
 
-  // 2. Fallback to local JSON file for local development
+  // 3. Fallback to local JSON file for local development
   if (fs.existsSync(serviceAccountPath)) {
-    return JSON.parse(fs.readFileSync(serviceAccountPath, "utf8"));
+    console.log(`[Firebase Admin] Loading credentials from local file: ${serviceAccountPath}`);
+    const localCredentials = JSON.parse(fs.readFileSync(serviceAccountPath, "utf8"));
+    console.log(
+      `[Firebase Admin] Local file credentials loaded for project: "${localCredentials.project_id || localCredentials.projectId}"`
+    );
+    return localCredentials;
   }
 
+  console.error("[Firebase Admin] No Firebase credentials found in environment variables or local file!");
   throw new Error(
     "Firebase credentials not found in environment variables (Azure) or local file (grad-envy-*.json)."
   );
@@ -73,27 +146,32 @@ const getFirebaseApp = () => {
     return admin.app();
   }
 
+  console.log("[Firebase Admin] Initializing Firebase Admin SDK app instance...");
   const credentials = getServiceAccountCredentials();
   const projectId = credentials.projectId || credentials.project_id;
 
-  console.log("Using Firebase project:", projectId);
-
-  return admin.initializeApp({
+  const app = admin.initializeApp({
     credential: admin.credential.cert(credentials),
     projectId,
   });
+
+  console.log(`[Firebase Admin] Firebase Admin SDK initialized successfully for project: "${projectId}"`);
+  return app;
 };
 
 const sendNotification = async (data) => {
-  if (!data.token) {
-    console.warn("No device token provided");
+  if (!data || !data.token) {
+    console.warn("[FCM] Notification skipped: No device token provided");
     return null;
   }
+
+  const maskedToken = `...${String(data.token).slice(-6)}`;
+  console.log(`[FCM] Sending push notification | Target: ${maskedToken} | Title: "${data.title}"`);
 
   try {
     const app = getFirebaseApp();
 
-      const stringifyData = (obj) => {
+    const stringifyData = (obj) => {
       const result = {};
       if (!obj) return result;
       for (const [key, value] of Object.entries(obj)) {
@@ -137,34 +215,34 @@ const sendNotification = async (data) => {
     };
 
     const response = await app.messaging().send(message);
-    
-    // // ⭐ Add response validation - FCM returns error codes for mismatches
-    // if (response.failureCount > 0 || !response.successCount) {
-    //   const failedTokens = response.responses?.map(r => r.error?.message).filter(Boolean);
-    //   console.error(`FCM failures: ${failedTokens?.join(', ') || 'Unknown'}`);
-    //   return null;
-    // }
-    
-    console.log(`Notification sent successfully: ${response}`);
+    console.log(`[FCM] Push notification delivered successfully to ${maskedToken} | Message ID: ${response}`);
     return response;
   } catch (error) {
-    // ⭐ Log specific FCM errors like "MismatchSenderId"
-    if (error.code === 'messaging/invalid-argument' || error.message.includes('MismatchSenderId')) {
-      console.error(`Sender ID mismatch for token ${data.token?.slice(-10)}...: Verify client/server project match`);
+    if (error.code === "messaging/registration-token-not-registered") {
+      console.warn(`[FCM] Token ${maskedToken} is no longer registered or has expired. The app may have been uninstalled.`);
+    } else if (
+      error.code === "messaging/invalid-argument" ||
+      error.code === "messaging/mismatched-credential" ||
+      error.message?.includes("MismatchSenderId")
+    ) {
+      console.error(
+        `[FCM] Sender ID mismatch or invalid token for ${maskedToken}. Ensure client and backend use the exact same Firebase Project.`
+      );
     } else {
-      console.error("FCM Notification error:", error.message || error);
+      console.error(`[FCM] Failed to send push notification to ${maskedToken}:`, error.code || error.message || error);
     }
     return null;
   }
 };
 
-
-
 const sendCallInvite = async (patientFcmToken, callData) => {
   if (!patientFcmToken) {
-    console.warn("No patient FCM token provided");
+    console.warn("[FCM Call] Call invite skipped: No patient FCM token provided");
     return null;
   }
+
+  const maskedToken = `...${String(patientFcmToken).slice(-6)}`;
+  console.log(`[FCM Call] Sending call invite to ${maskedToken} | Doctor: "${callData.doctorName}" | Channel: "${callData.channelName}"`);
 
   try {
     const app = getFirebaseApp();
@@ -195,11 +273,11 @@ const sendCallInvite = async (patientFcmToken, callData) => {
     };
 
     const response = await app.messaging().send(message);
-    logger.info("Call invitation sent successfully");
+    console.log(`[FCM Call] Call invitation sent successfully to ${maskedToken} | Message ID: ${response}`);
     return response;
 
   } catch (error) {
-    logger.error("Call invite error", error);
+    console.error(`[FCM Call] Failed to send call invite to ${maskedToken}:`, error.code || error.message || error);
     return null;
   }
 };
