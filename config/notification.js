@@ -23,17 +23,9 @@ const serviceAccountPath = path.join(
  */
 const getServiceAccountCredentials = () => {
   // 1. Check if whole JSON service account is provided in environment variables (Azure App Service / Key Vault)
-  const envKey = process.env.FIREBASE_SERVICE_ACCOUNT
-    ? "FIREBASE_SERVICE_ACCOUNT"
-    : process.env.FIREBASE_CREDENTIALS
-    ? "FIREBASE_CREDENTIALS"
-    : process.env.FIREBASE_SERVICE_ACCOUNT_KEY
-    ? "FIREBASE_SERVICE_ACCOUNT_KEY"
-    : null;
-
-  if (envKey) {
-    console.log(`[Firebase Admin] Found credentials in process.env.${envKey}`);
-    const rawServiceAccountEnv = process.env[envKey];
+  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+    console.log("[Firebase Admin] Found credentials in process.env.FIREBASE_SERVICE_ACCOUNT");
+    const rawServiceAccountEnv = process.env.FIREBASE_SERVICE_ACCOUNT;
     const rawConfig = typeof rawServiceAccountEnv === "string" ? rawServiceAccountEnv.trim() : rawServiceAccountEnv;
 
     // Guard against unresolved Azure Key Vault references
