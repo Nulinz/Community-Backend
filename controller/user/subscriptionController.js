@@ -3,7 +3,7 @@ import Razorpay from "razorpay";
 import User from "../../models/userModel.js";
 import Payment from "../../models/paymentModel.js";
 import SubscriptionPlan from "../../models/subscriptionPlanModel.js";
-import { awardXP } from "../../services/xpService.js";
+import { triggerMissionNotification } from "../../services/xpService.js";
 
 /**
  * Initializes and returns a Razorpay client instance.
@@ -19,6 +19,10 @@ const getRazorpayInstance = () => {
 
   return new Razorpay({ key_id: keyId, key_secret: keySecret });
 };
+
+// Indian Standard Time (IST, UTC+05:30) offset in milliseconds (5.5 hours)
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+const getNowIST = () => new Date(Date.now() + IST_OFFSET_MS);
 
 /**
  * Fetch available active subscription plans.
@@ -106,33 +110,34 @@ export const verifySubscriptionPayment = async (req, res, next) => {
           ? "Pro Monthly"
           : "Pro Quarterly");
 
-    // ── Plan Extension / Stacking Logic ──────────────────────────────
+    // ── Plan Extension / Stacking Logic (IST Timezone) ────────────────
     // Check if the user currently possesses an active, unexpired subscription.
     // If active days remain, stack the new duration directly onto the existing expiry date.
-    // Otherwise, start fresh from the current moment.
+    // Otherwise, start fresh from the current moment in Indian Standard Time (IST, UTC+05:30).
     const existingUser = await User.findById(userId).select("subscription").lean();
     const currentSub = existingUser?.subscription;
 
-    const now = new Date();
+    const nowIST = getNowIST();
     const isCurrentlyActive = Boolean(
       currentSub?.isPlanActive &&
       currentSub?.expiryDate &&
-      new Date(currentSub.expiryDate) > now
+      new Date(currentSub.expiryDate) > nowIST
     );
 
-    // If active, anchor on existing expiryDate; otherwise anchor on now
-    const baseDate = isCurrentlyActive ? new Date(currentSub.expiryDate) : now;
+    // If active, anchor on existing expiryDate; otherwise anchor on now in IST
+    const baseDate = isCurrentlyActive ? new Date(currentSub.expiryDate) : nowIST;
     const expiryDate = new Date(baseDate.getTime() + activeDays * 24 * 60 * 60 * 1000);
-    expiryDate.setHours(23, 59, 59, 999);
+    // Set to end of day in IST (23:59:59.999)
+    expiryDate.setUTCHours(23, 59, 59, 999);
 
-    // Preserve initial startDate if extending active membership; else start now
+    // Preserve initial startDate if extending active membership; else start now in IST
     const startDate = isCurrentlyActive && currentSub?.startDate
       ? new Date(currentSub.startDate)
-      : now;
+      : nowIST;
 
     const actionText = isCurrentlyActive ? "extended" : "activated";
 
-    // 1. Save Payment record directly to DB
+    // 1. Save Payment record directly to DB in IST
     const paymentRecord = await Payment.create({
       userId,
       referenceId: userId,
@@ -147,6 +152,9 @@ export const verifySubscriptionPayment = async (req, res, next) => {
       signature: actualSignature,
       transactionId: actualPaymentId,
       remarks: `Subscription ${actionText}: ${finalPlanName}`,
+      paymentDate: nowIST,
+      createdAt: nowIST,
+      updatedAt: nowIST,
     });
 
     // 2. Update User's active subscription status in DB
@@ -164,6 +172,14 @@ export const verifySubscriptionPayment = async (req, res, next) => {
       },
       { new: true }
     ).select("name email subscription");
+
+    // 3. Notify the user that their First Subscription mission reward is ready to claim.
+    //    XP is not auto-credited; the user can manually claim it from the Missions screen.
+    if (!isCurrentlyActive) {
+      triggerMissionNotification(userId, "FIRST_SUBSCRIPTION").catch((err) => {
+        console.error("FIRST_SUBSCRIPTION triggerMissionNotification error:", err?.message);
+      });
+    }
 
     return res.status(200).json({
       success: true,
@@ -244,7 +260,7 @@ export const getActiveSubscribedUsers = async (req, res, next) => {
         const start = new Date(sub.startDate);
         const expiry = new Date(sub.expiryDate);
         expiry.setHours(23, 59, 59, 999);
-        const now = new Date();
+        const now = getNowIST();
 
         durationDays = Math.max(0, Math.round((expiry - start) / (1000 * 60 * 60 * 24)));
         remainingDays = Math.max(0, Math.ceil((expiry - now) / (1000 * 60 * 60 * 24)));
@@ -303,7 +319,8 @@ export const getUserPlanHistory = async (req, res, next) => {
       endOfDayExpiry.setHours(23, 59, 59, 999);
     }
 
-    const isExpired = endOfDayExpiry ? new Date() > endOfDayExpiry : false;
+    const nowIST = getNowIST();
+    const isExpired = endOfDayExpiry ? (nowIST > endOfDayExpiry && new Date() > endOfDayExpiry) : false;
 
     const isCurrentlyActive = Boolean(
       userDoc?.subscription?.isPlanActive && !isExpired
@@ -317,7 +334,7 @@ export const getUserPlanHistory = async (req, res, next) => {
       if (!d) return null;
       const dateObj = new Date(d);
       if (isNaN(dateObj.getTime())) return null;
-      return `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, "0")}-${String(dateObj.getDate()).padStart(2, "0")}`;
+      return `${dateObj.getUTCFullYear()}-${String(dateObj.getUTCMonth() + 1).padStart(2, "0")}-${String(dateObj.getUTCDate()).padStart(2, "0")}`;
     };
 
     const extractPlanName = (payment, defaultName = "Pro Quarterly") => {

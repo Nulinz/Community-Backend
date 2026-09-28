@@ -188,6 +188,110 @@ export const renderResumeHTML = async (templateId, formData) => {
 };
 
 /**
+ * Helper to dynamically locate an installed Chromium-compatible browser binary
+ * (Chrome, Microsoft Edge, Brave) across Windows, Linux, and macOS.
+ * Eliminates missing Chrome cache errors without requiring separate CLI browser installs.
+ */
+const getSystemBrowserExecutable = async () => {
+  if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+    try {
+      await fs.access(process.env.PUPPETEER_EXECUTABLE_PATH);
+      return process.env.PUPPETEER_EXECUTABLE_PATH;
+    } catch {}
+  }
+
+  const localAppData = process.env.LOCALAPPDATA || "C:\\Users\\Admin\\AppData\\Local";
+  const programFiles = process.env.ProgramFiles || "C:\\Program Files";
+  const programFilesX86 = process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)";
+
+  const candidatePaths = [
+    // Standard Google Chrome locations
+    path.join(programFiles, "Google", "Chrome", "Application", "chrome.exe"),
+    path.join(programFilesX86, "Google", "Chrome", "Application", "chrome.exe"),
+    path.join(localAppData, "Google", "Chrome", "Application", "chrome.exe"),
+    // Microsoft Edge locations (standard on all Windows 10/11 environments)
+    path.join(programFilesX86, "Microsoft", "Edge", "Application", "msedge.exe"),
+    path.join(programFiles, "Microsoft", "Edge", "Application", "msedge.exe"),
+    path.join(localAppData, "Microsoft", "Edge", "Application", "msedge.exe"),
+    // Brave Browser
+    path.join(programFiles, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
+    path.join(programFilesX86, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
+    // Linux and macOS system paths
+    "/usr/bin/google-chrome",
+    "/usr/bin/google-chrome-stable",
+    "/usr/bin/chromium-browser",
+    "/usr/bin/chromium",
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
+  ];
+
+  for (const candidate of candidatePaths) {
+    try {
+      await fs.access(candidate);
+      return candidate;
+    } catch {}
+  }
+
+  return null;
+};
+
+/**
+ * Resilient Puppeteer browser launcher that attempts multiple discovery strategies:
+ * 1. Explicitly discovered system executable (Chrome, Edge, Brave).
+ * 2. Puppeteer native channel detection ('chrome', 'msedge').
+ * 3. Default Puppeteer cache resolution.
+ */
+export const launchPuppeteerBrowser = async (extraArgs = []) => {
+  const commonArgs = [
+    "--no-sandbox",
+    "--disable-setuid-sandbox",
+    "--disable-dev-shm-usage",
+    "--disable-gpu",
+    ...extraArgs
+  ];
+
+  // 1. Try system executable path if found
+  const execPath = await getSystemBrowserExecutable();
+  if (execPath) {
+    try {
+      return await puppeteer.launch({
+        executablePath: execPath,
+        headless: true,
+        args: commonArgs
+      });
+    } catch (err) {
+      console.warn(`[Puppeteer] Direct launch with ${execPath} failed:`, err.message);
+    }
+  }
+
+  // 2. Try Puppeteer channels (queries OS registry/PATH for installed browsers)
+  for (const channel of ["chrome", "msedge"]) {
+    try {
+      return await puppeteer.launch({
+        channel,
+        headless: true,
+        args: commonArgs
+      });
+    } catch (channelErr) {
+      // Continue to next channel
+    }
+  }
+
+  // 3. Fallback to default Puppeteer bundled browser
+  try {
+    return await puppeteer.launch({
+      headless: "shell",
+      args: commonArgs
+    });
+  } catch (shellErr) {
+    return await puppeteer.launch({
+      headless: true,
+      args: commonArgs
+    });
+  }
+};
+
+/**
  * Compiles HTML template with certificate data and renders a PDF Buffer via Puppeteer.
  */
 export const generateCertificatePDFBuffer = async (data) => {
@@ -197,15 +301,7 @@ export const generateCertificatePDFBuffer = async (data) => {
   const compiledTemplate = handlebars.compile(templateContent);
   const htmlContent = compiledTemplate(data);
 
-  const browser = await puppeteer.launch({
-    headless: "shell",
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-      "--disable-gpu"
-    ]
-  });
+  const browser = await launchPuppeteerBrowser();
 
   try {
     const page = await browser.newPage();
@@ -220,7 +316,9 @@ export const generateCertificatePDFBuffer = async (data) => {
 
     return pdfBuffer;
   } finally {
-    await browser.close();
+    if (browser) {
+      await browser.close();
+    }
   }
 };
 
@@ -230,16 +328,7 @@ export const generateCertificatePDFBuffer = async (data) => {
 export const generateResumePDFBuffer = async (templateId, formData) => {
   const htmlContent = await renderResumeHTML(templateId, formData);
 
-  const browser = await puppeteer.launch({
-    headless: "shell",
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-      "--disable-gpu",
-      "--font-render-hinting=none"
-    ]
-  });
+  const browser = await launchPuppeteerBrowser(["--font-render-hinting=none"]);
 
   try {
     const page = await browser.newPage();
@@ -255,7 +344,9 @@ export const generateResumePDFBuffer = async (templateId, formData) => {
 
     return pdfBuffer;
   } finally {
-    await browser.close();
+    if (browser) {
+      await browser.close();
+    }
   }
 };
 

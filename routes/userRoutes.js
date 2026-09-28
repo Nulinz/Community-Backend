@@ -66,7 +66,8 @@ import { clearAllNotifications, getNotifications, getUserResumes, markAsRead, ma
 import { getUserDetails } from "../controller/userDetailController.js";
 import {
   markEventAttendance,
-  getEventAttendanceStats
+  getEventAttendanceStats,
+  toggleEventAttendanceStatus,
 } from "../controller/user/eventAttendanceController.js";
 import {
   exportEventRegistrationsCSV,
@@ -272,6 +273,7 @@ router.get("/all-registered", isAuthenticated, getAllRegisteredUsers);
 // ─────────────────────────────────────────────
 router.post("/attendance/scan-event-qr", uploader.none(), isAuthenticated, markEventAttendance);
 router.get("/attendance/stats/:eventId", isAuthenticated, getEventAttendanceStats);
+router.patch("/attendance/toggle-status/:registrationId", isAuthenticated, toggleEventAttendanceStatus);
 
 // ─────────────────────────────────────────────
 // CSV Export Routes

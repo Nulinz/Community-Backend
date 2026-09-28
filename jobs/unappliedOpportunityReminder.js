@@ -83,7 +83,9 @@ const CYCLE_CONFIGS = [
  * Main execution handler that computes unapplied counts and dispatches alerts.
  */
 export const runUnappliedOpportunityReminder = async () => {
-  const cycleIndex = getCycleIndex();
+  // const cycleIndex = getCycleIndex();
+
+  const cycleIndex = 0; // for testing
   const config = CYCLE_CONFIGS[cycleIndex];
 
   console.log(`[UnappliedCron] Starting run for Cycle Day ${cycleIndex + 1}: ${config.label}`);
@@ -211,7 +213,7 @@ export const runUnappliedOpportunityReminder = async () => {
  */
 export const startUnappliedOpportunityReminderCron = () => {
   // Cron expression: minute 0, hour 11, every day, every month, every day of week
-  cron.schedule("0 11 * * *", runUnappliedOpportunityReminder, {
+  cron.schedule("55 14 * * *", runUnappliedOpportunityReminder, {
     timezone: "Asia/Kolkata",
   });
   console.log("[UnappliedCron] Scheduled — daily at 11:00 AM IST (3-day cycle: Jobs → Internships → Envy)");

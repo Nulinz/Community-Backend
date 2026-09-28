@@ -7,6 +7,7 @@ import PerformanceEvaluation from "../models/performanceEvaluationModel.js";
 import { notifyJobAudience } from "../helper/jobNotification.js";
 import Company from "../models/companyModel.js";
 import User from "../models/userModel.js";
+import Resume from "../models/resumeModel.js";
 
 const toCleanString = (value) =>
     typeof value === "string" ? value.trim() : "";
@@ -212,6 +213,7 @@ export const getInternshipById = async (req, res, next) => {
       jobType: "Internship",
     })
       .populate("userId", "email phone name")
+      .populate("resumeId", "fileName fileUrl pdfUrl")
       .sort({ createdAt: -1 })
       .lean();
 
@@ -226,17 +228,29 @@ export const getInternshipById = async (req, res, next) => {
           )
           .lean();
 
+        let resumeUrl = app.resumeId?.fileUrl || app.resumeId?.pdfUrl || "";
+        let resumeName = app.resumeId?.fileName || "Resume.pdf";
+        if (!resumeUrl && app.userId?._id) {
+          const userResume = await Resume.findOne({ userId: app.userId._id }).sort({ createdAt: -1 }).lean();
+          if (userResume) {
+            resumeUrl = userResume.fileUrl || userResume.pdfUrl || "";
+            resumeName = userResume.fileName || "Resume.pdf";
+          }
+        }
+
         return {
           sNo: index + 1,
           applicationId: app._id,
           userId: app.userId?._id,
-          name:app.userId?.name,
+          name: app.userId?.name,
           mail: app.userId?.email || "",
           contact: app.userId?.phone || "",
           appliedAt: app.createdAt,
-          location:app.location,
+          location: app.location,
           status: app.status || "applied",
           portfolio: app.portfolio || null,
+          resumeUrl,
+          resumeName,
           // UserDetails
           profile_pic: userDetails?.profile_pic || null,
           gender: userDetails?.gender || "",
@@ -378,6 +392,7 @@ export const getSelectedCandidates = async (req, res, next) => {
       status: "selected",
     })
       .populate("userId", "name email phone")
+      .populate("resumeId", "fileName fileUrl pdfUrl")
       .sort({ createdAt: -1 })
       .lean();
 
@@ -388,6 +403,16 @@ export const getSelectedCandidates = async (req, res, next) => {
         })
           .select("collegeName ugCollegeName pgCollegeName location city ugDegree ugYear pgDegree pgYear")
           .lean();
+
+        let resumeUrl = app.resumeId?.fileUrl || app.resumeId?.pdfUrl || "";
+        let resumeName = app.resumeId?.fileName || "Resume.pdf";
+        if (!resumeUrl && app.userId?._id) {
+          const userResume = await Resume.findOne({ userId: app.userId._id }).sort({ createdAt: -1 }).lean();
+          if (userResume) {
+            resumeUrl = userResume.fileUrl || userResume.pdfUrl || "";
+            resumeName = userResume.fileName || "Resume.pdf";
+          }
+        }
 
         const candidateCity = userDetails?.city || app.location || userDetails?.location || "-";
 
@@ -404,6 +429,8 @@ export const getSelectedCandidates = async (req, res, next) => {
           city: candidateCity,
           department: userDetails?.pgDegree || userDetails?.ugDegree || "-",
           year: userDetails?.ugYear || userDetails?.pgYear || "-",
+          resumeUrl,
+          resumeName,
         };
       })
     );
@@ -577,7 +604,7 @@ export const getAppliedCandidateProfile = async (req, res, next) => {
 
     const application = await AppliedJob.findById(applicationId)
       .populate("userId", "name email phone role")
-      .populate("resumeId", "fileName fileUrl fileSize mimeType")
+      .populate("resumeId", "fileName fileUrl pdfUrl fileSize mimeType")
       .lean();
 
     if (!application) {
@@ -587,6 +614,18 @@ export const getAppliedCandidateProfile = async (req, res, next) => {
     const userDetails = await UserDetails.findOne({
       userId: application.userId?._id,
     }).lean();
+
+    let resumeUrl = application.resumeId?.fileUrl || application.resumeId?.pdfUrl || "";
+    let resumeName = application.resumeId?.fileName || "Resume.pdf";
+    if (!resumeUrl && application.userId?._id) {
+      const userResume = await Resume.findOne({ userId: application.userId._id })
+        .sort({ createdAt: -1 })
+        .lean();
+      if (userResume) {
+        resumeUrl = userResume.fileUrl || userResume.pdfUrl || "";
+        resumeName = userResume.fileName || "Resume.pdf";
+      }
+    }
 
     const candidateProfile = {
       userId: application.userId?._id || application.userId,
@@ -646,12 +685,13 @@ export const getAppliedCandidateProfile = async (req, res, next) => {
         : [],
 
       // Resume
-      resumeUrl: application.resumeId?.fileUrl || "",
-      resumeName: application.resumeId?.fileName || "Resume.pdf",
+      resumeUrl,
+      resumeName,
     };
 
     res.status(200).json({
       success: true,
+      status: true,
       data: candidateProfile,
     });
   } catch (error) {

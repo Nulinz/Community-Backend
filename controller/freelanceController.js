@@ -103,9 +103,10 @@ export const createFreelanceForm = async (req, res, next) => {
     freelance.applicationDeadline = applicationDeadline || undefined;
     freelance.jobStartDate = jobStartDate || undefined;
     freelance.jobEndDate = jobEndDate || undefined;
-    freelance.salary = Number(salary) || 0;
+    const parsedBudgetNum = parseFloat(String(budget || "").replace(/[^0-9.]/g, "")) || 0;
+    freelance.salary = Number(salary) || parsedBudgetNum || 0;
     freelance.budgetType = toCleanString(budgetType) || "Fixed";
-    freelance.budget = toCleanString(budget);
+    freelance.budget = toCleanString(budget) || (salary ? String(salary) : "");
     freelance.paymentMethod = toCleanString(paymentMethod);
     freelance.paymentStructure = toCleanString(paymentStructure) || toCleanString(rest.paymentstructure) || "Full Payment";
     freelance.milestones = parseArray(milestones)

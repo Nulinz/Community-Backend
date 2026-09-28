@@ -4,7 +4,7 @@ import path from "path";
 import mongoose from "mongoose";
 import EventRegistration from "../models/eventRegistrationModel.js";
 import { getEventFinancials } from "../helper/getEventFinancials.js";
-import { validateOrganizerPayout } from "../helper/payoutValidator.js";
+import { validateOrganizerPayout, resolveOrganizerName } from "../helper/payoutValidator.js";
 const toCleanString = (value) =>
     typeof value === "string" ? value.trim() : "";
 
@@ -101,12 +101,23 @@ export const createSeminarForm = async (req, res, next) => {
         // Validation
         if (!eventType) throw Object.assign(new Error("Event Type is required"), { status: 400 });
         if (!eventName) throw Object.assign(new Error("Event Name is required"), { status: 400 });
-        if (!organizer) throw Object.assign(new Error("Organizer is required"), { status: 400 });
+        const resolvedOrganizer = await resolveOrganizerName(organizer, req.user);
         if (!mode) throw Object.assign(new Error("Mode is required"), { status: 400 });
         if ((mode === "Online" || mode === "Hybrid") && !onlinePlatformLink) {
             throw Object.assign(new Error("Online Platform / Meeting Link is required for Online or Hybrid mode"), { status: 400 });
         }
         if (!eventDate) throw Object.assign(new Error("Event Date is required"), { status: 400 });
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+        if (!isUpdate && new Date(eventDate) < startOfToday) {
+            throw Object.assign(new Error("Event Date cannot be earlier than the current date"), { status: 400 });
+        }
+        if (registrationEndDate && eventDate && new Date(registrationEndDate) > new Date(eventDate)) {
+            throw Object.assign(new Error("Registration End Date cannot be later than Event Date"), { status: 400 });
+        }
+        if (registrationStartDate && registrationEndDate && new Date(registrationStartDate) > new Date(registrationEndDate)) {
+            throw Object.assign(new Error("Registration Start Date cannot be later than Registration End Date"), { status: 400 });
+        }
         if (!registrationType) throw Object.assign(new Error("Registration Type is required"), { status: 400 });
 
         if (toCleanString(registrationType).toLowerCase() === "paid") {
@@ -139,15 +150,18 @@ export const createSeminarForm = async (req, res, next) => {
             oldSignatureUrlPath = seminar.signatureUrl;
         } else {
             seminar = new Seminar({ c_by: req.user._id });
-            seminar.status=status
         }
-  seminar.status=status
+        seminar.status = status;
+
         // Update fields
         seminar.eventType = toCleanString(eventType);
         seminar.eventName = toCleanString(eventName);
-        seminar.organizer = toCleanString(organizer);
-        seminar.mode = toCleanString(mode);
-        seminar.onlinePlatformLink = toCleanString(onlinePlatformLink);
+        seminar.organizer = resolvedOrganizer || seminar.organizer || "Organizer";
+        const cleanMode = toCleanString(mode);
+        seminar.mode = cleanMode;
+        seminar.onlinePlatformLink = (cleanMode.toLowerCase() === "offline")
+            ? ""
+            : toCleanString(onlinePlatformLink);
         seminar.externalRegistrationLink = toCleanString(externalRegistrationLink);
         seminar.eventDate = eventDate;
         seminar.registrationType = toCleanString(registrationType);
@@ -160,9 +174,24 @@ export const createSeminarForm = async (req, res, next) => {
         if (coverImagePath) seminar.coverImage = coverImagePath;
         if (signatureUrlPath) seminar.signatureUrl = signatureUrlPath;
 
-        seminar.individualFees = Number(individualFees) || 0;
-        seminar.teamFees = Number(teamFees) || 0;
-        seminar.lateFees = Number(lateFees) || 0;
+        // Fee validation: cannot be negative or decimal
+        const validateFee = (val, label) => {
+            if (val !== undefined && val !== null && val !== "") {
+                const num = Number(val);
+                if (isNaN(num) || num < 0) {
+                    throw Object.assign(new Error(`${label} cannot be negative`), { status: 400 });
+                }
+                if (!Number.isInteger(num)) {
+                    throw Object.assign(new Error(`${label} cannot contain decimal values`), { status: 400 });
+                }
+                return num;
+            }
+            return 0;
+        };
+
+        seminar.individualFees = validateFee(individualFees, "Individual Fees");
+        seminar.teamFees = validateFee(teamFees, "Team Fees");
+        seminar.lateFees = validateFee(lateFees, "Late Fees");
 
         seminar.firstPrize = toCleanString(firstPrize);
         seminar.secondPrize = toCleanString(secondPrize);

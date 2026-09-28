@@ -6,6 +6,7 @@ import UserDetails from "../models/userDetails.js";
 import PerformanceEvaluation from "../models/performanceEvaluationModel.js";
 import Company from "../models/companyModel.js";
 import User from "../models/userModel.js";
+import Resume from "../models/resumeModel.js";
 
 const toCleanString = (value) =>
   typeof value === "string" ? value.trim() : "";
@@ -208,6 +209,7 @@ export const getJobById = async (req, res, next) => {
       jobType: "Job",
     })
       .populate("userId", "email phone name")
+      .populate("resumeId", "fileName fileUrl pdfUrl")
       .sort({ createdAt: -1 })
       .lean();
 
@@ -222,6 +224,16 @@ export const getJobById = async (req, res, next) => {
           )
           .lean();
 
+        let resumeUrl = app.resumeId?.fileUrl || app.resumeId?.pdfUrl || "";
+        let resumeName = app.resumeId?.fileName || "Resume.pdf";
+        if (!resumeUrl && app.userId?._id) {
+          const userResume = await Resume.findOne({ userId: app.userId._id }).sort({ createdAt: -1 }).lean();
+          if (userResume) {
+            resumeUrl = userResume.fileUrl || userResume.pdfUrl || "";
+            resumeName = userResume.fileName || "Resume.pdf";
+          }
+        }
+
         return {
           sNo: index + 1,
           applicationId: app._id,
@@ -233,6 +245,8 @@ export const getJobById = async (req, res, next) => {
           location: app.location,
           status: app.status || "applied",
           portfolio: app.portfolio || null,
+          resumeUrl,
+          resumeName,
           profile_pic: userDetails?.profile_pic || null,
           gender: userDetails?.gender || "",
           currentStatus: userDetails?.currentStatus || "",
@@ -339,21 +353,96 @@ export const getAppliedCandidateProfile = async (req, res, next) => {
   try {
     const { applicationId } = req.params;
     const application = await AppliedJob.findById(applicationId)
-      .populate("userId", "name email phone profileImage")
-      .populate("resumeId");
+      .populate("userId", "name email phone profileImage role")
+      .populate("resumeId", "fileName fileUrl pdfUrl fileSize mimeType")
+      .lean();
 
     if (!application) {
       throw Object.assign(new Error("Application not found"), { status: 404 });
     }
 
-    const userDetails = await UserDetails.findOne({ userId: application.userId._id });
+    const userDetails = await UserDetails.findOne({
+      userId: application.userId?._id,
+    }).lean();
+
+    let resumeUrl = application.resumeId?.fileUrl || application.resumeId?.pdfUrl || "";
+    let resumeName = application.resumeId?.fileName || "Resume.pdf";
+    if (!resumeUrl && application.userId?._id) {
+      const userResume = await Resume.findOne({ userId: application.userId._id })
+        .sort({ createdAt: -1 })
+        .lean();
+      if (userResume) {
+        resumeUrl = userResume.fileUrl || userResume.pdfUrl || "";
+        resumeName = userResume.fileName || "Resume.pdf";
+      }
+    }
+
+    const candidateProfile = {
+      userId: application.userId?._id || application.userId,
+      applicationId: application._id,
+      jobId: application.jobId,
+      jobType: application.jobType,
+      status: application.status || "applied",
+      appliedAt: application.createdAt,
+
+      // Personal Info
+      name: userDetails?.name || application.userId?.name || "",
+      email: application.userId?.email || "",
+      mail: application.userId?.email || "",
+      contact: application.userId?.phone || "",
+      phoneNumber: application.userId?.phone || "",
+      profilePic: userDetails?.profile_pic || application.userId?.profileImage || null,
+      profile_pic: userDetails?.profile_pic || application.userId?.profileImage || null,
+      gender: userDetails?.gender || "",
+      dob: userDetails?.dob || null,
+      address: userDetails?.address || "",
+      city: userDetails?.city || "",
+      currentStatus: userDetails?.currentStatus || "",
+      education: userDetails?.education || "",
+      highestQualification: userDetails?.highQualification || userDetails?.education || "",
+
+      // Educational Details
+      college: userDetails?.ugCollegeName || userDetails?.pgCollegeName || "",
+      collegeName: userDetails?.ugCollegeName || userDetails?.pgCollegeName || "",
+      department: userDetails?.ugFieldOfStudy || userDetails?.pgFieldOfStudy || "",
+      degree: userDetails?.ugDegree || userDetails?.pgDegree || "",
+      ugDegree: userDetails?.ugDegree || "",
+      ugFieldOfStudy: userDetails?.ugFieldOfStudy || "",
+      ugYear: userDetails?.ugYear || null,
+      year: userDetails?.ugYear || userDetails?.pgYear || "",
+      ugCollegeName: userDetails?.ugCollegeName || "",
+      ugModeOfStudy: userDetails?.ugModeOfstudy || "",
+      ugPercentage: userDetails?.ugPercentage || "",
+      pgDegree: userDetails?.pgDegree || "",
+      pgFieldOfStudy: userDetails?.pgFieldOfStudy || "",
+      pgYear: userDetails?.pgYear || null,
+      pgCollegeName: userDetails?.pgCollegeName || "",
+      pgModeOfStudy: userDetails?.pgModeOfstudy || "",
+      pgPercentage: userDetails?.pgPercentage || "",
+      academicAchievement: Array.isArray(userDetails?.academicAchievements)
+        ? userDetails.academicAchievements.join(", ")
+        : userDetails?.academicAchievements || "",
+
+      // Skills
+      primarySkills: userDetails?.skills?.primary_skills?.length
+        ? userDetails.skills.primary_skills
+        : [],
+      toolsAndTechnologies: userDetails?.skills?.tools?.length
+        ? userDetails.skills.tools
+        : [],
+      languagesKnown: userDetails?.skills?.languages?.length
+        ? userDetails.skills.languages
+        : [],
+
+      // Resume
+      resumeUrl,
+      resumeName,
+    };
 
     return res.status(200).json({
+      success: true,
       status: true,
-      data: {
-        application,
-        userDetails,
-      },
+      data: candidateProfile,
     });
   } catch (error) {
     next(error);
@@ -380,6 +469,7 @@ export const updateApplicationStatus = async (req, res, next) => {
     }
 
     return res.status(200).json({
+      success: true,
       status: true,
       message: "Application status updated successfully",
       data: application,
@@ -392,13 +482,56 @@ export const updateApplicationStatus = async (req, res, next) => {
 export const getSelectedCandidates = async (req, res, next) => {
   try {
     const { jobId } = req.params;
-    const candidates = await AppliedJob.find({ jobId, status: "selected" })
+    const applications = await AppliedJob.find({ jobId, status: "selected" })
       .populate("userId", "name email phone profileImage")
-      .populate("resumeId");
+      .populate("resumeId", "fileName fileUrl pdfUrl")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const selectedList = await Promise.all(
+      applications.map(async (app, index) => {
+        const userDetails = await UserDetails.findOne({
+          userId: app.userId?._id,
+        })
+          .select("collegeName ugCollegeName pgCollegeName location city ugDegree ugYear pgDegree pgYear")
+          .lean();
+
+        let resumeUrl = app.resumeId?.fileUrl || app.resumeId?.pdfUrl || "";
+        let resumeName = app.resumeId?.fileName || "Resume.pdf";
+        if (!resumeUrl && app.userId?._id) {
+          const userResume = await Resume.findOne({ userId: app.userId._id }).sort({ createdAt: -1 }).lean();
+          if (userResume) {
+            resumeUrl = userResume.fileUrl || userResume.pdfUrl || "";
+            resumeName = userResume.fileName || "Resume.pdf";
+          }
+        }
+
+        const candidateCity = userDetails?.city || app.location || userDetails?.location || "-";
+
+        return {
+          userId: app.userId?._id,
+          id: app.userId?._id || app._id,
+          applicationId: app._id,
+          sNo: String(index + 1).padStart(2, "0"),
+          name: app.userId?.name || "Candidate",
+          mail: app.userId?.email || "",
+          contact: app.userId?.phone || "",
+          college: userDetails?.collegeName || userDetails?.ugCollegeName || userDetails?.pgCollegeName || "-",
+          location: candidateCity,
+          city: candidateCity,
+          department: userDetails?.pgDegree || userDetails?.ugDegree || "-",
+          year: userDetails?.ugYear || userDetails?.pgYear || "-",
+          resumeUrl,
+          resumeName,
+        };
+      })
+    );
 
     return res.status(200).json({
+      success: true,
       status: true,
-      data: candidates,
+      count: selectedList.length,
+      data: selectedList,
     });
   } catch (error) {
     next(error);

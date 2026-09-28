@@ -4,7 +4,7 @@ import path from "path";
 import mongoose from "mongoose";
 import EventRegistration from "../models/eventRegistrationModel.js";
 import { getEventFinancials } from "../helper/getEventFinancials.js";
-import { validateOrganizerPayout } from "../helper/payoutValidator.js";
+import { validateOrganizerPayout, resolveOrganizerName } from "../helper/payoutValidator.js";
 const toCleanString = (value) =>
     typeof value === "string" ? value.trim() : "";
 
@@ -96,9 +96,20 @@ export const createConferenceForm = async (req, res, next) => {
 
         // Validation
         if (!eventName) throw Object.assign(new Error("Event Name is required"), { status: 400 });
-        if (!organizer) throw Object.assign(new Error("Organizer is required"), { status: 400 });
+        const resolvedOrganizer = await resolveOrganizerName(organizer, req.user);
         if (!mode) throw Object.assign(new Error("Mode is required"), { status: 400 });
         if (!eventDate) throw Object.assign(new Error("Event Date is required"), { status: 400 });
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+        if (!isUpdate && new Date(eventDate) < startOfToday) {
+            throw Object.assign(new Error("Event Date cannot be earlier than the current date"), { status: 400 });
+        }
+        if (registrationEndDate && eventDate && new Date(registrationEndDate) > new Date(eventDate)) {
+            throw Object.assign(new Error("Registration End Date cannot be later than Event Date"), { status: 400 });
+        }
+        if (registrationStartDate && registrationEndDate && new Date(registrationStartDate) > new Date(registrationEndDate)) {
+            throw Object.assign(new Error("Registration Start Date cannot be later than Registration End Date"), { status: 400 });
+        }
         if (!registrationType) throw Object.assign(new Error("Registration Type is required"), { status: 400 });
 
         if (toCleanString(registrationType).toLowerCase() === "paid") {
@@ -139,14 +150,16 @@ export const createConferenceForm = async (req, res, next) => {
             oldSignatureUrlPath = conference.signatureUrl;
         } else {
             conference = new Conference({ c_by: req.user._id });
-            conference.status = status;
         }
         conference.status = status;
         // Update fields
         conference.eventName = toCleanString(eventName);
-        conference.organizer = toCleanString(organizer);
-        conference.mode = toCleanString(mode);
-        conference.onlinePlatformLink = toCleanString(onlinePlatformLink);
+        conference.organizer = resolvedOrganizer || conference.organizer || "Organizer";
+        const cleanMode = toCleanString(mode);
+        conference.mode = cleanMode;
+        conference.onlinePlatformLink = (cleanMode.toLowerCase() === "offline")
+            ? ""
+            : toCleanString(onlinePlatformLink);
         conference.externalRegistrationLink = toCleanString(externalRegistrationLink);
         conference.eventDate = eventDate;
         conference.registrationType = toCleanString(registrationType);
@@ -158,9 +171,24 @@ export const createConferenceForm = async (req, res, next) => {
         if (coverImagePath) conference.coverImage = coverImagePath;
         if (signatureUrlPath) conference.signatureUrl = signatureUrlPath;
 
-        conference.individualFees = Number(individualFees) || 0;
-        conference.teamFees = Number(teamFees) || 0;
-        conference.lateFees = Number(lateFees) || 0;
+        // Fee validation: cannot be negative or decimal
+        const validateFee = (val, label) => {
+            if (val !== undefined && val !== null && val !== "") {
+                const num = Number(val);
+                if (isNaN(num) || num < 0) {
+                    throw Object.assign(new Error(`${label} cannot be negative`), { status: 400 });
+                }
+                if (!Number.isInteger(num)) {
+                    throw Object.assign(new Error(`${label} cannot contain decimal values`), { status: 400 });
+                }
+                return num;
+            }
+            return 0;
+        };
+
+        conference.individualFees = validateFee(individualFees, "Individual Fees");
+        conference.teamFees = validateFee(teamFees, "Team Fees");
+        conference.lateFees = validateFee(lateFees, "Late Fees");
 
         conference.prizesAvailable = toCleanString(prizesAvailable) || "No";
         conference.firstPrize = toCleanString(firstPrize);

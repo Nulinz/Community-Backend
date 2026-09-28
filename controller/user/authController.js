@@ -61,7 +61,13 @@ export const loginUser = async (req, res) => {
       userId: user._id,
     });
 
-    if (user.register_status === "pending") {
+    // Determine if this is an admin-created account (company, college, admin, influencer).
+    // These accounts skip the OTP/registration gate — they are created directly by admin
+    // without going through the mobile self-registration flow.
+    // The web /web-login route is entirely separate and remains unaffected.
+    const isAdminCreatedRole = user.role && user.role !== "user";
+
+    if (!isAdminCreatedRole && user.register_status === "pending") {
       const otp = Math.floor(1000 + Math.random() * 9000).toString();
       const otp_expire = new Date(Date.now() + 5 * 60 * 1000);
       user.otp = otp;
@@ -120,13 +126,19 @@ export const loginUser = async (req, res) => {
       await user.save();
     }
 
+    // Admin-created roles are treated as fully onboarded app users: details_comp is forced
+    // true and role is normalised to "user" so the app enters the standard user flow.
+    const details_comp = isAdminCreatedRole
+      ? true
+      : (userDetails && user.register_status === "completed") ? true : false;
+
     // 🔹 8. Response
     return res.status(200).json({
       status: true,
       data: {
         accountStatus: "active",
-        details_comp: (userDetails && user.register_status === "completed") ? true : false, // 👈 key logic
-        register_status: user.register_status,
+        details_comp,
+        register_status: isAdminCreatedRole ? "completed" : user.register_status,
         referralCode: userReferralCode || "",
         token,
         user: {
@@ -134,8 +146,9 @@ export const loginUser = async (req, res) => {
           name: user.name,
           phone: user.phone,
           email: user.email,
-          role: user.role || "user",
-          // accountStatus: "active",
+          // App always receives "user" role regardless of actual DB role so it enters the
+          // normal user flow. The web portal uses /web-login which returns the real role.
+          role: "user",
           profile_pic: userDetails?.profile_pic,
           referralCode: userReferralCode || "",
         },
@@ -538,10 +551,21 @@ export const resetPassword = async (req, res) => {
       });
     }
 
-    // 🔹 4. Update password
+    // 🔹 4. Validate that new password is not the same as the old password
+    if (user.password) {
+      const isSamePassword = await user.comparePassword(new_password);
+      if (isSamePassword) {
+        return res.status(400).json({
+          status: false,
+          message: "New password cannot be the same as the old password",
+        });
+      }
+    }
+
+    // 🔹 5. Update password
     user.password = new_password;
 
-    // 🔹 5. Reset forgot flow
+    // 🔹 6. Reset forgot flow
     user.forgot_status = "completed";
     user.forgot_otp = null;
     user.forgot_otp_expire = null;

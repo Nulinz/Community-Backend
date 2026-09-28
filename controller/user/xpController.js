@@ -1,4 +1,5 @@
 import User from "../../models/userModel.js";
+import Payment from "../../models/paymentModel.js";
 import XPLog from "../../models/xpLogModel.js";
 import CompanyFollow from "../../models/companyFollowModel.js";
 import EventRegistration from "../../models/eventRegistrationModel.js";
@@ -106,6 +107,7 @@ export const getMissions = async (req, res, next) => {
       hasSavedJob,
       hasCompletedProfile,
       hasCreatedResume,
+      hasSubscriptionPayment,
       referredUsers,
       claimedReferralLogs,
     ] = await Promise.all([
@@ -127,6 +129,7 @@ export const getMissions = async (req, res, next) => {
         ],
       }),
       Resume.exists({ userId }),
+      Payment.exists({ userId, referenceType: "Subscription", paymentStatus: "Success" }),
       User.find({ referredBy: userId }).select("_id").lean(),
       XPLog.find({ userId, action: "REFERRAL" }).select("referenceId").lean(),
     ]);
@@ -206,7 +209,17 @@ export const getMissions = async (req, res, next) => {
       } else if (key === "FIRST_FREELANCE_APPLICATION") {
         currentProgress = hasFreelanceApp ? 1 : 0;
       } else if (key === "FIRST_SUBSCRIPTION") {
-        currentProgress = user.subscription?.status === "active" ? 1 : 0;
+        // Evaluates whether the user has subscribed to any subscription plan.
+        // True if the user has an active or past plan tenure, or a successful subscription payment.
+        const sub = user.subscription;
+        const hasEverSubscribed = Boolean(
+          (sub?.isPlanActive && sub?.expiryDate && new Date(sub.expiryDate) > new Date()) ||
+          sub?.startDate ||
+          sub?.expiryDate ||
+          (sub?.planName && sub.planName.toLowerCase() !== "free") ||
+          hasSubscriptionPayment
+        );
+        currentProgress = hasEverSubscribed ? 1 : 0;
       } else {
         currentProgress = 0;
       }
@@ -386,8 +399,25 @@ export const claimMission = async (req, res, next) => {
         return res.status(400).json({ status: false, message: "First freelance application mission not completed yet" });
       }
     } else if (actionKey === "FIRST_SUBSCRIPTION") {
-      const isSubscribed = user.subscription?.status === "active";
-      if (!isSubscribed) {
+      // Evaluates whether the user has subscribed to any subscription plan
+      const sub = user.subscription;
+      let hasEverSubscribed = Boolean(
+        (sub?.isPlanActive && sub?.expiryDate && new Date(sub.expiryDate) > new Date()) ||
+        sub?.startDate ||
+        sub?.expiryDate ||
+        (sub?.planName && sub.planName.toLowerCase() !== "free")
+      );
+      if (!hasEverSubscribed) {
+        const paymentExists = await Payment.exists({
+          userId,
+          referenceType: "Subscription",
+          paymentStatus: "Success",
+        });
+        if (paymentExists) {
+          hasEverSubscribed = true;
+        }
+      }
+      if (!hasEverSubscribed) {
         return res.status(400).json({ status: false, message: "First subscription mission not completed yet" });
       }
     } else if (actionKey === "INTERNSHIPS_AND_JOBS") {

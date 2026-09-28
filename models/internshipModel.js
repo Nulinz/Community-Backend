@@ -28,6 +28,8 @@ const internshipSchema = new mongoose.Schema(
     applicationDeadline: { type: Date },
     salary: { type: Number, default: 0 },
     paymentAmount: { type: Number, default: 0 },
+    budget: { type: String, trim: true },
+    budgetType: { type: String, trim: true, default: "Fixed" },
     responsibilities: [{ type: String, trim: true }],
     skill_set: [{ type: String, trim: true }],
     benefits: [{ type: String, trim: true }],

@@ -16,22 +16,17 @@ export const adminDashBoard = async (req, res) => {
   try {
     const now = new Date();
 
-    // 📅 Time ranges
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+    const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
 
-    // 🔧 Common filter
     const baseFilter = {
-      // is_deleted: false,
-      // is_active: true,
-      c_by:req?.user?._id,
+      c_by: req?.user?._id,
     };
 
-    // 📊 Helper
-    const getStats = async (Model) => {
+    // 📊 Helper — now accepts a separate filter for "total" so it isn't tied to c_by
+    const getStats = async (Model, { totalFilter = {} } = {}) => {
       const [total, thisMonth, lastMonth] = await Promise.all([
-        Model.countDocuments(baseFilter),
+        Model.countDocuments(totalFilter), // 👈 unscoped — true total in the collection
 
         Model.countDocuments({
           ...baseFilter,
@@ -40,14 +35,10 @@ export const adminDashBoard = async (req, res) => {
 
         Model.countDocuments({
           ...baseFilter,
-          createdAt: {
-            $gte: startOfLastMonth,
-            $lte: endOfLastMonth,
-          },
+          createdAt: { $gte: startOfLastMonth, $lt: startOfMonth },
         }),
       ]);
 
-      // 📈 Growth %
       let growth = 0;
       if (lastMonth > 0) {
         growth = ((thisMonth - lastMonth) / lastMonth) * 100;
@@ -63,7 +54,6 @@ export const adminDashBoard = async (req, res) => {
       };
     };
 
-    // 🧩 Models map
     const models = {
       companies: Company,
       colleges: College,
@@ -75,43 +65,32 @@ export const adminDashBoard = async (req, res) => {
       freelances: Freelance,
       jobs: Job,
     };
-    
 
-    // ⚡ Parallel execution
+    // ⚡ Parallel execution — pass {} as totalFilter so "total" = every doc in the collection
     const statsEntries = await Promise.all(
       Object.entries(models).map(async ([key, Model]) => {
-        const stats = await getStats(Model);
+        const stats = await getStats(Model, { totalFilter: {} });
         return [key, stats];
       })
     );
 
     const stats = Object.fromEntries(statsEntries);
 
-    // 🏢 Latest Companies
     const latestCompanies = await Company.find(baseFilter)
       .sort({ createdAt: -1 })
       .limit(5)
-      .select(
-        "companyName companyType contactPersonName city companyLogo createdAt"
-      )
+      .select("companyName companyType contactPersonName city companyLogo createdAt")
       .lean();
 
-    // 📅 Last 7 days trend
     const last7Days = new Date();
     last7Days.setDate(last7Days.getDate() - 6);
+    last7Days.setHours(0, 0, 0, 0);
 
     const companyTrends = await Company.aggregate([
-      {
-        $match: {
-          ...baseFilter,
-          createdAt: { $gte: last7Days },
-        },
-      },
+      { $match: { ...baseFilter, createdAt: { $gte: last7Days } } },
       {
         $group: {
-          _id: {
-            $dateToString: { format: "%Y-%m-%d", date: "$createdAt" },
-          },
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
           count: { $sum: 1 },
         },
       },
@@ -120,17 +99,10 @@ export const adminDashBoard = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      data: {
-        stats,
-        latestCompanies,
-        trends: {
-          companies: companyTrends,
-        },
-      },
+      data: { stats, latestCompanies, trends: { companies: companyTrends } },
     });
   } catch (error) {
     console.error("Dashboard API error:", error);
-
     return res.status(500).json({
       success: false,
       message: "Failed to fetch dashboard data",

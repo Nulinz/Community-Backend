@@ -153,9 +153,17 @@ const paymentSchema = new mongoose.Schema(
       type: Object,
       default: {},
     },
+
+    // Payment execution date (stored in IST, UTC+05:30)
+    paymentDate: {
+      type: Date,
+      default: () => new Date(Date.now() + 5.5 * 60 * 60 * 1000),
+    },
   },
   {
-    timestamps: true,
+    timestamps: {
+      currentTime: () => new Date(Date.now() + 5.5 * 60 * 60 * 1000),
+    },
   }
 );
 

@@ -1366,11 +1366,21 @@ const getJobProfile = async (req, res) => {
     const { domain, ...rawJobObj } = job.toObject();
     const itemDomains = Array.isArray(rawJobObj.domains) && rawJobObj.domains.length ? rawJobObj.domains : (domain ? domain.split(",").map(s => s.trim()).filter(Boolean) : []);
 
+    // ── Resolve budget from DB (prioritize budget field, fallback to salary/paymentAmount) ──
+    const resolvedBudget = rawJobObj.budget !== undefined && rawJobObj.budget !== null && String(rawJobObj.budget).trim() !== ""
+      ? String(rawJobObj.budget).trim()
+      : (rawJobObj.salary !== undefined && rawJobObj.salary !== null && rawJobObj.salary !== 0
+          ? String(rawJobObj.salary)
+          : (rawJobObj.paymentAmount !== undefined && rawJobObj.paymentAmount !== null && rawJobObj.paymentAmount !== 0
+              ? String(rawJobObj.paymentAmount)
+              : ""));
+
     return res.status(200).json({
       status: true,
       jobType,
       data: {
         ...rawJobObj,
+        budget: resolvedBudget,
         domains: itemDomains,
 
         // ✅ attach company info
@@ -2582,13 +2592,28 @@ const toggleFollow = async (req, res) => {
       });
     }
 
-    // Check if already following
-    const existing = await CompanyFollow.findOne({ userId, companyId });
+    // Resolve company to find both company._id and company.userId
+    const company = await Company.findOne({
+      $or: [{ _id: companyId }, { userId: companyId }]
+    }).lean();
+
+    const companyIds = company
+      ? [company._id, company.userId].filter(Boolean)
+      : [companyId];
+
+    // Check if already following (by either Company._id or Company.userId)
+    const existing = await CompanyFollow.findOne({
+      userId,
+      companyId: { $in: companyIds }
+    });
 
     if (existing) {
       // Unfollow
-      await CompanyFollow.findByIdAndDelete(existing._id);
-      const followCount = await CompanyFollow.countDocuments({ companyId });
+      await CompanyFollow.deleteMany({
+        userId,
+        companyId: { $in: companyIds }
+      });
+      const followCount = await CompanyFollow.countDocuments({ companyId: { $in: companyIds } });
       return res.status(200).json({
         status: true,
         is_following: false,
@@ -2596,9 +2621,10 @@ const toggleFollow = async (req, res) => {
         message: "Unfollowed successfully",
       });
     } else {
-      // Follow
-      await CompanyFollow.create({ userId, companyId });
-      const followCount = await CompanyFollow.countDocuments({ companyId });
+      // Follow - store with company.userId if available, or companyId
+      const targetCompanyId = company?.userId || companyId;
+      await CompanyFollow.create({ userId, companyId: targetCompanyId });
+      const followCount = await CompanyFollow.countDocuments({ companyId: { $in: companyIds } });
 
       // Trigger first company follow mission claim notification
       triggerMissionNotification(userId, "FIRST_COMPANY_FOLLOW").catch((err) =>
@@ -2721,10 +2747,12 @@ const getCompanyProfile = async (req, res) => {
 
     const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
 
+    const targetCompanyIds = [companyUserId, company._id].filter(Boolean);
+
     // ── Fetch all in parallel ───────────────────────────────────
     const [followCount, isFollowing, internshipsRaw, freelancesRaw] = await Promise.all([
-      CompanyFollow.countDocuments({ companyId: companyUserId }),
-      CompanyFollow.findOne({ userId, companyId: company.userId }),
+      CompanyFollow.countDocuments({ companyId: { $in: targetCompanyIds } }),
+      CompanyFollow.findOne({ userId, companyId: { $in: targetCompanyIds } }),
 
       // ✅ Internships posted by this company
       Internship.find({ isActive: true, c_by: companyUserId })

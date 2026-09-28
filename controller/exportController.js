@@ -91,12 +91,24 @@ export const exportEventAttendanceCSV = async (req, res) => {
     const { eventId } = req.params;
     const { eventType } = req.query;
 
-    const query = { eventId, attendanceStatus: "present" };
+    const isPresentCondition = {
+      $in: ["present", "Present", "PRESENT"],
+    };
+
+    const query = { eventId, attendanceStatus: isPresentCondition };
     if (eventType) {
-      query.eventType = eventType;
+      query.eventType = { $regex: new RegExp(`^${eventType}$`, "i") };
     }
 
-    const presentList = await EventRegistration.find(query).sort({ attendedAt: -1, createdAt: -1 });
+    let presentList = await EventRegistration.find(query).sort({ attendedAt: -1, createdAt: -1 });
+
+    // Fallback: If no records found with eventType filter, search by unique eventId directly
+    if (presentList.length === 0 && eventType) {
+      presentList = await EventRegistration.find({
+        eventId,
+        attendanceStatus: isPresentCondition,
+      }).sort({ attendedAt: -1, createdAt: -1 });
+    }
 
     const headers = [
       { label: "S.No", key: "sNo" },
@@ -119,7 +131,7 @@ export const exportEventAttendanceCSV = async (req, res) => {
       department: r.department || "N/A",
       year: r.year || "N/A",
       attendedAt: r.attendedAt ? new Date(r.attendedAt).toLocaleString("en-GB") : "N/A",
-      attendanceStatus: r.attendanceStatus || "present",
+      attendanceStatus: "Present",
     }));
 
     const csvContent = convertToCSV(headers, formattedData);

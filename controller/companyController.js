@@ -108,7 +108,7 @@ export const getCompanyDashboard = async (req, res) => {
       upcomingCompetitions,
       lastApplied,
     ] = await Promise.all([
-      CompanyFollow.countDocuments({ companyId: userId }),
+      CompanyFollow.countDocuments({ companyId: ownerQuery }),
       Internship.countDocuments({ c_by: userId, isActive: true }),
       Freelance.countDocuments({ c_by: userId, isActive: true }),
       Job.countDocuments({ c_by: userId, isActive: true }),
@@ -335,7 +335,7 @@ export const createCompanyForm = async (req, res, next) => {
         email: mailId,
         phone: phoneNumber,
         role: "company",
-        is_active: false,
+        is_active: true,
         password: null
       });
     }
@@ -556,28 +556,46 @@ export const getMyCompany = async (req, res, next) => {
       return { ...itemRest, domains: itemDomains };
     });
 
-    // ── 4. Get Followers ───────────────────────────────────────
-    const followers = await CompanyFollow.find({ companyId: companyUserId })
+    // ── 4. Get Followers (Matches either Company Document _id or Company User ID) ──
+    const targetCompanyIds = [companyUserId, company._id].filter(Boolean);
+    const rawFollowers = await CompanyFollow.find({ companyId: { $in: targetCompanyIds } })
       .populate("userId", "name email phone")
       .lean();
+
+    // Deduplicate by user ID
+    const seenUserIds = new Set();
+    const followers = rawFollowers.filter((f) => {
+      const uid = f.userId?._id?.toString() || f.userId?.toString();
+      if (!uid || seenUserIds.has(uid)) return false;
+      seenUserIds.add(uid);
+      return true;
+    });
 
     // ── 5. Enrich each follower with UserDetails ───────────────
     const followersData = await Promise.all(
       followers.map(async (follow) => {
+        const followerUser = follow.userId;
+        const followerUserId = followerUser?._id || follow.userId;
+
         const userDetails = await UserDetails.findOne({
-          userId: follow.userId?._id,
+          userId: followerUserId,
         })
           .select("name dob gender profile_pic currentStatus education ugDegree ugFieldOfStudy ugYear pgDegree pgFieldOfStudy pgYear companyName jobTitle yearOfExperience")
           .lean();
 
-        const followerName = follow.userId?.name || userDetails?.name || null;
+        const followerName = followerUser?.name || userDetails?.name || "Anonymous";
 
         return {
-          userId: follow.userId?._id,
+          userId: followerUserId,
           name: followerName,
-          email: follow.userId?.email || "",
-          phone: follow.userId?.phone || "",
+          email: followerUser?.email || "",
+          phone: followerUser?.phone || "",
+          contact: followerUser?.phone || "",
           followedAt: follow.createdAt,
+          degree: userDetails?.ugDegree || userDetails?.pgDegree || "-",
+          education: userDetails?.education || "-",
+          jobTitle: userDetails?.jobTitle || "-",
+          status: userDetails?.currentStatus || "Active",
           ...userDetails,
           name: followerName,
         };
@@ -687,30 +705,45 @@ export const getCompanyById = async (req, res, next) => {
       return { ...itemRest, domains: itemDomains };
     });
 
-    // ── 4. Get Followers ───────────────────────────────────────
-    const followers = await CompanyFollow.find({ companyId: companyUserId })
+    // ── 4. Get Followers (Matches either Company Document _id or Company User ID) ──
+    const targetCompanyIds = [companyUserId, company._id].filter(Boolean);
+    const rawFollowers = await CompanyFollow.find({ companyId: { $in: targetCompanyIds } })
       .populate("userId", "email phone name")
       .lean();
+
+    // Deduplicate by user ID
+    const seenUserIds = new Set();
+    const followers = rawFollowers.filter((f) => {
+      const uid = f.userId?._id?.toString() || f.userId?.toString();
+      if (!uid || seenUserIds.has(uid)) return false;
+      seenUserIds.add(uid);
+      return true;
+    });
 
     // ── 5. Enrich each follower with UserDetails ───────────────
     const followersData = await Promise.all(
       followers.map(async (follow) => {
+        const followerUser = follow.userId;
+        const followerUserId = followerUser?._id || follow.userId;
+
         const userDetails = await UserDetails.findOne({
-          userId: follow.userId?._id,
+          userId: followerUserId,
         })
-          .select("dob gender profile_pic currentStatus education ugDegree ugFieldOfStudy ugYear pgDegree pgFieldOfStudy pgYear companyName jobTitle yearOfExperience")
+          .select("name dob gender profile_pic currentStatus education ugDegree ugFieldOfStudy ugYear pgDegree pgFieldOfStudy pgYear companyName jobTitle yearOfExperience")
           .lean();
 
+        const followerName = followerUser?.name || userDetails?.name || "Anonymous";
+
         return {
-          userId: follow.userId?._id,
-          name: follow.userId?.name || "",
-          email: follow.userId?.email || "",
-          contact: follow.userId?.phone || "",
+          userId: followerUserId,
+          name: followerName,
+          email: followerUser?.email || "",
+          contact: followerUser?.phone || "",
           followedAt: follow.createdAt,
-          degree: userDetails.ugDegree || userDetails.pgDegree,
-          education: userDetails?.education,
-          jobTitle: userDetails?.jobTitle,
-          status: userDetails?.currentStatus
+          degree: userDetails?.ugDegree || userDetails?.pgDegree || "-",
+          education: userDetails?.education || "-",
+          jobTitle: userDetails?.jobTitle || "-",
+          status: userDetails?.currentStatus || "Active"
         };
       })
     );

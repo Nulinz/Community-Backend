@@ -377,6 +377,7 @@ export const createCollegeForm = async (req, res, next) => {
         phone: phoneNumber,
         role: "college",
         password: null,
+        is_active: true,
       });
     }
 

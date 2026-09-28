@@ -31,6 +31,8 @@ const jobSchema = new mongoose.Schema(
     salaryType: { type: String, trim: true, default: "Fixed amount" },
     salaryMin: { type: Number, default: 0 },
     salaryMax: { type: Number, default: 0 },
+    budget: { type: String, trim: true },
+    budgetType: { type: String, trim: true, default: "Fixed" },
     responsibilities: [{ type: String, trim: true }],
     skill_set: [{ type: String, trim: true }],
     benefits: [{ type: String, trim: true }],
