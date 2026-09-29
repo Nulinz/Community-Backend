@@ -86,7 +86,7 @@ export const runUnappliedOpportunityReminder = async () => {
   const cycleIndex = getCycleIndex();
 
   // const cycleIndex = 0; // for testing
-  const config = CYCLE_CONFIGS[cycleIndex];
+  const config = CYCLE_CONFIGS[cycleIndex]; //for  production
 
   console.log(`[UnappliedCron] Starting run for Cycle Day ${cycleIndex + 1}: ${config.label}`);
 
