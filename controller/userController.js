@@ -443,7 +443,7 @@ export const createAdmin = async (req, res, next) => {
             role,
         });
 
-        res.status(201).json({
+        res.status(200).json({
             success: true,
             message: "Admin created successfully",
             admin: {

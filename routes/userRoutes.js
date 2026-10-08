@@ -24,6 +24,7 @@ import { forgotOtpVerify, getCurrentUser, loginUser, forgotPassword, registerUse
 import {
   userDashboard,
   getSubscriptionStatus,
+  dismissLevelUpAnimation,
   getAllRegisteredUsers,
   getMyReferrals,
   getJobs,
@@ -54,6 +55,7 @@ import {
   getSeminarProfile,
   getAllCompanies,
   toggleFollow,
+  getFollowingList,
   getCompanyProfile,
   getMySuggestions,
   getJobMetaPage,
@@ -169,6 +171,9 @@ router.post(
   toggleFollow
 );
 
+// ✅ Get companies followed by authenticated user
+router.get("/following-companies", isAuthenticated, getFollowingList);
+
 router.post(
   "/company-profile",
   uploader.none(),
@@ -264,6 +269,10 @@ router.post("/adminchangepassword", uploader.none(), adminChangePassword);
 router.post("/adminlogout", uploader.none(), adminLogout);
 router.get("/me", isAuthenticated, getCurrentUser);
 router.get("/subscription-status", isAuthenticated, getSubscriptionStatus);
+// Dismiss / reset level-up celebration animation trigger back to false
+router.post("/levelup-animation", uploader.none(), isAuthenticated, dismissLevelUpAnimation);
+router.post("/subscription-status", uploader.none(), isAuthenticated, dismissLevelUpAnimation);
+router.post("/dismiss-levelup-animation", uploader.none(), isAuthenticated, dismissLevelUpAnimation);
 
 // GET /api/users/all-registered  (role = user)
 router.get("/all-registered", isAuthenticated, getAllRegisteredUsers);

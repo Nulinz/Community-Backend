@@ -3,14 +3,19 @@
     "apps": [],
     "details": [
       {
-        "appID": "<APPLE_TEAM_ID>.com.grad.envy",
+        "appID": "4Z5P6SM7H3.com.grad.envy",
         "paths": [
           "/referral",
           "/referral/*",
           "/referral?*",
+          "/join",
+          "/join/*",
+          "/join?*",
           "/share",
           "/share/*",
-          "/share?*"
+          "/share?*",
+          "/jobs/*",
+          "/events/*"
         ],
         "components": [
           {
@@ -24,6 +29,14 @@
           {
             "/": "/share*",
             "comment": "Matches all gradenvy.com share links"
+          },
+          {
+            "/": "/jobs*",
+            "comment": "Matches job profile links"
+          },
+          {
+            "/": "/events*",
+            "comment": "Matches event profile links"
           }
         ]
       }
@@ -31,7 +44,7 @@
   },
   "webcredentials": {
     "apps": [
-      "<APPLE_TEAM_ID>.com.grad.envy"
+      "4Z5P6SM7H3.com.grad.envy"
     ]
   }
 }

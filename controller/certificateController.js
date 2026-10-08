@@ -276,7 +276,7 @@ export const generateCertificate = async (req, res, next) => {
       verified: true
     });
 
-    return res.status(201).json({
+    return res.status(200).json({
       success: true,
       message: "Certificate generated successfully",
       data: {

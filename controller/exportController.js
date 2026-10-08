@@ -1,6 +1,7 @@
 import EventRegistration from "../models/eventRegistrationModel.js";
 import AppliedJob from "../models/appliedJobModel.js";
 import UserDetails from "../models/userDetails.js";
+import { enrichRegistrationsWithUserDetails } from "../helper/resolveUserEducation.js";
 
 /**
  * Lightweight, high-performance CSV string formatter following RFC 4180.
@@ -53,7 +54,8 @@ export const exportEventRegistrationsCSV = async (req, res) => {
       { label: "Registered At", key: "registeredAt" },
     ];
 
-    const formattedData = registrations.map((r, index) => ({
+    const enriched = await enrichRegistrationsWithUserDetails(registrations);
+    const formattedData = enriched.map((r, index) => ({
       sNo: index + 1,
       fullName: r.fullName || "N/A",
       mailId: r.mailId || "N/A",
@@ -67,7 +69,7 @@ export const exportEventRegistrationsCSV = async (req, res) => {
       foodType: r.foodType || "N/A",
       accommodation: r.accommodation || "no",
       attendanceStatus: r.attendanceStatus || "absent",
-      registeredAt: r.createdAt ? new Date(r.createdAt).toLocaleString("en-GB") : "N/A",
+      registeredAt: r.registeredAt ? new Date(r.registeredAt).toLocaleString("en-GB") : (r.createdAt ? new Date(r.createdAt).toLocaleString("en-GB") : "N/A"),
     }));
 
     const csvContent = convertToCSV(headers, formattedData);

@@ -4,6 +4,8 @@ import Conference from "../../models/conferenceModel.js";
 import Competition from "../../models/competitionModel.js";
 import Seminar from "../../models/seminarModel.js";
 import Event from "../../models/eventModel.js";
+import UserDetails from "../../models/userDetails.js";
+import { resolveUserEducation, enrichRegistrationsWithUserDetails } from "../../helper/resolveUserEducation.js";
 
 /**
  * Defensive extractor for QR scan payloads.
@@ -141,7 +143,12 @@ export const markEventAttendance = async (req, res) => {
         });
       }
 
-      const userProfile = await User.findById(userId).select("name email phone collegeName department year").lean();
+      const [userProfile, userDetails] = await Promise.all([
+        User.findById(userId).select("name email phone").lean(),
+        UserDetails.findOne({ userId }).lean(),
+      ]);
+      const eduDefaults = resolveUserEducation(userDetails);
+
       registration = await EventRegistration.create({
         eventId: eventDoc._id,
         eventType: resolvedEventType,
@@ -149,10 +156,10 @@ export const markEventAttendance = async (req, res) => {
         userId,
         member_count: 1,
         type: "Individual",
-        fullName: req.body.fullName?.trim() || userProfile?.name || "Participant",
-        department: req.body.department?.trim() || userProfile?.department || "N/A",
-        collegeName: req.body.collegeName?.trim() || userProfile?.collegeName || "N/A",
-        year: req.body.year?.trim() || userProfile?.year || "N/A",
+        fullName: req.body.fullName?.trim() || userDetails?.name || userProfile?.name || "Participant",
+        department: req.body.department?.trim() && req.body.department.trim().toUpperCase() !== "N/A" ? req.body.department.trim() : eduDefaults.department,
+        collegeName: req.body.collegeName?.trim() && req.body.collegeName.trim().toUpperCase() !== "N/A" ? req.body.collegeName.trim() : eduDefaults.college,
+        year: req.body.year?.trim() && req.body.year.trim().toUpperCase() !== "N/A" ? req.body.year.trim() : eduDefaults.year,
         phoneNumber: req.body.phoneNumber?.trim() || userProfile?.phone || "",
         mailId: req.body.mailId?.trim() || userProfile?.email || "",
         attendanceStatus: "present",
@@ -242,10 +249,11 @@ export const getEventAttendanceStats = async (req, res) => {
     const totalPresent = presentList.length;
     const totalAbsent = Math.max(0, totalRegistered - totalPresent);
 
+    const enrichedList = await enrichRegistrationsWithUserDetails(registrations);
     const mapAttendee = (r, index) => ({
       index: index + 1,
-      id: r._id,
-      _id: r._id,
+      id: r.registrationId || r._id,
+      _id: r.registrationId || r._id,
       userId: r.userId,
       fullName: r.fullName || "N/A",
       name: r.fullName || "N/A",
@@ -261,7 +269,7 @@ export const getEventAttendanceStats = async (req, res) => {
       accommodation: r.accommodation || "no",
       attendedAt: r.attendedAt,
       attendanceStatus: isPresent(r.attendanceStatus) ? "present" : "absent",
-      createdAt: r.createdAt,
+      createdAt: r.registeredAt || r.createdAt,
     });
 
     return res.status(200).json({

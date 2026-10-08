@@ -129,6 +129,11 @@ const userSchema = new mongoose.Schema(
       default: 1,
     },
 
+    show_levelup_animation: {
+      type: Boolean,
+      default: false,
+    },
+
     // 🔹 DAILY ACTIVE TIME TRACKING
     dailyActiveMinutes: {
       type: Number,

@@ -66,7 +66,11 @@ export const getMissions = async (req, res, next) => {
 
     // Self-healing synchronization: update user document if stored level lagged behind XP calculation
     if (user.level !== userLevel) {
-      User.findByIdAndUpdate(userId, { level: userLevel }).exec();
+      const syncUpdate = { level: userLevel };
+      if (userLevel > (user.level || 0)) {
+        syncUpdate.show_levelup_animation = true;
+      }
+      User.findByIdAndUpdate(userId, { $set: syncUpdate }).exec();
     }
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
@@ -142,7 +146,7 @@ export const getMissions = async (req, res, next) => {
       (u) => !claimedReferralSet.has(String(u._id))
     ).length;
 
-    // Build missions list
+    // Build missions list including daily activity, milestones, social follows, and referrals
     const missionKeys = [
       "DAILY_LOGIN",
       activeTimeMissionKey,
@@ -157,6 +161,8 @@ export const getMissions = async (req, res, next) => {
       "FIRST_COMPETITION_REGISTRATION",
       "FIRST_FREELANCE_APPLICATION",
       "FIRST_SUBSCRIPTION",
+      "FOLLOW_INSTAGRAM",
+      "FOLLOW_YOUTUBE",
       "REFERRAL",
     ];
 
@@ -256,6 +262,8 @@ export const getMissions = async (req, res, next) => {
         progressPercentage,
         requiredLevel: config.requiredLevel || null,
         status, // "IN_PROGRESS" | "READY_TO_CLAIM" | "CLAIMED" | "LOCKED"
+        platform: config.platform || null,
+        url: config.url || null,
         unclaimedCount: key === "REFERRAL" ? unclaimedReferrals : undefined,
       };
     }).filter(Boolean);
@@ -289,7 +297,14 @@ export const claimMission = async (req, res, next) => {
   try {
     const userId = req.user._id;
     const body = req.body || {};
-    const actionKey = body.actionKey || req.query?.actionKey;
+    let actionKey = body.actionKey || req.query?.actionKey;
+
+    // Allow claiming social missions via platform parameter for client convenience
+    if (!actionKey && (body.platform || req.query?.platform)) {
+      const p = String(body.platform || req.query?.platform).trim().toLowerCase();
+      if (p === "instagram" || p === "insta") actionKey = "FOLLOW_INSTAGRAM";
+      if (p === "youtube" || p === "yt") actionKey = "FOLLOW_YOUTUBE";
+    }
 
     if (!actionKey || !XP_ACTIONS[actionKey]) {
       return res.status(400).json({
@@ -507,7 +522,7 @@ export const claimSocialFollowXP = async (req, res, next) => {
       return res.status(401).json({ success: false, status: false, message: "Unauthorized user." });
     }
 
-    const { platform } = req.body;
+    const platform = req.body?.platform || req.query?.platform;
     if (!platform) {
       return res.status(400).json({
         success: false,
@@ -519,9 +534,9 @@ export const claimSocialFollowXP = async (req, res, next) => {
     const normalizedPlatform = String(platform).trim().toLowerCase();
     let actionKey = null;
 
-    if (normalizedPlatform === "instagram") {
+    if (normalizedPlatform === "instagram" || normalizedPlatform === "insta") {
       actionKey = "FOLLOW_INSTAGRAM";
-    } else if (normalizedPlatform === "youtube") {
+    } else if (normalizedPlatform === "youtube" || normalizedPlatform === "yt") {
       actionKey = "FOLLOW_YOUTUBE";
     } else {
       return res.status(400).json({

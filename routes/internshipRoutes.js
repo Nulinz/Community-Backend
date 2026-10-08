@@ -14,16 +14,19 @@ import {
     savePerformanceEvaluation,
     getPerformanceEvaluation
 } from "../controller/internshipController.js";
+import { createUpload } from "../middleware/upload.js";
 
 const router = express.Router();
+const opportunityUpload = createUpload("opportunity");
+const internshipUploader = opportunityUpload.fields([{ name: "companyLogo", maxCount: 1 }]);
 
-router.post("/create", isAuthenticated, createInternshipForm);
+router.post("/create", isAuthenticated, internshipUploader, createInternshipForm);
 router.get("/all", isAuthenticated, getAllInternships);
 router.get("/getById/:id", isAuthenticated, getInternshipById);
 router.patch("/toggle-status/:id", isAuthenticated, toggleInternshipStatus);
 
 // Update the Internship
-router.put("/update/:id", isAuthenticated, createInternshipForm);
+router.put("/update/:id", isAuthenticated, internshipUploader, createInternshipForm);
 
 // Candidate Selection, Performance & Attendance Routes
 router.get("/candidate-profile/:applicationId", isAuthenticated, getAppliedCandidateProfile);

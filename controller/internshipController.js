@@ -1,144 +1,181 @@
 import mongoose from "mongoose";
+import path from "path";
 import Internship from "../models/internshipModel.js";
 import AppliedJob from "../models/appliedJobModel.js";
 import Attendance from "../models/attendanceModel.js";
 import UserDetails from "../models/userDetails.js";
 import PerformanceEvaluation from "../models/performanceEvaluationModel.js";
 import { notifyJobAudience } from "../helper/jobNotification.js";
+import { notifyCompanyFollowers } from "../helper/companyFollowNotification.js";
 import Company from "../models/companyModel.js";
 import User from "../models/userModel.js";
 import Resume from "../models/resumeModel.js";
 
 const toCleanString = (value) =>
-    typeof value === "string" ? value.trim() : "";
+  typeof value === "string" ? value.trim() : "";
+
+const getUploadedFilePath = (file) => {
+  if (!file?.path) return "";
+  return path.relative(process.cwd(), file.path).replace(/\\/g, "/");
+};
 
 
 
 
 export const createInternshipForm = async (req, res, next) => {
-    try {
-        const { id, _id, ...rest } = req.body;
-        const targetId = id || _id || req.params?.id;;
-        const isUpdate = !!targetId;
-        const status=req?.user?.role==="admin"?"approved":"pending"
-        const {
-            internshipType,
-            jobTitle,
-            domain,
-            domains,
-            organizer,
-            companyName,
-            location,
-            mode,
-            totalOpenings,
-            duration,
-            internStartDate,
-            applicationDeadline,
-            salary,
-            paymentAmount,
-            responsibilities,
-            eligibility,
-            description,
-            certificateAvailability,
-            skill_set,
-            benefits,
-            learning_outcomes,
-            development_benefits,
-            development_resources
-        } = rest;
+  try {
+    const { id, _id, ...rest } = req.body;
+    const targetId = id || _id || req.params?.id;;
+    const isUpdate = !!targetId;
+    const status = req?.user?.role === "admin" ? "approved" : "pending"
+    const {
+      internshipType,
+      jobTitle,
+      domain,
+      domains,
+      organizer,
+      companyName,
+      location,
+      mode,
+      totalOpenings,
+      duration,
+      internStartDate,
+      applicationDeadline,
+      salary,
+      paymentAmount,
+      responsibilities,
+      eligibility,
+      description,
+      certificateAvailability,
+      skill_set,
+      benefits,
+      learning_outcomes,
+      development_benefits,
+      development_resources
+    } = rest;
 
-        // Validation
-        if (!internshipType) throw Object.assign(new Error("Internship Type is required"), { status: 400 });
-        if (!jobTitle) throw Object.assign(new Error("Job Title is required"), { status: 400 });
-        const resolvedOrganizer = toCleanString(organizer || companyName);
+    // Validation
+    if (!internshipType) throw Object.assign(new Error("Internship Type is required"), { status: 400 });
+    if (!jobTitle) throw Object.assign(new Error("Job Title is required"), { status: 400 });
+    const resolvedOrganizer = toCleanString(organizer || companyName);
 
-        if (!resolvedOrganizer) throw Object.assign(new Error("Organizer is required"), { status: 400 });
-        if (!mode) throw Object.assign(new Error("Mode is required"), { status: 400 });
-        const cleanMode = toCleanString(mode);
-        if ((cleanMode === "On-site" || cleanMode === "Hybrid" || cleanMode === "Offline") && !location) {
-            throw Object.assign(new Error("Location is required for On-site or Hybrid mode"), { status: 400 });
-        }
-
-        // Handle dynamic arrays (sent as JSON strings or raw arrays depending on frontend)
-        const parseArray = (val) => {
-            if (Array.isArray(val)) return val;
-            if (typeof val === "string") {
-                try { return JSON.parse(val); } catch (e) { return [val]; }
-            }
-            return [];
-        };
-
-        let internship;
-
-        if (isUpdate) {
-            internship = await Internship.findById(targetId);
-            if (!internship) {
-                throw Object.assign(new Error("Internship not found"), { status: 404 });
-            }
-            if (req.user?.role === "company" && internship.c_by?.toString() !== req.user._id?.toString()) {
-                throw Object.assign(new Error("Not authorized to update this internship"), { status: 403 });
-            }
-        } else {
-            internship = new Internship({ c_by: req.user._id });
-            internship.status=status
-        }
-        const resolvedDomains = parseArray(domains || domain);
-
-        // Update fields
-        const cleanType = toCleanString(internshipType);
-        internship.internshipType = cleanType;
-        internship.jobTitle = toCleanString(jobTitle);
-        internship.domains = resolvedDomains;
-        internship.organizer = resolvedOrganizer;
-        internship.companyName = resolvedOrganizer;
-        internship.location = toCleanString(location) || (cleanMode === "Remote" || cleanMode === "Online" ? "Remote" : "");
-        internship.mode = cleanMode;
-        internship.totalOpenings = Number(totalOpenings) || 0;
-        internship.duration = toCleanString(duration);
-        internship.internStartDate = internStartDate || undefined;
-        internship.applicationDeadline = applicationDeadline || undefined;
-
-        // Financials: Stipend (monthly amount) vs Paid (fee amount) vs Unpaid
-        if (cleanType === "Stipend") {
-            internship.salary = Number(salary) || 0;
-            internship.paymentAmount = 0;
-        } else if (cleanType === "Paid") {
-            internship.paymentAmount = Number(paymentAmount) || Number(salary) || 0;
-            internship.salary = 0;
-        } else {
-            // Unpaid
-            internship.salary = 0;
-            internship.paymentAmount = 0;
-        }
-
-        internship.description = toCleanString(description);
-        internship.certificateAvailability = toCleanString(certificateAvailability);
-
-        internship.responsibilities = parseArray(responsibilities);
-        internship.eligibility = parseArray(eligibility);
-        internship.skill_set=parseArray(skill_set)
-        internship.benefits=parseArray(benefits)
-        internship.learning_outcomes=parseArray(learning_outcomes)
-        internship.development_benefits=parseArray(development_benefits)
-        internship.development_resources=parseArray(development_resources)
-
-
-        const savedInternship = await internship.save();
-        const internshipObj = savedInternship.toObject();
-        delete internshipObj.domain;
-        internshipObj.domains = Array.isArray(internshipObj.domains) && internshipObj.domains.length
-          ? internshipObj.domains
-          : resolvedDomains;
-
-        res.status(isUpdate ? 200 : 201).json({
-            success: true,
-            message: `Internship ${isUpdate ? "updated" : "created"} successfully`,
-            data: internshipObj,
-        });
-
-    } catch (error) {
-        next(error);
+    if (!resolvedOrganizer) throw Object.assign(new Error("Organizer is required"), { status: 400 });
+    if (!mode) throw Object.assign(new Error("Mode is required"), { status: 400 });
+    const cleanMode = toCleanString(mode);
+    if ((cleanMode === "On-site" || cleanMode === "Hybrid" || cleanMode === "Offline") && !location) {
+      throw Object.assign(new Error("Location is required for On-site or Hybrid mode"), { status: 400 });
     }
+
+    // Handle dynamic arrays (sent as JSON strings or raw arrays depending on frontend)
+    const parseArray = (val) => {
+      if (Array.isArray(val)) return val;
+      if (typeof val === "string") {
+        try { return JSON.parse(val); } catch (e) { return [val]; }
+      }
+      return [];
+    };
+
+    let internship;
+
+    if (isUpdate) {
+      internship = await Internship.findById(targetId);
+      if (!internship) {
+        throw Object.assign(new Error("Internship not found"), { status: 404 });
+      }
+      if (req.user?.role === "company" && internship.c_by?.toString() !== req.user._id?.toString()) {
+        throw Object.assign(new Error("Not authorized to update this internship"), { status: 403 });
+      }
+    } else {
+      internship = new Internship({ c_by: req.user._id });
+      internship.status = status
+    }
+    const resolvedDomains = parseArray(domains || domain);
+
+    // Update fields
+    const cleanType = toCleanString(internshipType);
+    internship.internshipType = cleanType;
+    internship.jobTitle = toCleanString(jobTitle);
+    internship.domains = resolvedDomains;
+    internship.organizer = resolvedOrganizer;
+    internship.companyName = resolvedOrganizer;
+
+    // ── Handle Custom Company Logo / Dropdown Selection ──────────
+    let customCompanyLogo = internship.companyLogo || null;
+    if (req.files?.companyLogo?.[0]) {
+      const relPath = getUploadedFilePath(req.files.companyLogo[0]);
+      customCompanyLogo = relPath ? (relPath.startsWith("/") ? relPath : `/${relPath}`) : null;
+    } else if (req.body.companyLogo && typeof req.body.companyLogo === "string" && req.body.companyLogo.trim()) {
+      customCompanyLogo = req.body.companyLogo.trim();
+    } else if (resolvedOrganizer) {
+      const matchingCompany = await Company.findOne({
+        companyName: new RegExp(`^${resolvedOrganizer}$`, "i"),
+      }).select("companyLogo").lean();
+      if (matchingCompany?.companyLogo) {
+        customCompanyLogo = matchingCompany.companyLogo;
+      }
+    }
+
+    if (customCompanyLogo) {
+      internship.companyLogo = customCompanyLogo;
+    }
+    internship.location = toCleanString(location) || (cleanMode === "Remote" || cleanMode === "Online" ? "Remote" : "");
+    internship.mode = cleanMode;
+    internship.totalOpenings = Number(totalOpenings) || 0;
+    internship.duration = toCleanString(duration);
+    internship.internStartDate = internStartDate || undefined;
+    internship.applicationDeadline = applicationDeadline || undefined;
+
+    // Financials: Stipend (monthly amount) vs Paid (fee amount) vs Unpaid
+    if (cleanType === "Stipend") {
+      internship.salary = Number(salary) || 0;
+      internship.paymentAmount = 0;
+    } else if (cleanType === "Paid") {
+      internship.paymentAmount = Number(paymentAmount) || Number(salary) || 0;
+      internship.salary = 0;
+    } else {
+      // Unpaid
+      internship.salary = 0;
+      internship.paymentAmount = 0;
+    }
+
+    internship.description = toCleanString(description);
+    internship.certificateAvailability = toCleanString(certificateAvailability);
+
+    internship.responsibilities = parseArray(responsibilities);
+    internship.eligibility = parseArray(eligibility);
+    internship.skill_set = parseArray(skill_set)
+    internship.benefits = parseArray(benefits)
+    internship.learning_outcomes = parseArray(learning_outcomes)
+    internship.development_benefits = parseArray(development_benefits)
+    internship.development_resources = parseArray(development_resources)
+
+
+    const savedInternship = await internship.save();
+    const internshipObj = savedInternship.toObject();
+    delete internshipObj.domain;
+    internshipObj.domains = Array.isArray(internshipObj.domains) && internshipObj.domains.length
+      ? internshipObj.domains
+      : resolvedDomains;
+
+    // Asynchronously notify followers of this company when a new internship is posted
+    if (!isUpdate) {
+      notifyCompanyFollowers({
+        opportunity: internshipObj,
+        opportunityType: "Internship",
+        senderId: req.user._id,
+        organizerName: resolvedOrganizer,
+      }).catch((err) => console.error("Error triggering follower internship notification:", err.message));
+    }
+
+    res.status(isUpdate ? 200 : 201).json({
+      success: true,
+      message: `Internship ${isUpdate ? "updated" : "created"} successfully`,
+      data: internshipObj,
+    });
+
+  } catch (error) {
+    next(error);
+  }
 };
 
 export const getAllInternships = async (req, res, next) => {
@@ -238,6 +275,14 @@ export const getInternshipById = async (req, res, next) => {
           }
         }
 
+        const rawPortfolios = Array.isArray(app.portfolios) && app.portfolios.length > 0
+          ? app.portfolios
+          : (Array.isArray(app.portfolio) && app.portfolio.length > 0
+            ? app.portfolio
+            : (typeof app.portfolio === "string" && app.portfolio.trim()
+              ? [{ field_name: "Portfolio", portfolio: app.portfolio.trim() }]
+              : []));
+
         return {
           sNo: index + 1,
           applicationId: app._id,
@@ -248,7 +293,8 @@ export const getInternshipById = async (req, res, next) => {
           appliedAt: app.createdAt,
           location: app.location,
           status: app.status || "applied",
-          portfolio: app.portfolio || null,
+          portfolios: rawPortfolios,
+          portfolio: rawPortfolios.length > 0 ? rawPortfolios : null,
           resumeUrl,
           resumeName,
           // UserDetails
@@ -267,9 +313,9 @@ export const getInternshipById = async (req, res, next) => {
       })
     );
 
-    // Resolve company logo from company profile or admin
-    let companyLogo = null;
-    if (internship.c_by) {
+    // Resolve company logo from internship, company profile or admin
+    let companyLogo = internship.companyLogo || null;
+    if (!companyLogo && internship.c_by) {
       const company = await Company.findOne({
         $or: [{ userId: internship.c_by }, { c_by: internship.c_by }],
       })
@@ -292,7 +338,7 @@ export const getInternshipById = async (req, res, next) => {
     if (!companyLogo && internship.c_by) {
       const creator = await User.findById(internship.c_by).select("role").lean();
       if (creator?.role === "admin") {
-        companyLogo = "uploads/Nulinz LOGO 3.png";
+        companyLogo = "referral/assets/index_icon.png";
       }
     }
 
@@ -323,35 +369,35 @@ export const getInternshipById = async (req, res, next) => {
 };
 
 export const toggleInternshipStatus = async (req, res, next) => {
-    try {
-        const { id } = req.params;
-        const internship = await Internship.findById(id);
+  try {
+    const { id } = req.params;
+    const internship = await Internship.findById(id);
 
-        if (!internship) {
-            throw Object.assign(new Error("Internship not found"), { status: 404 });
-        }
-        if (req.user?.role === "company" && internship.c_by?.toString() !== req.user._id?.toString()) {
-            throw Object.assign(new Error("Not authorized to update this internship"), { status: 403 });
-        }
-
-        internship.isActive = !internship.isActive;
-        await internship.save();
-
-        const internshipObj = internship.toObject();
-        const resolvedDomains = Array.isArray(internshipObj.domains) && internshipObj.domains.length
-          ? internshipObj.domains
-          : (internshipObj.domain ? internshipObj.domain.split(",").map((s) => s.trim()).filter(Boolean) : []);
-        delete internshipObj.domain;
-        internshipObj.domains = resolvedDomains;
-
-        res.status(200).json({
-            success: true,
-            message: `Internship ${internship.isActive ? "activated" : "deactivated"} successfully`,
-            data: internshipObj,
-        });
-    } catch (error) {
-        next(error);
+    if (!internship) {
+      throw Object.assign(new Error("Internship not found"), { status: 404 });
     }
+    if (req.user?.role === "company" && internship.c_by?.toString() !== req.user._id?.toString()) {
+      throw Object.assign(new Error("Not authorized to update this internship"), { status: 403 });
+    }
+
+    internship.isActive = !internship.isActive;
+    await internship.save();
+
+    const internshipObj = internship.toObject();
+    const resolvedDomains = Array.isArray(internshipObj.domains) && internshipObj.domains.length
+      ? internshipObj.domains
+      : (internshipObj.domain ? internshipObj.domain.split(",").map((s) => s.trim()).filter(Boolean) : []);
+    delete internshipObj.domain;
+    internshipObj.domains = resolvedDomains;
+
+    res.status(200).json({
+      success: true,
+      message: `Internship ${internship.isActive ? "activated" : "deactivated"} successfully`,
+      data: internshipObj,
+    });
+  } catch (error) {
+    next(error);
+  }
 };
 
 // ── Update Application Status (Select Candidate) ────────────────
@@ -627,6 +673,14 @@ export const getAppliedCandidateProfile = async (req, res, next) => {
       }
     }
 
+    const rawPortfolios = Array.isArray(application.portfolios) && application.portfolios.length > 0
+      ? application.portfolios
+      : (Array.isArray(application.portfolio) && application.portfolio.length > 0
+        ? application.portfolio
+        : (typeof application.portfolio === "string" && application.portfolio.trim()
+          ? [{ field_name: "Portfolio", portfolio: application.portfolio.trim() }]
+          : []));
+
     const candidateProfile = {
       userId: application.userId?._id || application.userId,
       applicationId: application._id,
@@ -634,6 +688,8 @@ export const getAppliedCandidateProfile = async (req, res, next) => {
       jobType: application.jobType,
       status: application.status || "applied",
       appliedAt: application.createdAt,
+      portfolios: rawPortfolios,
+      portfolio: rawPortfolios.length > 0 ? rawPortfolios : null,
 
       // Personal Info
       name: userDetails?.name || application.userId?.name || "",

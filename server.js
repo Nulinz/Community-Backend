@@ -52,6 +52,7 @@ const allowedOrigins = [
   "https://icy-tree-067e50e10.7.azurestaticapps.net",
   "https://salmon-ocean-053a6b810.6.azurestaticapps.net",
   "https://gradenvy.com",
+  "http://192.168.1.13:5173"
 ].filter(Boolean);
 
 app.set("trust proxy", true);
@@ -71,6 +72,7 @@ app.use(
 app.use(express.json());
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 app.use("/resume", express.static(path.join(process.cwd(), "resume")));
+app.use("/public", express.static(path.join(process.cwd(), "public")));
 
 // ── Deep Linking & App Association Assets ──────────────────────
 // 1. Android Digital Asset Links (Required for Android App Links auto-verify)
@@ -187,7 +189,7 @@ const startServer = async () => {
     //     city: "Salem",
     //     state: "Tamil Nadu",
     //     pincode: "636001",
-    //     companyLogo: "uploads/Nulinz LOGO 3.png",
+    //     companyLogo: "referral/assets/index_icon.png",
     //   },
     // });
 

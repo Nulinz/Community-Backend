@@ -1,6 +1,6 @@
 import express from "express";
 import { isAuthenticated } from "../middleware/authMiddleware.js";
-import { createCompanyForm, getAllCompany, getCompanyById, addPost, setPassword, getMyCompany, toggleCompanyStatus, getCompanyNames, getCompanyDashboard } from "../controller/companyController.js";
+import { createCompanyForm, getAllCompany, getCompanyById, addPost, deletePost, setPassword, getMyCompany, toggleCompanyStatus, getCompanyNames, getCompanyDashboard } from "../controller/companyController.js";
 import { createUpload } from "../middleware/upload.js";
 
 const router = express.Router();
@@ -19,7 +19,8 @@ router.get("/get-mine", isAuthenticated, getMyCompany);
 router.get("/all", isAuthenticated, getAllCompany);
 router.get("/names", isAuthenticated, getCompanyNames);
 router.get("/getById/:id", isAuthenticated, getCompanyById);
-router.post("/add-post/:id", isAuthenticated, companyUpload.array("images", 10), addPost);
+router.post(["/add-post/:id", "/add-posts/:id"], isAuthenticated, companyUpload.any(), addPost);
+router.delete(["/delete-post/:id", "/delete-posts/:id"], isAuthenticated, deletePost);
 router.post("/set-password", isAuthenticated, setPassword);
 router.patch("/toggle-status/:id", isAuthenticated, toggleCompanyStatus);
 

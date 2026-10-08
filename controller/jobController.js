@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import path from "path";
 import Job from "../models/jobModel.js";
 import AppliedJob from "../models/appliedJobModel.js";
 import Attendance from "../models/attendanceModel.js";
@@ -7,9 +8,16 @@ import PerformanceEvaluation from "../models/performanceEvaluationModel.js";
 import Company from "../models/companyModel.js";
 import User from "../models/userModel.js";
 import Resume from "../models/resumeModel.js";
+import { formatJobSalary } from "../helper/salaryHelper.js";
+import { notifyCompanyFollowers } from "../helper/companyFollowNotification.js";
 
 const toCleanString = (value) =>
   typeof value === "string" ? value.trim() : "";
+
+const getUploadedFilePath = (file) => {
+  if (!file?.path) return "";
+  return path.relative(process.cwd(), file.path).replace(/\\/g, "/");
+};
 
 /**
  * Normalizes input arrays that may arrive either as native arrays,
@@ -97,6 +105,26 @@ export const createJobForm = async (req, res, next) => {
     job.jobTitle = toCleanString(jobTitle);
     job.organizer = resolvedOrganizer;
     job.companyName = resolvedOrganizer;
+
+    // ── Handle Custom Company Logo / Dropdown Selection ──────────
+    let customCompanyLogo = job.companyLogo || null;
+    if (req.files?.companyLogo?.[0]) {
+      const relPath = getUploadedFilePath(req.files.companyLogo[0]);
+      customCompanyLogo = relPath ? (relPath.startsWith("/") ? relPath : `/${relPath}`) : null;
+    } else if (req.body.companyLogo && typeof req.body.companyLogo === "string" && req.body.companyLogo.trim()) {
+      customCompanyLogo = req.body.companyLogo.trim();
+    } else if (resolvedOrganizer) {
+      const matchingCompany = await Company.findOne({
+        companyName: new RegExp(`^${resolvedOrganizer}$`, "i"),
+      }).select("companyLogo").lean();
+      if (matchingCompany?.companyLogo) {
+        customCompanyLogo = matchingCompany.companyLogo;
+      }
+    }
+
+    if (customCompanyLogo) {
+      job.companyLogo = customCompanyLogo;
+    }
     job.location = toCleanString(location) || (cleanMode === "Online" || cleanMode === "Remote" ? cleanMode : "");
     job.mode = cleanMode;
     job.totalOpenings = Number(totalOpenings) || 0;
@@ -124,6 +152,19 @@ export const createJobForm = async (req, res, next) => {
     jobObj.domains = Array.isArray(jobObj.domains) && jobObj.domains.length
       ? jobObj.domains
       : resolvedDomains;
+    jobObj.salary = formatJobSalary(jobObj);
+    delete jobObj.salaryMin;
+    delete jobObj.salaryMax;
+
+    // Asynchronously notify followers of this company when a new job is posted
+    if (!isUpdate) {
+      notifyCompanyFollowers({
+        opportunity: jobObj,
+        opportunityType: "Job",
+        senderId: req.user._id,
+        organizerName: resolvedOrganizer,
+      }).catch((err) => console.error("Error triggering follower job notification:", err.message));
+    }
 
     return res.status(isUpdate ? 200 : 201).json({
       status: true,
@@ -169,9 +210,14 @@ export const getAllJobs = async (req, res, next) => {
           jobId: item._id,
           jobType: "Job",
         });
-        const { domain, ...itemRest } = item;
+        const { domain, salaryMin, salaryMax, ...itemRest } = item;
         const itemDomains = Array.isArray(itemRest.domains) && itemRest.domains.length ? itemRest.domains : (domain ? domain.split(",").map(s => s.trim()).filter(Boolean) : []);
-        return { ...itemRest, domains: itemDomains, appliedCount };
+        return {
+          ...itemRest,
+          domains: itemDomains,
+          salary: formatJobSalary(item),
+          appliedCount,
+        };
       })
     );
 
@@ -234,6 +280,14 @@ export const getJobById = async (req, res, next) => {
           }
         }
 
+        const rawPortfolios = Array.isArray(app.portfolios) && app.portfolios.length > 0
+          ? app.portfolios
+          : (Array.isArray(app.portfolio) && app.portfolio.length > 0
+            ? app.portfolio
+            : (typeof app.portfolio === "string" && app.portfolio.trim()
+              ? [{ field_name: "Portfolio", portfolio: app.portfolio.trim() }]
+              : []));
+
         return {
           sNo: index + 1,
           applicationId: app._id,
@@ -244,7 +298,8 @@ export const getJobById = async (req, res, next) => {
           appliedAt: app.createdAt,
           location: app.location,
           status: app.status || "applied",
-          portfolio: app.portfolio || null,
+          portfolios: rawPortfolios,
+          portfolio: rawPortfolios.length > 0 ? rawPortfolios : null,
           resumeUrl,
           resumeName,
           profile_pic: userDetails?.profile_pic || null,
@@ -262,9 +317,9 @@ export const getJobById = async (req, res, next) => {
       })
     );
 
-    // Resolve company logo from company profile or admin
-    let companyLogo = null;
-    if (job.c_by) {
+    // Resolve company logo from job, company profile or admin
+    let companyLogo = job.companyLogo || null;
+    if (!companyLogo && job.c_by) {
       const company = await Company.findOne({
         $or: [{ userId: job.c_by }, { c_by: job.c_by }],
       })
@@ -287,15 +342,16 @@ export const getJobById = async (req, res, next) => {
     if (!companyLogo && job.c_by) {
       const creator = await User.findById(job.c_by).select("role").lean();
       if (creator?.role === "admin") {
-        companyLogo = "uploads/Nulinz LOGO 3.png";
+        companyLogo = "referral/assets/index_icon.png";
       }
     }
 
-    const { domain, ...jobRest } = job;
+    const { domain, salaryMin, salaryMax, ...jobRest } = job;
     const itemDomains = Array.isArray(jobRest.domains) && jobRest.domains.length ? jobRest.domains : (domain ? domain.split(",").map(s => s.trim()).filter(Boolean) : []);
     const enrichedJob = {
       ...jobRest,
       domains: itemDomains,
+      salary: formatJobSalary(job),
       companyLogo: companyLogo || "",
       companyImage: companyLogo || "",
     };
@@ -338,6 +394,9 @@ export const toggleJobStatus = async (req, res, next) => {
       : (jobObj.domain ? jobObj.domain.split(",").map((s) => s.trim()).filter(Boolean) : []);
     delete jobObj.domain;
     jobObj.domains = resolvedDomains;
+    jobObj.salary = formatJobSalary(jobObj);
+    delete jobObj.salaryMin;
+    delete jobObj.salaryMax;
 
     return res.status(200).json({
       status: true,
@@ -377,6 +436,14 @@ export const getAppliedCandidateProfile = async (req, res, next) => {
       }
     }
 
+    const rawPortfolios = Array.isArray(application.portfolios) && application.portfolios.length > 0
+      ? application.portfolios
+      : (Array.isArray(application.portfolio) && application.portfolio.length > 0
+        ? application.portfolio
+        : (typeof application.portfolio === "string" && application.portfolio.trim()
+          ? [{ field_name: "Portfolio", portfolio: application.portfolio.trim() }]
+          : []));
+
     const candidateProfile = {
       userId: application.userId?._id || application.userId,
       applicationId: application._id,
@@ -384,6 +451,8 @@ export const getAppliedCandidateProfile = async (req, res, next) => {
       jobType: application.jobType,
       status: application.status || "applied",
       appliedAt: application.createdAt,
+      portfolios: rawPortfolios,
+      portfolio: rawPortfolios.length > 0 ? rawPortfolios : null,
 
       // Personal Info
       name: userDetails?.name || application.userId?.name || "",

@@ -835,18 +835,20 @@ export const changePassword = async (req, res) => {
 export const webLoginUser = async (req, res) => {
   try {
     // 🔹 1. Identifier (email or phone) and password
-    const { phone, email, password } = req.body;
+    const { password } = req.body;
+    const rawIdentifier = req.body.identifier || req.body.email || req.body.phone || "";
+    const identifier = typeof rawIdentifier === "string" ? rawIdentifier.trim() : String(rawIdentifier).trim();
     const fcm_token = req.body.fcm_token || req.body.fcmToken || null;
-    const identifier = email || phone;
 
-    if (!identifier || !password)
-      return res.status(400).json({ status: false, message: "Email/Phone and password are required" });
+    if (!identifier || !password) {
+      return res.status(400).json({ status: false, message: "Email or phone number and password are required" });
+    }
 
-    // 🔹 2. Find user by email OR phone
+    // 🔹 2. Find user dynamically by lowercase email OR phone
     const user = await User.findOne({
       $or: [
-        { email: identifier.toLowerCase().trim() },
-        { phone: identifier.trim() },
+        { email: identifier.toLowerCase() },
+        { phone: identifier },
       ],
     }).select("+password");
 

@@ -1,4 +1,5 @@
 import { register } from "module";
+import mongoose from "mongoose";
 import Company from "../models/companyModel.js";
 import User from "../models/userModel.js";
 import fs from "fs";
@@ -492,7 +493,7 @@ export const getAllCompany = async (req, res, next) => {
 
 export const getCompanyNames = async (req, res, next) => {
   try {
-    const companies = await Company.find({}, "companyName").sort({ companyName: 1 }).lean();
+    const companies = await Company.find({}, "companyName companyLogo").sort({ companyName: 1 }).lean();
 
     const names = [...new Set(
       companies
@@ -503,6 +504,10 @@ export const getCompanyNames = async (req, res, next) => {
     res.status(200).json({
       success: true,
       data: names,
+      companies: companies.map((c) => ({
+        companyName: toCleanString(c?.companyName),
+        companyLogo: c?.companyLogo || null,
+      })),
     });
   } catch (error) {
     next(error);
@@ -770,41 +775,197 @@ export const getCompanyById = async (req, res, next) => {
   }
 };
 
+/**
+ * Uploads and attaches post images to a company's profile.
+ * Supports multiple file field names ('images', 'posts', 'file', etc.) or URL arrays in body.
+ * Robustly matches company by its own document _id, its associated userId, or creator c_by.
+ */
 export const addPost = async (req, res, next) => {
+  // Collect any uploaded files for processing and cleanup on failure
+  let rawFiles = [];
+  if (Array.isArray(req.files)) {
+    rawFiles = req.files;
+  } else if (req.files && typeof req.files === "object") {
+    rawFiles = Object.values(req.files).flat();
+  } else if (req.file) {
+    rawFiles = [req.file];
+  }
+
   try {
     const { id } = req.params;
-    const files = req.files;
 
-    if (!files || files.length === 0) {
-      const error = new Error("No images uploaded");
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+      if (rawFiles.length > 0) cleanupUploadedFiles(rawFiles);
+      const error = new Error("Invalid or missing Company ID format");
       error.status = 400;
       throw error;
     }
 
-    const company = await Company.findById(id);
+    // Extract paths from uploaded files
+    let newPosts = rawFiles
+      .map(file => {
+        const relPath = getUploadedFilePath(file);
+        if (!relPath) return null;
+        return relPath.startsWith('/') ? relPath : '/' + relPath;
+      })
+      .filter(Boolean);
+
+    // Fallback: If no multipart files, check if posts / images were passed in request body
+    if (newPosts.length === 0 && (req.body?.posts || req.body?.images)) {
+      const bodyPosts = req.body?.posts || req.body?.images;
+      const bodyList = Array.isArray(bodyPosts) ? bodyPosts : [bodyPosts];
+      newPosts = bodyList
+        .filter(item => typeof item === "string" && item.trim().length > 0)
+        .map(item => item.trim());
+    }
+
+    if (newPosts.length === 0) {
+      if (rawFiles.length > 0) cleanupUploadedFiles(rawFiles);
+      const error = new Error("No images or posts uploaded");
+      error.status = 400;
+      throw error;
+    }
+
+    // Find company by doc _id, userId, or c_by
+    const company = await Company.findOne({
+      $or: [
+        { _id: id },
+        { userId: id },
+        { c_by: id }
+      ]
+    });
+
+    if (!company) {
+      if (rawFiles.length > 0) cleanupUploadedFiles(rawFiles);
+      const error = new Error("Company not found");
+      error.status = 404;
+      throw error;
+    }
+
+    // Safely append new posts without breaking on missing schema fields or non-array posts
+    const existingPosts = Array.isArray(company.posts) ? company.posts : [];
+    company.posts = [...existingPosts, ...newPosts];
+    await company.save({ validateBeforeSave: false });
+
+    return res.status(200).json({
+      success: true,
+      message: "Posts added successfully",
+      data: company.posts
+    });
+  } catch (error) {
+    if (rawFiles.length > 0) {
+      cleanupUploadedFiles(rawFiles);
+    }
+    next(error);
+  }
+};
+
+/**
+ * Deletes a specific post image from a company's profile.
+ * Enforces multi-layer defensive checks:
+ * 1. Validates ID format and image URL inputs.
+ * 2. Strict authorization: Only an admin or the verified company owner can delete posts.
+ * 3. Atomic database update: Removes the specific post URL from the company's posts array.
+ * 4. Path traversal defense: Strictly confines physical file unlink to the uploads/company directory.
+ */
+export const deletePost = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const targetUrl =
+      req.body?.imageUrl ||
+      req.body?.postUrl ||
+      req.body?.image ||
+      req.body?.post ||
+      req.query?.imageUrl ||
+      req.query?.postUrl;
+
+    // ── 1. Validate Input Parameters ───────────────────────────
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+      const error = new Error("Invalid or missing Company ID format");
+      error.status = 400;
+      throw error;
+    }
+
+    if (!targetUrl || typeof targetUrl !== "string" || !targetUrl.trim()) {
+      const error = new Error("Image URL to delete is required");
+      error.status = 400;
+      throw error;
+    }
+
+    // ── 2. Find Target Company ─────────────────────────────────
+    const company = await Company.findOne({
+      $or: [{ _id: id }, { userId: id }, { c_by: id }],
+    });
+
     if (!company) {
       const error = new Error("Company not found");
       error.status = 404;
       throw error;
     }
 
-    // Map files to their paths - Ensure they start with a / as requested
-    const newPosts = files.map(file => {
-      const relPath = getUploadedFilePath(file);
-      return relPath.startsWith('/') ? relPath : '/' + relPath;
+    // ── 3. Strict Ownership & Role Authorization ───────────────
+    // Prevent any unauthorized user from deleting another company's media
+    const companyUserId = company.userId?._id
+      ? company.userId._id.toString()
+      : company.userId?.toString();
+    const companyCreatorId = company.c_by?.toString();
+    const currentUserId = req.user?._id?.toString();
+    const isAdmin = req.user?.role === "admin";
+
+    const isOwner =
+      (companyUserId && companyUserId === currentUserId) ||
+      (companyCreatorId && companyCreatorId === currentUserId);
+
+    if (!isAdmin && !isOwner) {
+      const error = new Error("Access denied: You can only delete your own company's posts");
+      error.status = 403;
+      throw error;
+    }
+
+    // ── 4. Verify Image Exists in Company's Posts ───────────────
+    const cleanTarget = targetUrl.trim();
+    const normalizedTarget = cleanTarget.startsWith("/") ? cleanTarget : `/${cleanTarget}`;
+    const unslashedTarget = cleanTarget.replace(/^\/+/, "");
+
+    const existingPosts = Array.isArray(company.posts) ? company.posts : [];
+    const postIndex = existingPosts.findIndex((p) => {
+      const norm = p.startsWith("/") ? p : `/${p}`;
+      return norm === normalizedTarget || p === unslashedTarget;
     });
 
-    // Update company record
-    const updatedCompany = await Company.findByIdAndUpdate(
-      id,
-      { $push: { posts: { $each: newPosts } } },
-      { new: true, runValidators: true }
-    ).lean();
+    if (postIndex === -1) {
+      const error = new Error("The specified post image was not found on this company profile");
+      error.status = 404;
+      throw error;
+    }
 
-    res.status(200).json({
+    // ── 5. Remove Post from Database ───────────────────────────
+    const [removedPostPath] = existingPosts.splice(postIndex, 1);
+    company.posts = existingPosts;
+    await company.save({ validateBeforeSave: false });
+
+    // ── 6. Path Traversal Guard & Physical File Deletion ───────
+    try {
+      const cleanPath = (removedPostPath || cleanTarget).replace(/^\/+/, "");
+      const resolvedPath = path.resolve(process.cwd(), cleanPath);
+      const uploadsDir = path.resolve(process.cwd(), "uploads", "company");
+
+      // Verify resolved path strictly resides inside uploads/company/
+      if (resolvedPath.startsWith(uploadsDir) && fs.existsSync(resolvedPath)) {
+        fs.unlink(resolvedPath, (err) => {
+          if (err) {
+            console.error("[POST DELETE UNLINK ERROR]", err.message);
+          }
+        });
+      }
+    } catch (cleanupErr) {
+      console.error("[POST DELETE CLEANUP ERROR]", cleanupErr.message);
+    }
+
+    return res.status(200).json({
       success: true,
-      message: "Posts added successfully",
-      data: updatedCompany.posts
+      message: "Post image deleted successfully",
+      data: company.posts,
     });
   } catch (error) {
     next(error);

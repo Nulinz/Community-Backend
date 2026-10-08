@@ -20,6 +20,7 @@ const internshipSchema = new mongoose.Schema(
     domains: [{ type: String, trim: true }],
     organizer: { type: String, required: true, trim: true },
     companyName: { type: String, required: true, trim: true },
+    companyLogo: { type: String, default: null, trim: true },
     location: { type: String, required: true, trim: true },
     mode: { type: String, required: true },
     totalOpenings: { type: Number, default: 0 },

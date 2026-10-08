@@ -115,15 +115,21 @@ export const awardXP = async ({ userId, actionKey, referenceId = null }) => {
   }
 
   levelInfo = calculateLevelInfo(totalXP);
+  const finalIsLevelUp = isLevelUp || (levelInfo.currentLevel > (user.level || 0));
 
   // Atomically update user document in MongoDB
+  const updateFields = {
+    xp: totalXP,
+    level: levelInfo.currentLevel,
+  };
+  if (finalIsLevelUp) {
+    updateFields.show_levelup_animation = true;
+  }
+
   const updatedUser = await User.findByIdAndUpdate(
     userId,
     {
-      $set: {
-        xp: totalXP,
-        level: levelInfo.currentLevel,
-      },
+      $set: updateFields,
     },
     { new: true }
   );
@@ -133,7 +139,7 @@ export const awardXP = async ({ userId, actionKey, referenceId = null }) => {
     xpAwarded: actionConfig.xp,
     totalXP: updatedUser?.xp ?? totalXP,
     level: updatedUser?.level ?? levelInfo.currentLevel,
-    isLevelUp,
+    isLevelUp: finalIsLevelUp,
     levelInfo,
   };
 };

@@ -24,6 +24,8 @@ const freelanceSchema = new mongoose.Schema(
     domains: [{ type: String, trim: true }],
     jobTitle: { type: String, required: true, trim: true },
     companyName: { type: String, required: true, trim: true },
+    organizer: { type: String, trim: true },
+    companyLogo: { type: String, trim: true },
     mode: { type: String, default: "Online" },
     duration: { type: String },
     location: {

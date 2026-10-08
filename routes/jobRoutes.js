@@ -14,14 +14,17 @@ import {
   savePerformanceEvaluation,
   getPerformanceEvaluation,
 } from "../controller/jobController.js";
+import { createUpload } from "../middleware/upload.js";
 
 const router = express.Router();
+const opportunityUpload = createUpload("opportunity");
+const jobUploader = opportunityUpload.fields([{ name: "companyLogo", maxCount: 1 }]);
 
-router.post("/create", isAuthenticated, createJobForm);
+router.post("/create", isAuthenticated, jobUploader, createJobForm);
 router.get("/all", isAuthenticated, getAllJobs);
 router.get("/getById/:id", isAuthenticated, getJobById);
 router.patch("/toggle-status/:id", isAuthenticated, toggleJobStatus);
-router.put("/update/:id", isAuthenticated, createJobForm);
+router.put("/update/:id", isAuthenticated, jobUploader, createJobForm);
 
 // Candidate Selection, Performance & Attendance Routes
 router.get("/candidate-profile/:applicationId", isAuthenticated, getAppliedCandidateProfile);

@@ -40,6 +40,10 @@ const errorMiddleware = (err, req, res, next) => {
     // JWT authentication failure
     statusCode = 401;
     userMessage = "Your session has expired or is invalid. Please sign in again.";
+  } else if (err.name === "MulterError") {
+    // Multer file upload errors (e.g. LIMIT_FILE_SIZE, LIMIT_UNEXPECTED_FILE)
+    statusCode = 400;
+    userMessage = err.message || "File upload failed.";
   } else if (err.isOperational) {
     // Trusted operational error with an explicitly supplied user message
     userMessage = err.message || userMessage;

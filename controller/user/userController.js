@@ -6,9 +6,11 @@ import Company from "../../models/companyModel.js";
 import Freelance from "../../models/freelanceModel.js";
 import SavedJob from "../../models/savedJobModel.js";
 import AppliedJob from "../../models/appliedJobModel.js";
+import Resume from "../../models/resumeModel.js";
 
 import { checkIsSaved } from "../../helper/isSaved.js";
 import { checkIsApplied } from "../../helper/isApplied.js";
+import { formatJobSalary } from "../../helper/salaryHelper.js";
 
 import Competition from "../../models/competitionModel.js";
 import EventRegistration from "../../models/eventRegistrationModel.js";
@@ -34,13 +36,15 @@ import { getCollegeByEventId } from "../../helper/collegeDetails.js";
 import Payment from "../../models/paymentModel.js";
 import XPLog from "../../models/xpLogModel.js";
 import Notification from "../../models/notificationModel.js";
+import UserDetails from "../../models/userDetails.js";
+import { resolveUserEducation } from "../../helper/resolveUserEducation.js";
 
 
 const userDashboard = async (req, res) => {
   try {
     const userId = req.user._id;
 
-    const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
+    const STATIC_ADMIN_IMAGE = "referral/assets/index_icon.png";
 
     // ── Step 1: Get applied job IDs ─────────────────────────────
     const appliedJobs = await AppliedJob.find({ userId }).select("jobId");
@@ -167,7 +171,7 @@ const userDashboard = async (req, res) => {
     startOfToday.setHours(0, 0, 0, 0);
 
     const userDoc = await User.findById(userId).select(
-      "xp level lastActiveDate fcm_token subscription"
+      "xp level lastActiveDate fcm_token subscription show_levelup_animation"
     );
     if (userDoc && (!userDoc.lastActiveDate || new Date(userDoc.lastActiveDate) < startOfToday)) {
       userDoc.lastActiveDate = new Date();
@@ -288,6 +292,7 @@ const userDashboard = async (req, res) => {
           progressPercentage: levelInfo.progressPercentage,
           xpForNextLevel: levelInfo.xpForNextLevel,
           xpNeeded: levelInfo.xpNeeded,
+          show_levelup_animation: Boolean(userDoc?.show_levelup_animation),
         },
         subscription: subscriptionReminder,
         popularEvents,
@@ -337,7 +342,7 @@ const userDashboard = async (req, res) => {
 //         ),
 //     ]);
 
-//     const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
+//     const STATIC_ADMIN_IMAGE = "referral/assets/index_icon.png";
 
 //     // ── Step 3: Enrich events with is_registered ────────────────
 //     const popularEvents = await Promise.all(
@@ -404,175 +409,8 @@ const getJobs = async (req, res) => {
     const [jobs, savedJobs, appliedJobs] = await Promise.all([
       Job.find({ isActive: true, status: "approved" })
         .sort({ createdAt: -1 })
-        .select("jobTitle domain domains jobType location companyName duration salary createdAt mode totalOpenings c_by")
-        .populate("c_by", "role"),
-      SavedJob.find({
-        $or: [{ userId: userObjectId }, { userId: String(userId) }],
-      })
-        .select("jobId")
-        .lean(),
-      AppliedJob.find({
-        $or: [{ userId: userObjectId }, { userId: String(userId) }],
-      })
-        .select("jobId")
-        .lean(),
-    ]);
-
-    const savedSet = new Set(savedJobs.map((s) => String(s.jobId)));
-    const appliedSet = new Set(appliedJobs.map((a) => String(a.jobId)));
-
-    const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
-
-    const data = await Promise.all(
-      jobs.map(async (item) => {
-        const { domain, ...restObj } = item.toObject();
-        const itemDomains = Array.isArray(restObj.domains) && restObj.domains.length ? restObj.domains : (domain ? domain.split(",").map(s => s.trim()).filter(Boolean) : []);
-        let companyImage = null;
-        if (item.c_by?.role === "admin") {
-          companyImage = STATIC_ADMIN_IMAGE;
-        } else if (item.c_by?.role === "company") {
-          const company = await Company.findOne({
-            userId: item.c_by._id,
-          })
-            .select("companyLogo")
-            .lean();
-
-          companyImage = company?.companyLogo || null;
-        }
-
-        const isSaved = savedSet.has(String(item._id));
-        const isApplied = appliedSet.has(String(item._id));
-
-        return {
-          ...restObj,
-          domains: itemDomains,
-          companyImage,
-          is_saved: isSaved,
-          // isSaved: isSaved,
-          // saved: isSaved,
-          is_applied: isApplied,
-          // isApplied: isApplied,
-          // applied: isApplied,
-        };
-      })
-    );
-
-    return res.status(200).json({
-      status: true,
-      count: data.length,
-      data,
-    });
-  } catch (error) {
-    console.error("Jobs API Error:", error.message);
-    return res.status(500).json({
-      status: false,
-      message: "Failed to load jobs data",
-      error: error.message,
-    });
-  }
-};
-const getAllInternships = async (req, res) => {
-  try {
-    const userId = req.user._id;
-    const userObjectId = mongoose.Types.ObjectId.isValid(userId)
-      ? new mongoose.Types.ObjectId(String(userId))
-      : userId;
-
-    // 🔔 Track internships exploration activity for XP mission and trigger claim notification
-    User.findByIdAndUpdate(userId, { lastJobsViewDate: new Date() }).exec();
-    triggerMissionNotification(userId, "INTERNSHIPS_AND_JOBS").catch((err) =>
-      console.error("Internships view mission notification error:", err.message)
-    );
-
-    const [internships, savedJobs, appliedJobs] = await Promise.all([
-      Internship.find({ isActive: true, status: "approved" })
-        .sort({ createdAt: -1 })
-        .select("jobTitle domain domains location companyName duration salary paymentAmount internshipType eligibility createdAt c_by")
-        .populate("c_by", "role"),
-      SavedJob.find({
-        $or: [{ userId: userObjectId }, { userId: String(userId) }],
-      })
-        .select("jobId")
-        .lean(),
-      AppliedJob.find({
-        $or: [{ userId: userObjectId }, { userId: String(userId) }],
-      })
-        .select("jobId")
-        .lean(),
-    ]);
-
-    const savedSet = new Set(savedJobs.map((s) => String(s.jobId)));
-    const appliedSet = new Set(appliedJobs.map((a) => String(a.jobId)));
-
-    const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
-
-    const data = await Promise.all(
-      internships.map(async (item) => {
-        const { domain, ...restObj } = item.toObject();
-        const itemDomains = Array.isArray(restObj.domains) && restObj.domains.length ? restObj.domains : (domain ? domain.split(",").map(s => s.trim()).filter(Boolean) : []);
-        let companyImage = null;
-        if (item.c_by?.role === "admin") {
-          companyImage = STATIC_ADMIN_IMAGE;
-        } else if (item.c_by?.role === "company") {
-          const company = await Company.findOne({
-            userId: item.c_by._id,
-          }).select("companyLogo").lean();
-
-          companyImage = company?.companyLogo || null;
-        }
-
-        const isSaved = savedSet.has(String(item._id));
-        const isApplied = appliedSet.has(String(item._id));
-
-        return {
-          ...restObj,
-          domains: itemDomains,
-          companyImage,
-          is_saved: isSaved,
-          isSaved: isSaved,
-          saved: isSaved,
-          is_applied: isApplied,
-          isApplied: isApplied,
-          applied: isApplied,
-        };
-      })
-    );
-
-    return res.status(200).json({
-      status: true,
-      count: data.length,
-      data,
-    });
-  } catch (error) {
-    console.error("Internships API Error:", error.message);
-    return res.status(500).json({
-      status: false,
-      message: "Failed to load internships",
-      error: error.message,
-    });
-  }
-};
-/**
- * Retrieves all approved active freelance opportunities for the user feed.
- * Opportunities remain visible regardless of application status, matching
- * the behavior of jobs and internships, with dynamic is_applied and is_saved flags.
- */
-const getAllFreelances = async (req, res) => {
-  try {
-    const userId = req.user._id;
-    const userObjectId = mongoose.Types.ObjectId.isValid(userId)
-      ? new mongoose.Types.ObjectId(String(userId))
-      : userId;
-
-    // Concurrently fetch active freelances and user interaction states (saved and applied)
-    const [freelances, savedJobs, appliedJobs] = await Promise.all([
-      Freelance.find({
-        isActive: true,
-        status: "approved",
-      })
-        .sort({ createdAt: -1 })
         .select(
-          "domain domains eligibility description companyName jobTitle projectType budget budgetType jobStartDate jobEndDate totalOpenings mode salary createdAt c_by"
+          "jobTitle domain domains jobType location companyName companyLogo duration salary salaryType salaryMin salaryMax createdAt mode totalOpenings c_by"
         )
         .populate("c_by", "role"),
       SavedJob.find({
@@ -590,13 +428,13 @@ const getAllFreelances = async (req, res) => {
     const savedSet = new Set(savedJobs.map((s) => String(s.jobId)));
     const appliedSet = new Set(appliedJobs.map((a) => String(a.jobId)));
 
-    const STATIC_ADMIN_IMAGE = "public/referral/assets/gradenvyLogo.png";
+    const STATIC_ADMIN_IMAGE = "referral/assets/index_icon.png";
 
     // ── Batch lookup company logos to maximize performance and avoid N+1 queries ──
-    const creatorUserIds = freelances
+    const creatorUserIds = jobs
       .map((item) => item.c_by?._id)
       .filter(Boolean);
-    const companyNames = freelances
+    const companyNames = jobs
       .map((item) => item.companyName?.trim())
       .filter(Boolean);
 
@@ -632,6 +470,267 @@ const getAllFreelances = async (req, res) => {
       }
     });
 
+    const data = jobs.map((item) => {
+      const fullJobObj = item.toObject();
+      const { domain, salaryMin, salaryMax, ...restObj } = fullJobObj;
+      const itemDomains = Array.isArray(restObj.domains) && restObj.domains.length
+        ? restObj.domains
+        : (domain ? domain.split(",").map((s) => s.trim()).filter(Boolean) : []);
+
+      const creatorIdStr = item.c_by?._id ? String(item.c_by._id) : null;
+      const normalizedName = item.companyName ? item.companyName.toLowerCase().trim() : null;
+
+      /**
+       * Resolve company logo with hierarchical fallback:
+       * 1. Explicitly saved logo on job document (e.g. chosen from dropdown or uploaded in admin panel)
+       * 2. Registered company logo matched by companyName (e.g. admin created job for an existing company)
+       * 3. Company logo matched by creator userId/c_by (if creator is a registered company)
+       * 4. Static admin branding fallback if posted by admin
+       */
+      const resolvedLogo =
+        item.companyLogo ||
+        (normalizedName && companyByNameMap.get(normalizedName)) ||
+        (creatorIdStr && companyByCreatorMap.get(creatorIdStr)) ||
+        (item.c_by?.role === "admin" ? STATIC_ADMIN_IMAGE : null);
+
+      const isSaved = savedSet.has(String(item._id));
+      const isApplied = appliedSet.has(String(item._id));
+
+      return {
+        ...restObj,
+        domains: itemDomains,
+        salary: formatJobSalary(fullJobObj),
+        companyLogo: resolvedLogo,
+        companyImage: resolvedLogo,
+        is_saved: isSaved,
+        is_applied: isApplied,
+      };
+    });
+
+    return res.status(200).json({
+      status: true,
+      count: data.length,
+      data,
+    });
+  } catch (error) {
+    console.error("Jobs API Error:", error.message);
+    return res.status(500).json({
+      status: false,
+      message: "Failed to load jobs data",
+      error: error.message,
+    });
+  }
+};
+const getAllInternships = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const userObjectId = mongoose.Types.ObjectId.isValid(userId)
+      ? new mongoose.Types.ObjectId(String(userId))
+      : userId;
+
+    // 🔔 Track internships exploration activity for XP mission and trigger claim notification
+    User.findByIdAndUpdate(userId, { lastJobsViewDate: new Date() }).exec();
+    triggerMissionNotification(userId, "INTERNSHIPS_AND_JOBS").catch((err) =>
+      console.error("Internships view mission notification error:", err.message)
+    );
+
+    const [internships, savedJobs, appliedJobs] = await Promise.all([
+      Internship.find({ isActive: true, status: "approved" })
+        .sort({ createdAt: -1 })
+        .select(
+          "jobTitle domain domains location companyName companyLogo duration salary paymentAmount internshipType eligibility createdAt c_by"
+        )
+        .populate("c_by", "role"),
+      SavedJob.find({
+        $or: [{ userId: userObjectId }, { userId: String(userId) }],
+      })
+        .select("jobId")
+        .lean(),
+      AppliedJob.find({
+        $or: [{ userId: userObjectId }, { userId: String(userId) }],
+      })
+        .select("jobId")
+        .lean(),
+    ]);
+
+    const savedSet = new Set(savedJobs.map((s) => String(s.jobId)));
+    const appliedSet = new Set(appliedJobs.map((a) => String(a.jobId)));
+
+    const STATIC_ADMIN_IMAGE = "referral/assets/index_icon.png";
+
+    // ── Batch lookup company logos to maximize performance and avoid N+1 queries ──
+    const creatorUserIds = internships
+      .map((item) => item.c_by?._id)
+      .filter(Boolean);
+    const companyNames = internships
+      .map((item) => item.companyName?.trim())
+      .filter(Boolean);
+
+    const [companiesByCreator, companiesByName] = await Promise.all([
+      creatorUserIds.length > 0
+        ? Company.find({
+            $or: [{ userId: { $in: creatorUserIds } }, { c_by: { $in: creatorUserIds } }],
+          })
+            .select("userId c_by companyLogo companyName")
+            .lean()
+        : [],
+      companyNames.length > 0
+        ? Company.find({
+            companyName: { $in: companyNames.map((n) => new RegExp(`^${n}$`, "i")) },
+          })
+            .select("companyLogo companyName")
+            .lean()
+        : [],
+    ]);
+
+    const companyByCreatorMap = new Map();
+    companiesByCreator.forEach((c) => {
+      if (c.companyLogo) {
+        if (c.userId) companyByCreatorMap.set(String(c.userId), c.companyLogo);
+        if (c.c_by) companyByCreatorMap.set(String(c.c_by), c.companyLogo);
+      }
+    });
+
+    const companyByNameMap = new Map();
+    companiesByName.forEach((c) => {
+      if (c.companyLogo && c.companyName) {
+        companyByNameMap.set(c.companyName.toLowerCase().trim(), c.companyLogo);
+      }
+    });
+
+    const data = internships.map((item) => {
+      const { domain, ...restObj } = item.toObject();
+      const itemDomains = Array.isArray(restObj.domains) && restObj.domains.length
+        ? restObj.domains
+        : (domain ? domain.split(",").map((s) => s.trim()).filter(Boolean) : []);
+
+      const creatorIdStr = item.c_by?._id ? String(item.c_by._id) : null;
+      const normalizedName = item.companyName ? item.companyName.toLowerCase().trim() : null;
+
+      /**
+       * Resolve company logo with hierarchical fallback:
+       * 1. Direct internship document companyLogo (explicitly chosen/uploaded during creation in admin panel)
+       * 2. Registered company logo matched by companyName (e.g. admin created internship for an existing company)
+       * 3. Company logo matched by creator userId/c_by (if creator is a registered company)
+       * 4. Static admin branding fallback if posted by admin
+       */
+      const resolvedLogo =
+        item.companyLogo ||
+        (normalizedName && companyByNameMap.get(normalizedName)) ||
+        (creatorIdStr && companyByCreatorMap.get(creatorIdStr)) ||
+        (item.c_by?.role === "admin" ? STATIC_ADMIN_IMAGE : null);
+
+      const isSaved = savedSet.has(String(item._id));
+      const isApplied = appliedSet.has(String(item._id));
+
+      return {
+        ...restObj,
+        domains: itemDomains,
+        companyLogo: resolvedLogo,
+        companyImage: resolvedLogo,
+        is_saved: isSaved,
+        isSaved: isSaved,
+        saved: isSaved,
+        is_applied: isApplied,
+        isApplied: isApplied,
+        applied: isApplied,
+      };
+    });
+
+    return res.status(200).json({
+      status: true,
+      count: data.length,
+      data,
+    });
+  } catch (error) {
+    console.error("Internships API Error:", error.message);
+    return res.status(500).json({
+      status: false,
+      message: "Failed to load internships",
+      error: error.message,
+    });
+  }
+};
+/**
+ * Retrieves all approved active freelance opportunities for the user feed.
+ * Opportunities remain visible regardless of application status, matching
+ * the behavior of jobs and internships, with dynamic is_applied and is_saved flags.
+ */
+const getAllFreelances = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const userObjectId = mongoose.Types.ObjectId.isValid(userId)
+      ? new mongoose.Types.ObjectId(String(userId))
+      : userId;
+
+    // Concurrently fetch active freelances and user interaction states (saved and applied)
+    const [freelances, savedJobs, appliedJobs] = await Promise.all([
+      Freelance.find({
+        isActive: true,
+        status: "approved",
+      })
+        .sort({ createdAt: -1 })
+        .select(
+          "domains eligibility description companyName organizer companyLogo jobTitle projectType budget budgetType duration jobStartDate jobEndDate totalOpenings createdAt c_by"
+        )
+        .populate("c_by", "role"),
+      SavedJob.find({
+        $or: [{ userId: userObjectId }, { userId: String(userId) }],
+      })
+        .select("jobId")
+        .lean(),
+      AppliedJob.find({
+        $or: [{ userId: userObjectId }, { userId: String(userId) }],
+      })
+        .select("jobId")
+        .lean(),
+    ]);
+
+    const savedSet = new Set(savedJobs.map((s) => String(s.jobId)));
+    const appliedSet = new Set(appliedJobs.map((a) => String(a.jobId)));
+
+    const STATIC_ADMIN_IMAGE = "referral/assets/index_icon.png";
+
+    // ── Batch lookup company logos to maximize performance and avoid N+1 queries ──
+    const creatorUserIds = freelances
+      .map((item) => item.c_by?._id)
+      .filter(Boolean);
+    const companyNames = freelances
+      .map((item) => item.companyName?.trim())
+      .filter(Boolean);
+
+    const [companiesByCreator, companiesByName] = await Promise.all([
+      creatorUserIds.length > 0
+        ? Company.find({
+          $or: [{ userId: { $in: creatorUserIds } }, { c_by: { $in: creatorUserIds } }],
+        })
+          .select("userId c_by companyLogo companyName")
+          .lean()
+        : [],
+      companyNames.length > 0
+        ? Company.find({
+          companyName: { $in: companyNames.map((n) => new RegExp(`^${n}$`, "i")) },
+        })
+          .select("companyLogo companyName")
+          .lean()
+        : [],
+    ]);
+
+    const companyByCreatorMap = new Map();
+    companiesByCreator.forEach((c) => {
+      if (c.companyLogo) {
+        if (c.userId) companyByCreatorMap.set(String(c.userId), c.companyLogo);
+        if (c.c_by) companyByCreatorMap.set(String(c.c_by), c.companyLogo);
+      }
+    });
+
+    const companyByNameMap = new Map();
+    companiesByName.forEach((c) => {
+      if (c.companyLogo && c.companyName) {
+        companyByNameMap.set(c.companyName.toLowerCase().trim(), c.companyLogo);
+      }
+    });
+
     // Enrich freelance items with company logo and interaction states
     const data = freelances.map((item) => {
       const { domain, ...restObj } = item.toObject();
@@ -642,12 +741,13 @@ const getAllFreelances = async (req, res) => {
       const creatorIdStr = item.c_by?._id ? String(item.c_by._id) : null;
       const normalizedName = item.companyName ? item.companyName.toLowerCase().trim() : null;
 
-      // Resolve logo: first by company creator ID, then by matching companyName, then fallback to admin static logo if admin
+      // Resolve logo: Prioritize custom companyLogo if selected or uploaded;
+      // otherwise, resolve company creator logo or match by companyName; fallback to STATIC_ADMIN_IMAGE if admin.
       const resolvedLogo =
+        item.companyLogo ||
         (creatorIdStr && companyByCreatorMap.get(creatorIdStr)) ||
         (normalizedName && companyByNameMap.get(normalizedName)) ||
-        (item.c_by?.role === "admin" ? STATIC_ADMIN_IMAGE : null) ||
-        null;
+        (item.c_by?.role === "admin" ? STATIC_ADMIN_IMAGE : null);
 
       const isSaved = savedSet.has(String(item._id));
       const isApplied = appliedSet.has(String(item._id));
@@ -656,6 +756,7 @@ const getAllFreelances = async (req, res) => {
         ...restObj,
         domains: itemDomains,
         companyImage: resolvedLogo,
+        companyLogo: resolvedLogo,
         is_saved: isSaved,
         isSaved: isSaved,
         saved: isSaved,
@@ -799,7 +900,7 @@ const getSavedJobs = async (req, res) => {
         path: "jobId",
         match: { isActive: true },
         select:
-          "jobTitle domain domains jobType location c_by companyName duration salary createdAt jobStartDate jobEndDate totalOpenings mode eligibility",
+          "jobTitle domain domains jobType location c_by companyName duration salary salaryType salaryMin salaryMax createdAt jobStartDate jobEndDate totalOpenings mode eligibility",
         populate: {
           path: "c_by",
           select: "role",
@@ -807,7 +908,7 @@ const getSavedJobs = async (req, res) => {
       })
       .sort({ createdAt: -1 });
 
-    const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
+    const STATIC_ADMIN_IMAGE = "referral/assets/index_icon.png";
 
     // Enrich saved jobs with company branding and application status
     const enrichedSavedJobs = await Promise.all(
@@ -831,9 +932,10 @@ const getSavedJobs = async (req, res) => {
           companyImage = company?.companyLogo || null;
         }
 
-        const { domain, ...rawJobObj } = job.toObject();
+        const fullJobObj = job.toObject();
+        const { domain, salaryMin, salaryMax, ...rawJobObj } = fullJobObj;
         const itemDomains = Array.isArray(rawJobObj.domains) && rawJobObj.domains.length ? rawJobObj.domains : (domain ? domain.split(",").map(s => s.trim()).filter(Boolean) : []);
-        const jobObj = { ...rawJobObj, domains: itemDomains };
+        const jobObj = { ...rawJobObj, domains: itemDomains, salary: formatJobSalary(fullJobObj) };
         // Use actual jobType from Job (e.g. "Full Time") or fallback to "Internship"
         const actualJobType = jobObj.jobType || (item.jobType === "Internship" ? "Internship" : "Full Time");
 
@@ -916,7 +1018,7 @@ const getSavedFreelances = async (req, res) => {
       })
       .sort({ createdAt: -1 });
 
-    const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
+    const STATIC_ADMIN_IMAGE = "referral/assets/index_icon.png";
 
     // Enrich saved freelances with company branding and application status
     const data = (
@@ -972,35 +1074,139 @@ const getSavedFreelances = async (req, res) => {
     });
   }
 };
+/**
+ * Parse and normalize multiple portfolio links and their corresponding field names.
+ * Accommodates multipart form data (repeated key submissions), JSON arrays,
+ * single string values, and stringified JSON payloads gracefully.
+ */
+const parsePortfolioInputs = (body = {}) => {
+  const safeJsonParse = (val) => {
+    if (typeof val !== "string") return val;
+    const trimmed = val.trim();
+    if (
+      (trimmed.startsWith("[") && trimmed.endsWith("]")) ||
+      (trimmed.startsWith("{") && trimmed.endsWith("}"))
+    ) {
+      try {
+        return JSON.parse(trimmed);
+      } catch {
+        return val;
+      }
+    }
+    return val;
+  };
+
+  const parsedPortfolios = safeJsonParse(body.portfolios);
+  const parsedPortfolio = safeJsonParse(body.portfolio);
+  const parsedFieldName = safeJsonParse(body.field_name);
+
+  const rawList = [];
+
+  // 1. Direct portfolios array payload
+  if (Array.isArray(parsedPortfolios)) {
+    for (const item of parsedPortfolios) {
+      if (typeof item === "object" && item !== null) {
+        const u = item.portfolio || item.url || item.link || "";
+        const n = item.field_name || item.name || item.title || "Portfolio";
+        if (typeof u === "string" && u.trim()) {
+          rawList.push({ field_name: String(n).trim() || "Portfolio", portfolio: u.trim() });
+        }
+      } else if (typeof item === "string" && item.trim()) {
+        rawList.push({ field_name: "Portfolio", portfolio: item.trim() });
+      }
+    }
+  }
+
+  // 2. Multi-value or single portfolio & field_name keys
+  const portfolioValues = Array.isArray(parsedPortfolio)
+    ? parsedPortfolio
+    : parsedPortfolio !== undefined && parsedPortfolio !== null
+    ? [parsedPortfolio]
+    : [];
+
+  const fieldNameValues = Array.isArray(parsedFieldName)
+    ? parsedFieldName
+    : parsedFieldName !== undefined && parsedFieldName !== null
+    ? [parsedFieldName]
+    : [];
+
+  for (let i = 0; i < portfolioValues.length; i++) {
+    const item = portfolioValues[i];
+    if (typeof item === "object" && item !== null) {
+      const u = item.portfolio || item.url || item.link || "";
+      const n = item.field_name || item.name || (fieldNameValues[i] ? String(fieldNameValues[i]).trim() : "Portfolio");
+      if (typeof u === "string" && u.trim()) {
+        rawList.push({ field_name: String(n).trim() || "Portfolio", portfolio: u.trim() });
+      }
+    } else if (typeof item === "string" && item.trim()) {
+      const n = fieldNameValues[i] && typeof fieldNameValues[i] === "string" && fieldNameValues[i].trim()
+        ? fieldNameValues[i].trim()
+        : "Portfolio";
+      rawList.push({ field_name: n, portfolio: item.trim() });
+    }
+  }
+
+  // Deduplicate by URL while keeping distinct field labels
+  const seen = new Set();
+  const normalized = [];
+  for (const entry of rawList) {
+    const key = `${entry.field_name.toLowerCase()}:${entry.portfolio.toLowerCase()}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      normalized.push(entry);
+    }
+  }
+
+  return normalized;
+};
+
 const applyJob = async (req, res) => {
   try {
     const userId = req.user._id;
-    const { jobId, jobType, resumeId, portfolio } = req.body;
+    const body = req.body || {};
 
-    // Validate required fields
-    if (!jobId || !jobType) {
+    // Target opportunity ID resolution from body, query, or params
+    const targetJobId = body.jobId || body.job_id || body.id || req.query?.jobId || req.params?.jobId;
+    if (!targetJobId) {
       return res.status(400).json({
         status: false,
-        message: "jobId and jobType are required",
+        message: "jobId is required",
       });
     }
 
-    // Validate jobType
-    if (!["Job", "Internship", "Freelance"].includes(jobType)) {
-      return res.status(400).json({
-        status: false,
-        message: "jobType must be 'Job', 'Internship', or 'Freelance'",
-      });
+    // Auto-resolve jobType and find host document across Job, Internship, and Freelance collections
+    const rawJobType = body.jobType || body.job_type || req.query?.jobType;
+    let resolvedJobType = null;
+    if (rawJobType && typeof rawJobType === "string") {
+      const lower = rawJobType.trim().toLowerCase();
+      if (lower === "internship") resolvedJobType = "Internship";
+      else if (lower === "freelance") resolvedJobType = "Freelance";
+      else if (lower === "job") resolvedJobType = "Job";
     }
 
-    // Fetch job to get c_by
     let job = null;
-    if (jobType === "Job") {
-      job = await Job.findById(jobId).select("c_by");
-    } else if (jobType === "Internship") {
-      job = await Internship.findById(jobId).select("c_by");
+    if (resolvedJobType === "Job") {
+      job = await Job.findById(targetJobId).select("c_by");
+    } else if (resolvedJobType === "Internship") {
+      job = await Internship.findById(targetJobId).select("c_by");
+    } else if (resolvedJobType === "Freelance") {
+      job = await Freelance.findById(targetJobId).select("c_by");
     } else {
-      job = await Freelance.findById(jobId).select("c_by");
+      // Auto-detect target collection when jobType is omitted in payload
+      job = await Job.findById(targetJobId).select("c_by");
+      if (job) {
+        resolvedJobType = "Job";
+      } else {
+        job = await Internship.findById(targetJobId).select("c_by");
+        if (job) {
+          resolvedJobType = "Internship";
+        } else {
+          job = await Freelance.findById(targetJobId).select("c_by");
+          if (job) {
+            resolvedJobType = "Freelance";
+          }
+        }
+      }
     }
 
     if (!job) {
@@ -1010,8 +1216,8 @@ const applyJob = async (req, res) => {
       });
     }
 
-    // Check if already applied
-    const existing = await AppliedJob.findOne({ userId, jobId });
+    // Guard against duplicate applications
+    const existing = await AppliedJob.findOne({ userId, jobId: targetJobId });
     if (existing) {
       return res.status(400).json({
         status: false,
@@ -1019,17 +1225,30 @@ const applyJob = async (req, res) => {
       });
     }
 
-    // Apply with c_by from job
-    await AppliedJob.create({
+    // Resume resolution: optional in payload, falls back to user's latest stored resume
+    let resolvedResumeId = body.resumeId || body.resume_id || null;
+    if (!resolvedResumeId) {
+      const latestResume = await Resume.findOne({ userId }).sort({ createdAt: -1 }).select("_id").lean();
+      if (latestResume) {
+        resolvedResumeId = latestResume._id;
+      }
+    }
+
+    // Parse repeated or single field_name and portfolio submissions into an array
+    const portfolioList = parsePortfolioInputs(body);
+
+    // Persist application with complete metadata
+    const createdApp = await AppliedJob.create({
       userId,
-      jobId,
-      jobType,
-      resumeId,
-      portfolio: typeof portfolio === "string" ? portfolio.trim() : null,
-      c_by: job.c_by,
+      jobId: targetJobId,
+      jobType: resolvedJobType || "Job",
+      resumeId: resolvedResumeId,
+      portfolios: portfolioList,
+      portfolio: portfolioList.length > 0 ? portfolioList : null,
+      c_by: job.c_by || null,
     });
 
-    if (jobType === "Freelance") {
+    if (resolvedJobType === "Freelance") {
       triggerMissionNotification(userId, "FIRST_FREELANCE_APPLICATION").catch((err) =>
         console.error("FIRST_FREELANCE_APPLICATION notification error:", err.message)
       );
@@ -1039,6 +1258,12 @@ const applyJob = async (req, res) => {
       status: true,
       is_applied: true,
       message: "Applied successfully",
+      data: {
+        applicationId: createdApp._id,
+        jobId: targetJobId,
+        jobType: resolvedJobType,
+        portfolios: portfolioList,
+      },
     });
   } catch (error) {
     console.error("Apply Job Error:", error.message);
@@ -1062,7 +1287,7 @@ const getAppliedJobs = async (req, res) => {
         path: "jobId",
         match: { isActive: true },
         select:
-          "jobTitle domain domains location c_by companyName duration salary createdAt jobStartDate jobEndDate totalOpenings mode",
+          "jobTitle domain domains location c_by companyName duration salary salaryType salaryMin salaryMax createdAt jobStartDate jobEndDate totalOpenings mode",
         populate: {
           path: "c_by",
           select: "role",
@@ -1070,7 +1295,7 @@ const getAppliedJobs = async (req, res) => {
       })
       .sort({ createdAt: -1 });
 
-    const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
+    const STATIC_ADMIN_IMAGE = "referral/assets/index_icon.png";
 
     const enrichedAppliedJobs = (
       await Promise.all(
@@ -1093,7 +1318,8 @@ const getAppliedJobs = async (req, res) => {
             companyImage = company?.companyLogo || null;
           }
 
-          const { domain, ...rawJobObj } = job.toObject();
+          const fullJobObj = job.toObject();
+          const { domain, salaryMin, salaryMax, ...rawJobObj } = fullJobObj;
           const itemDomains = Array.isArray(rawJobObj.domains) && rawJobObj.domains.length ? rawJobObj.domains : (domain ? domain.split(",").map(s => s.trim()).filter(Boolean) : []);
 
           return {
@@ -1101,6 +1327,7 @@ const getAppliedJobs = async (req, res) => {
             jobId: {
               ...rawJobObj,
               domains: itemDomains,
+              salary: formatJobSalary(fullJobObj),
               companyImage,
               is_applied: true,
               is_saved: await checkIsSaved(userId, job._id, item.jobType),
@@ -1149,7 +1376,7 @@ const getAppliedFreelances = async (req, res) => {
       })
       .sort({ createdAt: -1 });
 
-    const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
+    const STATIC_ADMIN_IMAGE = "referral/assets/index_icon.png";
 
     const enrichedAppliedFreelances = (
       await Promise.all(
@@ -1213,7 +1440,7 @@ const getMySuggestions = async (req, res) => {
       .populate({
         path: "jobId",
         select:
-          "jobTitle location c_by companyName duration salary eligibility createdAt description jobStartDate jobEndDate totalOpenings mode",
+          "jobTitle location c_by companyName duration salary salaryType salaryMin salaryMax eligibility createdAt description jobStartDate jobEndDate totalOpenings mode",
         populate: {
           path: "c_by",
           select: "role",
@@ -1221,7 +1448,7 @@ const getMySuggestions = async (req, res) => {
       })
       .sort({ createdAt: -1 });
 
-    const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
+    const STATIC_ADMIN_IMAGE = "referral/assets/index_icon.png";
 
     const enrichedSuggestions = await Promise.all(
       suggestions.map(async (item) => {
@@ -1254,12 +1481,15 @@ const getMySuggestions = async (req, res) => {
           jobId: job._id,
         });
 
+        const fullJobObj = job.toObject();
+        const { salaryMin, salaryMax, ...rawJobObj } = fullJobObj;
+
         return {
           ...item.toObject(),
 
           jobId: {
-            ...job.toObject(),
-
+            ...rawJobObj,
+            salary: formatJobSalary(fullJobObj),
             companyImage,
 
             // ✅ Applied Status
@@ -1325,30 +1555,59 @@ const getJobProfile = async (req, res) => {
       });
     }
 
-    const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
+    const STATIC_ADMIN_IMAGE = "referral/assets/index_icon.png";
 
-    // ── Get Company Details ─────────────────────────────
+    /**
+     * Resolve company profile details and companyId.
+     * Business rule: If the creator role is admin, companyId must be null
+     * and fallback to the static admin branding. Otherwise, resolve the
+     * registered Company document ID to allow clients to link to the company profile.
+     */
+    let companyId = null;
     let companyDetails = {
+      companyId: null,
       companyLogo: null,
       email: job?.c_by?.email || null,
       phone: job?.c_by?.phone || null,
       aboutUs: null,
-      websiteLink: null
+      websiteLink: null,
+      companyTagLine: null,
     };
 
-    if (job.c_by?.role === "admin") {
-      companyDetails.companyLogo = STATIC_ADMIN_IMAGE;
-    } else if (job.c_by?.role === "company") {
-      const company = await Company.findOne({
-        userId: job.c_by._id,
-      })
-        .select("companyLogo aboutUs websiteLink")
-        .lean();
-      companyDetails = {
-        companyLogo: company?.companyLogo || null,
-        aboutUs: company?.aboutUs || null,
-        website: company?.websiteLink || null
-      };
+    const creatorRole = job.c_by?.role ? String(job.c_by.role).toLowerCase() : null;
+
+    if (creatorRole === "admin") {
+      companyId = null;
+      companyDetails.companyLogo = job.companyLogo || STATIC_ADMIN_IMAGE;
+    } else {
+      const company =
+        (await Company.findOne({
+          $or: [{ userId: job.c_by?._id }, { c_by: job.c_by?._id }],
+        })
+          .select("_id companyLogo aboutUs websiteLink companyName companyTagLine")
+          .lean()) ||
+        (job.companyName
+          ? await Company.findOne({
+              companyName: { $regex: new RegExp(`^${job.companyName.trim()}$`, "i") },
+            })
+            .select("_id companyLogo aboutUs websiteLink companyName companyTagLine")
+              .lean()
+          : null);
+
+      if (company) {
+        companyId = company._id ? String(company._id) : null;
+        companyDetails = {
+          _id: company._id,
+          companyId,
+          companyLogo: company.companyLogo || null,
+          aboutUs: company.aboutUs || null,
+          website: company.websiteLink || null,
+          websiteLink: company.websiteLink || null,
+          email: job?.c_by?.email || null,
+          phone: job?.c_by?.phone || null,
+          companyTagLine: company.companyTagLine || "The Place where innovation arises",
+        };
+      }
     }
 
     // ── Parallel Checks ─────────────────────────────
@@ -1356,45 +1615,45 @@ const getJobProfile = async (req, res) => {
       checkIsSaved(userId, id, jobType),
       checkIsApplied(userId, id),
 
-      // ✅ total applicants count
+      // Calculate total applicants for this specific job, internship, or freelance posting
       AppliedJob.countDocuments({
         jobId: id,
-        jobType: jobType,
       }),
     ]);
 
-    const { domain, ...rawJobObj } = job.toObject();
+    const fullJobObj = job.toObject();
+    const resolvedSalary = formatJobSalary(fullJobObj);
+    const { domain, salaryMin, salaryMax, ...rawJobObj } = fullJobObj;
     const itemDomains = Array.isArray(rawJobObj.domains) && rawJobObj.domains.length ? rawJobObj.domains : (domain ? domain.split(",").map(s => s.trim()).filter(Boolean) : []);
 
     // ── Resolve budget from DB (prioritize budget field, fallback to salary/paymentAmount) ──
     const resolvedBudget = rawJobObj.budget !== undefined && rawJobObj.budget !== null && String(rawJobObj.budget).trim() !== ""
       ? String(rawJobObj.budget).trim()
-      : (rawJobObj.salary !== undefined && rawJobObj.salary !== null && rawJobObj.salary !== 0
-          ? String(rawJobObj.salary)
-          : (rawJobObj.paymentAmount !== undefined && rawJobObj.paymentAmount !== null && rawJobObj.paymentAmount !== 0
-              ? String(rawJobObj.paymentAmount)
-              : ""));
+      : (resolvedSalary !== undefined && resolvedSalary !== null && resolvedSalary !== 0 && String(resolvedSalary).trim() !== "0"
+        ? String(resolvedSalary)
+        : (rawJobObj.paymentAmount !== undefined && rawJobObj.paymentAmount !== null && rawJobObj.paymentAmount !== 0
+          ? String(rawJobObj.paymentAmount)
+          : ""));
 
     return res.status(200).json({
       status: true,
       jobType,
+      appliedCount: appliedCount || 0,
       data: {
         ...rawJobObj,
+        salary: resolvedSalary,
         budget: resolvedBudget,
         domains: itemDomains,
 
-        // ✅ attach company info
+        // Attached company info including resolved companyId
         company: companyDetails,
 
-        // ✅ flags
-        is_saved,
+        // Interaction flags
+        is_saved,             
         isSaved: is_saved,
         is_applied,
         isApplied: is_applied,
 
-        // ✅ count
-        applied_count: appliedCount,
-        appliedCount: appliedCount,
       },
     });
   } catch (error) {
@@ -2069,14 +2328,19 @@ const createExternalEventRegistration = async (req, res) => {
     // ==============================
     // 3. FETCH USER PROFILE FOR DEFAULTS
     // ==============================
-    const user = await User.findById(userId).select("name email phone collegeName department year").lean();
+    const [user, userDetails] = await Promise.all([
+      User.findById(userId).select("name email phone").lean(),
+      UserDetails.findOne({ userId }).lean(),
+    ]);
 
-    const finalFullName = fullName?.trim() || user?.name || "Participant";
+    const eduDefaults = resolveUserEducation(userDetails);
+
+    const finalFullName = fullName?.trim() || userDetails?.name || user?.name || "Participant";
     const finalMailId = mailId?.trim() || user?.email || "";
     const finalPhone = phoneNumber?.trim() || user?.phone || "";
-    const finalCollege = collegeName?.trim() || user?.collegeName || "N/A";
-    const finalDept = department?.trim() || user?.department || "N/A";
-    const finalYear = year?.trim() || user?.year || "N/A";
+    const finalCollege = collegeName?.trim() && collegeName.trim().toUpperCase() !== "N/A" ? collegeName.trim() : eduDefaults.college;
+    const finalDept = department?.trim() && department.trim().toUpperCase() !== "N/A" ? department.trim() : eduDefaults.department;
+    const finalYear = year?.trim() && year.trim().toUpperCase() !== "N/A" ? year.trim() : eduDefaults.year;
 
     // ==============================
     // 4. CREATE REGISTRATION RECORD
@@ -2555,7 +2819,7 @@ const getAllCompanies = async (req, res) => {
       .populate("userId", "is_active")
       .sort({ createdAt: -1 })
       .select(
-        "companyName companyType companyTagLine companyCultureTags companyLogo coverImage city state technologies whatWeDo yearFounded websiteLink userId isActive is_active createdAt"
+        "companyName companyType companyTagLine companyCultureTags companyLogo coverImage city state technologies yearFounded websiteLink userId isActive is_active createdAt domains employees"
       );
 
     // Filter only companies where linked User account is_active is not false and company status is active
@@ -2649,22 +2913,150 @@ const toggleFollow = async (req, res) => {
 };
 
 
+/**
+ * Retrieves all companies followed by the authenticated user using their Bearer token.
+ * Populates complete company profile data, aggregates live follower counts,
+ * and strictly deduplicates results so each company appears exactly once.
+ */
 const getFollowingList = async (req, res) => {
   try {
     const userId = req.user._id;
 
-    const follows = await CompanyFollow.find({ userId })
+    // 1. Fetch user's company follow records ordered by most recent follow
+    const followRecords = await CompanyFollow.find({ userId })
       .sort({ createdAt: -1 })
-      .populate({
-        path: "companyId",
-        select:
-          "companyName companyType companyTagLine companyLogo coverImage city state technologies isActive",
+      .lean();
+
+    if (!followRecords.length) {
+      return res.status(200).json({
+        status: true,
+        count: 0,
+        data: [],
       });
+    }
+
+    const companyTargetIds = followRecords
+      .map((f) => f.companyId)
+      .filter(Boolean);
+
+    // 2. Fetch corresponding company documents matching either Company._id or Company.userId
+    const companies = await Company.find({
+      $or: [
+        { _id: { $in: companyTargetIds } },
+        { userId: { $in: companyTargetIds } },
+      ],
+    })
+      .select(
+        "companyName companyType companyTagLine companyCultureTags companyLogo coverImage city state location industry websiteLink technologies yearFounded employees isActive is_admin_company userId createdAt"
+      )
+      .lean();
+
+    // 3. Map company references for O(1) matching by both _id and userId
+    const companyMap = new Map();
+    companies.forEach((comp) => {
+      if (comp._id) {
+        companyMap.set(comp._id.toString(), comp);
+      }
+      if (comp.userId) {
+        companyMap.set(comp.userId.toString(), comp);
+      }
+    });
+
+    // 4. Defensive fallback for direct admin account follows without a company document
+    const unfoundIds = companyTargetIds.filter((id) => !companyMap.has(id.toString()));
+    if (unfoundIds.length > 0) {
+      const adminUsers = await User.find({ _id: { $in: unfoundIds }, role: "admin" })
+        .select("name role email")
+        .lean();
+
+      adminUsers.forEach((admin) => {
+        companyMap.set(admin._id.toString(), {
+          _id: admin._id,
+          companyName: admin.name || "Nulinz",
+          companyType: "Administration",
+          companyTagLine: "Connecting Talent with Opportunity",
+          companyCultureTags: [],
+          companyLogo: "referral/assets/index_icon.png",
+          coverImage: "default-cover.png",
+          city: "",
+          state: "",
+          location: "",
+          industry: "Community & Education",
+          websiteLink: "",
+          technologies: [],
+          employees: "1-10",
+          yearFounded: null,
+          isActive: true,
+        });
+      });
+    }
+
+    // 5. Aggregate follower counts in a single query to avoid N+1 overhead
+    const allCompanyIds = [];
+    companies.forEach((c) => {
+      if (c._id) allCompanyIds.push(c._id);
+      if (c.userId) allCompanyIds.push(c.userId);
+    });
+
+    const followerCounts = await CompanyFollow.aggregate([
+      { $match: { companyId: { $in: allCompanyIds } } },
+      { $group: { _id: "$companyId", count: { $sum: 1 } } },
+    ]);
+
+    const followerCountMap = new Map();
+    followerCounts.forEach((fc) => {
+      if (fc._id) {
+        followerCountMap.set(fc._id.toString(), fc.count);
+      }
+    });
+
+    // 6. Deduplicate: ensure each unique company appears only once even if multiple records exist
+    const seenCompanyIds = new Set();
+    const resultList = [];
+
+    for (const record of followRecords) {
+      if (!record.companyId) continue;
+      const comp = companyMap.get(record.companyId.toString());
+      if (!comp) continue;
+
+      const canonicalId = comp._id.toString();
+      if (seenCompanyIds.has(canonicalId)) {
+        continue;
+      }
+      seenCompanyIds.add(canonicalId);
+
+      const targetIds = [comp._id?.toString(), comp.userId?.toString()].filter(Boolean);
+      let totalFollowers = 0;
+      targetIds.forEach((id) => {
+        totalFollowers += followerCountMap.get(id) || 0;
+      });
+
+      resultList.push({
+        _id: comp._id,
+        companyName: comp.companyName || "",
+        companyType: comp.companyType || "",
+        companyTagLine: comp.companyTagLine || "",
+        companyCultureTags: comp.companyCultureTags || [],
+        companyLogo: comp.companyLogo || null,
+        coverImage: comp.coverImage || null,
+        city: comp.city || "",
+        state: comp.state || "",
+        location: comp.location || [comp.city, comp.state].filter(Boolean).join(", "),
+        industry: comp.industry || "",
+        websiteLink: comp.websiteLink || "",
+        technologies: Array.isArray(comp.technologies) ? comp.technologies : [],
+        employees: comp.employees || "",
+        yearFounded: comp.yearFounded || null,
+        followersCount: totalFollowers,
+        is_following: true,
+        followedAt: record.createdAt,
+      });
+    }
 
     return res.status(200).json({
       status: true,
-      count: follows.length,
-      data: follows.map((f) => f.companyId),
+      count: resultList.length,
+      data: resultList,
     });
   } catch (error) {
     console.error("Following List Error:", error.message);
@@ -2745,7 +3137,7 @@ const getCompanyProfile = async (req, res) => {
 
     const companyUserId = company.userId; // ✅ the user who owns this company
 
-    const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
+    const STATIC_ADMIN_IMAGE = "referral/assets/index_icon.png";
 
     const targetCompanyIds = [companyUserId, company._id].filter(Boolean);
 
@@ -3005,7 +3397,7 @@ const getJobMetaPage = async (req, res) => {
       return res.status(400).send("<h1>Invalid Job ID</h1>");
     }
 
-    const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
+    const STATIC_ADMIN_IMAGE = "referral/assets/index_icon.png";
 
     let job = null;
     let jobType = null;
@@ -3263,7 +3655,7 @@ const getCompanyMetaPage = async (req, res) => {
       return res.status(400).send("<h1>Invalid User ID</h1>");
     }
 
-    const STATIC_ADMIN_IMAGE = "uploads/Nulinz LOGO 3.png";
+    const STATIC_ADMIN_IMAGE = "referral/assets/index_icon.png";
 
     let companyName = "Nulinz";
     let tagLine = "Connecting Talent with Opportunity";
@@ -3462,10 +3854,15 @@ const activePing = async (req, res, next) => {
   }
 };
 
+/**
+ * Retrieves the current user's subscription status and level-up celebration trigger.
+ * Exposes `show_levelup_animation` (and client-compatible alias `show_levelup_anaimation`)
+ * so clients can trigger celebration modals upon level progression.
+ */
 const getSubscriptionStatus = async (req, res, next) => {
   try {
     const user = await User.findById(req.user._id).select(
-      "name email phone subscription"
+      "name email phone subscription show_levelup_animation"
     );
 
     if (!user) {
@@ -3491,9 +3888,12 @@ const getSubscriptionStatus = async (req, res, next) => {
     }
 
     const isPlanActive = Boolean(user.subscription?.isPlanActive && !isExpired);
+    const showLevelUpAnimation = Boolean(user.show_levelup_animation);
 
     return res.status(200).json({
       success: true,
+      show_levelup_animation: showLevelUpAnimation,
+      // show_levelup_anaimation: showLevelUpAnimation,
       data: {
         userId: user._id,
         name: user.name || "",
@@ -3503,6 +3903,43 @@ const getSubscriptionStatus = async (req, res, next) => {
         isPlanActive,
         startDate: user.subscription?.startDate || null,
         expiryDate: endOfDayExpiry ? endOfDayExpiry.toISOString() : null,
+        // show_levelup_animation: showLevelUpAnimation,
+        // show_levelup_anaimation: showLevelUpAnimation,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Resets the user's level-up animation trigger back to false.
+ * Called by the frontend once the level-up celebration modal has been displayed and dismissed.
+ */
+const dismissLevelUpAnimation = async (req, res, next) => {
+  try {
+    const userId = req.user?._id;
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        status: false,
+        message: "Unauthorized",
+      });
+    }
+
+    await User.findByIdAndUpdate(userId, {
+      $set: { show_levelup_animation: false },
+    });
+
+    return res.status(200).json({
+      success: true,
+      status: true,
+      message: "Level-up animation dismissed successfully",
+      show_levelup_animation: false,
+      show_levelup_anaimation: false,
+      data: {
+        show_levelup_animation: false,
+        show_levelup_anaimation: false,
       },
     });
   } catch (error) {
@@ -3661,6 +4098,7 @@ const getMyReferrals = async (req, res, next) => {
 export {
   userDashboard,
   getSubscriptionStatus,
+  dismissLevelUpAnimation,
   getAllRegisteredUsers,
   getMyReferrals,
   getJobs,

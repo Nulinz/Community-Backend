@@ -2,11 +2,18 @@ import Freelance from "../models/freelanceModel.js";
 import AppliedJob from "../models/appliedJobModel.js";
 import UserDetails from "../models/userDetails.js";
 import { notifyJobAudience } from "../helper/jobNotification.js";
+import { notifyCompanyFollowers } from "../helper/companyFollowNotification.js";
 import Company from "../models/companyModel.js";
 import User from "../models/userModel.js";
+import path from "path";
 
 const toCleanString = (value) =>
   typeof value === "string" ? value.trim() : "";
+
+const getUploadedFilePath = (file) => {
+  if (!file?.path) return "";
+  return path.relative(process.cwd(), file.path).replace(/\\/g, "/");
+};
 
 const parseArray = (val) => {
   if (Array.isArray(val)) return val;
@@ -64,7 +71,8 @@ export const createFreelanceForm = async (req, res, next) => {
 
     // Validation
     if (!jobTitle) throw Object.assign(new Error("Job Title is required"), { status: 400 });
-    if (!companyName) throw Object.assign(new Error("Company Name is required"), { status: 400 });
+    const resolvedOrganizer = toCleanString(rest.organizer || companyName);
+    if (!resolvedOrganizer) throw Object.assign(new Error("Company Name / Organizer is required"), { status: 400 });
 
     const selectedType = projectType || "Small Project";
     const numericBudget = parseFloat(String(budget || "").replace(/[^0-9.]/g, ""));
@@ -95,7 +103,28 @@ export const createFreelanceForm = async (req, res, next) => {
     // Update fields
     freelance.domains = resolvedDomains;
     freelance.jobTitle = toCleanString(jobTitle);
-    freelance.companyName = toCleanString(companyName);
+    freelance.organizer = resolvedOrganizer;
+    freelance.companyName = resolvedOrganizer;
+
+    // ── Handle Custom Company Logo / Dropdown Selection ──────────
+    let customCompanyLogo = freelance.companyLogo || null;
+    if (req.files?.companyLogo?.[0]) {
+      const relPath = getUploadedFilePath(req.files.companyLogo[0]);
+      customCompanyLogo = relPath ? (relPath.startsWith("/") ? relPath : `/${relPath}`) : null;
+    } else if (req.body.companyLogo && typeof req.body.companyLogo === "string" && req.body.companyLogo.trim()) {
+      customCompanyLogo = req.body.companyLogo.trim();
+    } else if (resolvedOrganizer) {
+      const matchingCompany = await Company.findOne({
+        companyName: new RegExp(`^${resolvedOrganizer}$`, "i"),
+      }).select("companyLogo").lean();
+      if (matchingCompany?.companyLogo) {
+        customCompanyLogo = matchingCompany.companyLogo;
+      }
+    }
+
+    if (customCompanyLogo) {
+      freelance.companyLogo = customCompanyLogo;
+    }
     freelance.projectType = toCleanString(projectType) || "Small Project";
     freelance.mode = toCleanString(mode) || "Online";
     freelance.totalOpenings = Number(totalOpenings) || 0;
@@ -136,6 +165,16 @@ export const createFreelanceForm = async (req, res, next) => {
     freelanceObj.domains = Array.isArray(freelanceObj.domains) && freelanceObj.domains.length
       ? freelanceObj.domains
       : resolvedDomains;
+
+    // Asynchronously notify followers of this company when a new freelance (Envy) project is posted
+    if (!isUpdate) {
+      notifyCompanyFollowers({
+        opportunity: freelanceObj,
+        opportunityType: "Freelance",
+        senderId: req.user._id,
+        organizerName: resolvedOrganizer,
+      }).catch((err) => console.error("Error triggering follower freelance notification:", err.message));
+    }
 
     res.status(isUpdate ? 200 : 201).json({
       success: true,
@@ -228,9 +267,17 @@ export const getFreelanceById = async (req, res, next) => {
           userId: app.userId?._id,
         })
           .select(
-            "profile_pic gender dob currentStatus education ugDegree ugFieldOfStudy ugYear pgDegree pgFieldOfStudy pgYear companyName jobTitle yearOfExperience"
+            "profile_pic gender dob currentStatus education ugDegree ugFieldOfStudy ugYear pgDegree pgFieldOfStudy pgYear companyName jobTitle yearOfExperience city"
           )
           .lean();
+
+        const rawPortfolios = Array.isArray(app.portfolios) && app.portfolios.length > 0
+          ? app.portfolios
+          : (Array.isArray(app.portfolio) && app.portfolio.length > 0
+            ? app.portfolio
+            : (typeof app.portfolio === "string" && app.portfolio.trim()
+              ? [{ field_name: "Portfolio", portfolio: app.portfolio.trim() }]
+              : []));
 
         return {
           sNo: index + 1,
@@ -242,7 +289,8 @@ export const getFreelanceById = async (req, res, next) => {
           appliedAt: app.createdAt,
           location: app.location,
           status: app.status || "applied",
-          portfolio: app.portfolio || null,
+          portfolios: rawPortfolios,
+          portfolio: rawPortfolios.length > 0 ? rawPortfolios : null,
           // UserDetails
           profile_pic: userDetails?.profile_pic || null,
           gender: userDetails?.gender || "",
@@ -255,6 +303,7 @@ export const getFreelanceById = async (req, res, next) => {
           companyName: userDetails?.companyName || "",
           jobTitle: userDetails?.jobTitle || "",
           yearOfExperience: userDetails?.yearOfExperience || null,
+          city: userDetails?.city || "",
         };
       })
     );
@@ -284,7 +333,7 @@ export const getFreelanceById = async (req, res, next) => {
     if (!companyLogo && freelance.c_by) {
       const creator = await User.findById(freelance.c_by).select("role").lean();
       if (creator?.role === "admin") {
-        companyLogo = "uploads/Nulinz LOGO 3.png";
+        companyLogo = "referral/assets/index_icon.png";
       }
     }
 

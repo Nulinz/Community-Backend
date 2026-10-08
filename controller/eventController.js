@@ -5,6 +5,7 @@ import mongoose from "mongoose";
 import EventRegistration from "../models/eventRegistrationModel.js";
 import { getEventFinancials } from "../helper/getEventFinancials.js";
 import { validateOrganizerPayout, resolveOrganizerName } from "../helper/payoutValidator.js";
+import { enrichRegistrationsWithUserDetails } from "../helper/resolveUserEducation.js";
 
 const toCleanString = (value) =>
     typeof value === "string" ? value.trim() : "";
@@ -274,11 +275,23 @@ export const getAllEvents = async (req, res, next) => {
                 query.status = "pending";
         }
 
-        const events = await Event.find(query).sort({ createdAt: -1 });
+        const events = await Event.find(query).sort({ createdAt: -1 }).lean();
+        const eventIds = events.map((e) => e._id);
+        const counts = eventIds.length > 0
+            ? await EventRegistration.aggregate([
+                { $match: { eventId: { $in: eventIds } } },
+                { $group: { _id: "$eventId", count: { $sum: 1 } } },
+            ])
+            : [];
+        const countMap = new Map(counts.map((c) => [String(c._id), c.count]));
+        const data = events.map((item) => ({
+            ...item,
+            registeredCount: countMap.get(String(item._id)) || 0,
+        }));
 
         res.status(200).json({
             success: true,
-            data: events,
+            data,
         });
     } catch (error) {
         next(error);
@@ -310,25 +323,7 @@ export const getEventById = async (req, res, next) => {
             .sort({ createdAt: -1 })
             .lean();
 
-        const registeredList = registrations.map((reg, index) => ({
-            sNo: index + 1,
-            registrationId: reg._id,
-            userId: reg.userId?._id,
-            name: reg.userId?.name,
-            email: reg.userId?.email || reg.mailId,
-            phone: reg.userId?.phone || reg.phoneNumber,
-            fullName: reg.fullName,
-            department: reg.department,
-            college: reg.collegeName,
-            year: reg.year,
-            phoneNumber: reg.phoneNumber,
-            mailId: reg.mailId,
-            food: reg.food,
-            foodType: reg.foodType,
-            accommodation: reg.accommodation,
-            accommodationType: reg.accommodationType,
-            registeredAt: reg.createdAt,
-        }));
+        const registeredList = await enrichRegistrationsWithUserDetails(registrations);
 
         return res.status(200).json({
             success: true,
