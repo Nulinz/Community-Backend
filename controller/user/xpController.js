@@ -150,6 +150,8 @@ export const getMissions = async (req, res, next) => {
     const missionKeys = [
       "DAILY_LOGIN",
       activeTimeMissionKey,
+      "FOLLOW_INSTAGRAM",
+      "FOLLOW_YOUTUBE",
       "AI_STATION",
       "INTERNSHIPS_AND_JOBS",
       "FIRST_REGISTERATION",
@@ -161,8 +163,7 @@ export const getMissions = async (req, res, next) => {
       "FIRST_COMPETITION_REGISTRATION",
       "FIRST_FREELANCE_APPLICATION",
       "FIRST_SUBSCRIPTION",
-      "FOLLOW_INSTAGRAM",
-      "FOLLOW_YOUTUBE",
+
       "REFERRAL",
     ];
 

@@ -537,29 +537,35 @@ export const getMyCompany = async (req, res, next) => {
       is_active: userId?.is_active ?? true
     };
 
-    // ── 2. Get Internships (c_by = companyUserId) ──────────────
-    const rawInternships = await Internship.find({ c_by: companyUserId })
-      .sort({ createdAt: -1 })
-      .select("jobTitle domain domains location companyName duration salary paymentAmount internshipType eligibility createdAt")
-      .lean();
+    // ── 2. Get Postings (Jobs, Internships, Freelances) concurrently ──
+    const [rawJobs, rawInternships, rawFreelances] = await Promise.all([
+      Job.find({ c_by: companyUserId })
+        .sort({ createdAt: -1 })
+        .select("jobTitle domain domains location companyName duration salary salaryType salaryMin salaryMax eligibility mode totalOpenings createdAt")
+        .lean(),
 
-    const internships = rawInternships.map(item => {
+      Internship.find({ c_by: companyUserId })
+        .sort({ createdAt: -1 })
+        .select("jobTitle domain domains location companyName duration salary paymentAmount internshipType eligibility createdAt")
+        .lean(),
+
+      Freelance.find({ c_by: companyUserId })
+        .sort({ createdAt: -1 })
+        .select("jobTitle domain domains location companyName eligibility jobStartDate jobEndDate duration totalOpenings mode salary createdAt")
+        .lean(),
+    ]);
+
+    const formatDomains = (item) => {
       const { domain: itemDomain, ...itemRest } = item;
-      const itemDomains = Array.isArray(itemRest.domains) && itemRest.domains.length ? itemRest.domains : (itemDomain ? itemDomain.split(",").map(s => s.trim()).filter(Boolean) : []);
+      const itemDomains = Array.isArray(itemRest.domains) && itemRest.domains.length
+        ? itemRest.domains
+        : (itemDomain ? itemDomain.split(",").map((s) => s.trim()).filter(Boolean) : []);
       return { ...itemRest, domains: itemDomains };
-    });
+    };
 
-    // ── 3. Get Freelances (c_by = companyUserId) ───────────────
-    const rawFreelances = await Freelance.find({ c_by: companyUserId })
-      .sort({ createdAt: -1 })
-      .select("jobTitle domain domains location companyName eligibility jobStartDate jobEndDate duration totalOpenings mode salary createdAt")
-      .lean();
-
-    const freelances = rawFreelances.map(item => {
-      const { domain: itemDomain, ...itemRest } = item;
-      const itemDomains = Array.isArray(itemRest.domains) && itemRest.domains.length ? itemRest.domains : (itemDomain ? itemDomain.split(",").map(s => s.trim()).filter(Boolean) : []);
-      return { ...itemRest, domains: itemDomains };
-    });
+    const jobs = rawJobs.map(formatDomains);
+    const internships = rawInternships.map(formatDomains);
+    const freelances = rawFreelances.map(formatDomains);
 
     // ── 4. Get Followers (Matches either Company Document _id or Company User ID) ──
     const targetCompanyIds = [companyUserId, company._id].filter(Boolean);
@@ -613,6 +619,8 @@ export const getMyCompany = async (req, res, next) => {
       data: {
         company: flattenedCompany,
         jobs: {
+          jobs,
+          jobsCount: jobs.length,
           internships,
           internshipsCount: internships.length,
           freelances,
@@ -686,29 +694,35 @@ export const getCompanyById = async (req, res, next) => {
       is_active: userId?.is_active ?? true,
     };
 
-    // ── 2. Get Internships (c_by = companyUserId) ──────────────
-    const rawInternships = await Internship.find({ c_by: companyUserId })
-      .sort({ createdAt: -1 })
-      .select("jobTitle domain domains location companyName duration salary paymentAmount internshipType eligibility createdAt")
-      .lean();
+    // ── 2. Get Postings (Jobs, Internships, Freelances) concurrently ──
+    const [rawJobs, rawInternships, rawFreelances] = await Promise.all([
+      Job.find({ c_by: companyUserId })
+        .sort({ createdAt: -1 })
+        .select("jobTitle domain domains location companyName duration salary salaryType salaryMin salaryMax eligibility mode totalOpenings createdAt")
+        .lean(),
 
-    const internships = rawInternships.map(item => {
+      Internship.find({ c_by: companyUserId })
+        .sort({ createdAt: -1 })
+        .select("jobTitle domain domains location companyName duration salary paymentAmount internshipType eligibility createdAt")
+        .lean(),
+
+      Freelance.find({ c_by: companyUserId })
+        .sort({ createdAt: -1 })
+        .select("jobTitle domain domains location companyName eligibility jobStartDate jobEndDate duration totalOpenings mode salary createdAt")
+        .lean(),
+    ]);
+
+    const formatDomains = (item) => {
       const { domain: itemDomain, ...itemRest } = item;
-      const itemDomains = Array.isArray(itemRest.domains) && itemRest.domains.length ? itemRest.domains : (itemDomain ? itemDomain.split(",").map(s => s.trim()).filter(Boolean) : []);
+      const itemDomains = Array.isArray(itemRest.domains) && itemRest.domains.length
+        ? itemRest.domains
+        : (itemDomain ? itemDomain.split(",").map((s) => s.trim()).filter(Boolean) : []);
       return { ...itemRest, domains: itemDomains };
-    });
+    };
 
-    // ── 3. Get Freelances (c_by = companyUserId) ───────────────
-    const rawFreelances = await Freelance.find({ c_by: companyUserId })
-      .sort({ createdAt: -1 })
-      .select("jobTitle domain domains location companyName eligibility jobStartDate jobEndDate duration totalOpenings mode salary createdAt")
-      .lean();
-
-    const freelances = rawFreelances.map(item => {
-      const { domain: itemDomain, ...itemRest } = item;
-      const itemDomains = Array.isArray(itemRest.domains) && itemRest.domains.length ? itemRest.domains : (itemDomain ? itemDomain.split(",").map(s => s.trim()).filter(Boolean) : []);
-      return { ...itemRest, domains: itemDomains };
-    });
+    const jobs = rawJobs.map(formatDomains);
+    const internships = rawInternships.map(formatDomains);
+    const freelances = rawFreelances.map(formatDomains);
 
     // ── 4. Get Followers (Matches either Company Document _id or Company User ID) ──
     const targetCompanyIds = [companyUserId, company._id].filter(Boolean);
@@ -759,6 +773,8 @@ export const getCompanyById = async (req, res, next) => {
       data: {
         company: flattenedCompany,
         jobs: {
+          jobs,
+          jobsCount: jobs.length,
           internships,
           internshipsCount: internships.length,
           freelances,

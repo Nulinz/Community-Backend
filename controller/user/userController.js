@@ -2813,26 +2813,178 @@ const getMyRegistrations = async (req, res) => {
 };
 
 
+/**
+ * Retrieves all active, verified company profiles for the user directory feed.
+ * Aggregates live follower counts (deduplicating across company profile ID and 
+ * account User ID) alongside all active job/internship/freelance opportunities 
+ * in a batched, parallel query pipeline to prevent N+1 latency.
+ */
 const getAllCompanies = async (req, res) => {
   try {
-    const companies = await Company.find()
+    const companies = await Company.find({
+      isActive: { $ne: false },
+      is_active: { $ne: false },
+    })
       .populate("userId", "is_active")
       .sort({ createdAt: -1 })
       .select(
         "companyName companyType companyTagLine companyCultureTags companyLogo coverImage city state technologies yearFounded websiteLink userId isActive is_active createdAt domains employees"
-      );
+      )
+      .lean();
 
-    // Filter only companies where linked User account is_active is not false and company status is active
-    const activeCompanies = companies.filter((c) => {
-      const isUserActive = c.userId?.is_active !== false;
+    // Guard against inactive accounts and deduplicate by canonical company ID and linked user account
+    const seenCompanyIds = new Set();
+    const seenUserIds = new Set();
+    const activeCompanies = [];
+
+    for (const c of companies) {
+      const isUserActive = !c.userId || c.userId.is_active !== false;
       const isCompActive = c.isActive !== false && c.is_active !== false;
-      return isUserActive && isCompActive;
+      if (!isUserActive || !isCompActive) continue;
+
+      const compId = c._id?.toString();
+      const userIdStr = c.userId?._id?.toString() || c.userId?.toString();
+
+      if (compId && seenCompanyIds.has(compId)) continue;
+      if (userIdStr && seenUserIds.has(userIdStr)) continue;
+
+      if (compId) seenCompanyIds.add(compId);
+      if (userIdStr) seenUserIds.add(userIdStr);
+
+      activeCompanies.push(c);
+    }
+
+    if (!activeCompanies.length) {
+      return res.status(200).json({
+        status: true,
+        count: 0,
+        data: [],
+      });
+    }
+
+    // Index company identifiers to resolve followers and opportunities to their canonical company
+    const idToCanonicalCompId = new Map();
+    const nameToCanonicalCompId = new Map();
+    const allTargetIds = [];
+    const allCompanyNames = [];
+
+    activeCompanies.forEach((comp) => {
+      const canonicalId = comp._id.toString();
+      idToCanonicalCompId.set(canonicalId, canonicalId);
+      allTargetIds.push(comp._id);
+
+      const uId = comp.userId?._id || comp.userId;
+      if (uId) {
+        const uIdStr = uId.toString();
+        idToCanonicalCompId.set(uIdStr, canonicalId);
+        allTargetIds.push(uId);
+      }
+
+      if (comp.companyName && typeof comp.companyName === "string") {
+        const cleanName = comp.companyName.trim().toLowerCase();
+        if (cleanName) {
+          nameToCanonicalCompId.set(cleanName, canonicalId);
+          allCompanyNames.push(comp.companyName.trim());
+        }
+      }
+    });
+
+    const opportunityQueryConditions = [{ c_by: { $in: allTargetIds } }];
+    if (allCompanyNames.length > 0) {
+      opportunityQueryConditions.push({ companyName: { $in: allCompanyNames } });
+    }
+
+    // Batch query followers and all opportunity postings (jobs, internships, freelance) concurrently
+    const [followRecords, jobsRaw, internshipsRaw, freelancesRaw] = await Promise.all([
+      CompanyFollow.find({ companyId: { $in: allTargetIds } })
+        .select("companyId userId")
+        .lean(),
+
+      Job.find({
+        isActive: true,
+        status: { $ne: "rejected" },
+        $or: opportunityQueryConditions,
+      })
+        .select("_id c_by companyName")
+        .lean(),
+
+      Internship.find({
+        isActive: true,
+        status: { $ne: "rejected" },
+        $or: opportunityQueryConditions,
+      })
+        .select("_id c_by companyName")
+        .lean(),
+
+      Freelance.find({
+        isActive: true,
+        status: { $ne: "rejected" },
+        $or: opportunityQueryConditions,
+      })
+        .select("_id c_by companyName")
+        .lean(),
+    ]);
+
+    // Aggregate unique followers per canonical company to prevent duplicate follower counts
+    const companyFollowersSet = new Map();
+    activeCompanies.forEach((c) => companyFollowersSet.set(c._id.toString(), new Set()));
+
+    followRecords.forEach((item) => {
+      const cId = item.companyId?.toString();
+      const followerId = item.userId?.toString();
+      const canonicalId = cId ? idToCanonicalCompId.get(cId) : null;
+      if (canonicalId && followerId) {
+        companyFollowersSet.get(canonicalId)?.add(followerId);
+      }
+    });
+
+    // Aggregate unique opportunity postings per canonical company
+    const companyOpportunitiesSet = new Map();
+    activeCompanies.forEach((c) => companyOpportunitiesSet.set(c._id.toString(), new Set()));
+
+    const recordOpportunity = (opp) => {
+      const oppId = opp._id?.toString();
+      if (!oppId) return;
+
+      const cByStr = opp.c_by?.toString();
+      let canonicalId = cByStr ? idToCanonicalCompId.get(cByStr) : null;
+
+      if (!canonicalId && opp.companyName && typeof opp.companyName === "string") {
+        canonicalId = nameToCanonicalCompId.get(opp.companyName.trim().toLowerCase());
+      }
+
+      if (canonicalId && companyOpportunitiesSet.has(canonicalId)) {
+        companyOpportunitiesSet.get(canonicalId).add(oppId);
+      }
+    };
+
+    jobsRaw.forEach(recordOpportunity);
+    internshipsRaw.forEach(recordOpportunity);
+    freelancesRaw.forEach(recordOpportunity);
+
+    const currentUserId = req.user?._id ? req.user._id.toString() : null;
+
+    // Map each company payload with total_followers, opputunities, and is_following added
+    const enrichedCompanies = activeCompanies.map((c) => {
+      const canonicalId = c._id.toString();
+      const totalFollowers = companyFollowersSet.get(canonicalId)?.size || 0;
+      const totalOpportunities = companyOpportunitiesSet.get(canonicalId)?.size || 0;
+      const isFollowing = currentUserId
+        ? (companyFollowersSet.get(canonicalId)?.has(currentUserId) || false)
+        : false;
+
+      return {
+        ...c,
+        total_followers: totalFollowers,
+        opputunities: totalOpportunities,
+        is_following: isFollowing,
+      };
     });
 
     return res.status(200).json({
       status: true,
-      count: activeCompanies.length,
-      data: activeCompanies,
+      count: enrichedCompanies.length,
+      data: enrichedCompanies,
     });
   } catch (error) {
     console.error("Companies API Error:", error.message);
@@ -3142,9 +3294,15 @@ const getCompanyProfile = async (req, res) => {
     const targetCompanyIds = [companyUserId, company._id].filter(Boolean);
 
     // ── Fetch all in parallel ───────────────────────────────────
-    const [followCount, isFollowing, internshipsRaw, freelancesRaw] = await Promise.all([
+    const [followCount, isFollowing, jobsRaw, internshipsRaw, freelancesRaw] = await Promise.all([
       CompanyFollow.countDocuments({ companyId: { $in: targetCompanyIds } }),
       CompanyFollow.findOne({ userId, companyId: { $in: targetCompanyIds } }),
+
+      // ✅ Full-time jobs posted by this company
+      Job.find({ isActive: true, c_by: companyUserId })
+        .sort({ createdAt: -1 })
+        .select("jobTitle domain domains totalOpenings mode description c_by location companyName duration salary salaryType salaryMin salaryMax eligibility createdAt")
+        .populate("c_by", "role"),
 
       // ✅ Internships posted by this company
       Internship.find({ isActive: true, c_by: companyUserId })
@@ -3159,7 +3317,31 @@ const getCompanyProfile = async (req, res) => {
         .populate("c_by", "role"),
     ]);
 
+    // ── Enrich full-time jobs ───────────────────────────────────
+    const jobs = await Promise.all(
+      jobsRaw.map(async (item) => {
+        const { domain, ...rawObj } = item.toObject();
+        const itemDomains = Array.isArray(rawObj.domains) && rawObj.domains.length ? rawObj.domains : (domain ? domain.split(",").map(s => s.trim()).filter(Boolean) : []);
 
+        let companyImage = null;
+        if (item.c_by?.role === "admin") {
+          companyImage = STATIC_ADMIN_IMAGE;
+        } else if (item.c_by?.role === "company") {
+          const comp = await Company.findOne({ c_by: item.c_by._id })
+            .select("companyLogo")
+            .lean();
+          companyImage = comp?.companyLogo || null;
+        }
+
+        return {
+          ...rawObj,
+          domains: itemDomains,
+          companyImage,
+          is_saved: await checkIsSaved(userId, item._id, "Job"),
+          is_applied: await checkIsApplied(userId, item._id),
+        };
+      })
+    );
 
     // ── Enrich internships ──────────────────────────────────────
     const internships = await Promise.all(
@@ -3219,6 +3401,7 @@ const getCompanyProfile = async (req, res) => {
         ...company.toObject(),
         followCount,
         is_following: !!isFollowing,
+        jobs,          // ✅ full-time jobs by this company
         internships,   // ✅ internships by this company
         freelances,    // ✅ freelance jobs by this company
       },
