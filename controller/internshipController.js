@@ -513,8 +513,19 @@ export const saveAttendance = async (req, res, next) => {
     const { jobId } = req.params;
     const { date, records } = req.body;
 
-    if (!date || !Array.isArray(records)) {
+    if (!date || !Array.isArray(records) || records.length === 0) {
       throw Object.assign(new Error("Date and records array are required"), { status: 400 });
+    }
+
+    // Ensure all candidates have a designated attendance status before committing records
+    const hasUnmarked = records.some(
+      (record) => !record.status || (record.status.toLowerCase() !== "present" && record.status.toLowerCase() !== "absent")
+    );
+    if (hasUnmarked) {
+      throw Object.assign(
+        new Error("Attendance must be marked (Present or Absent) for all candidates before saving"),
+        { status: 400 }
+      );
     }
 
     const attendanceDate = parseToUTCMidnight(date);

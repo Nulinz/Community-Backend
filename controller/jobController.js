@@ -611,13 +611,25 @@ export const saveAttendance = async (req, res, next) => {
   try {
     const { jobId } = req.params;
     const { date, attendanceList } = req.body;
+    const items = Array.isArray(attendanceList) ? attendanceList : (Array.isArray(req.body.records) ? req.body.records : null);
 
-    if (!date || !Array.isArray(attendanceList)) {
-      throw Object.assign(new Error("Date and attendance list are required"), { status: 400 });
+    if (!date || !items || items.length === 0) {
+      throw Object.assign(new Error("Date and a non-empty attendance list are required"), { status: 400 });
+    }
+
+    // Ensure all candidate records have an explicit present or absent status
+    const hasUnmarked = items.some(
+      (item) => !item.status || (item.status.toLowerCase() !== "present" && item.status.toLowerCase() !== "absent")
+    );
+    if (hasUnmarked) {
+      throw Object.assign(
+        new Error("Attendance must be marked (Present or Absent) for all candidates before saving"),
+        { status: 400 }
+      );
     }
 
     const records = await Promise.all(
-      attendanceList.map((item) =>
+      items.map((item) =>
         Attendance.findOneAndUpdate(
           { jobId, userId: item.userId, date: new Date(date) },
           {

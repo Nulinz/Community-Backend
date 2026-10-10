@@ -28,6 +28,7 @@ import feedbackRoutes from "./routes/feedbackRoutes.js";
 import subscriptionRoutes from "./routes/subscriptionRoutes.js";
 import influencerRoutes from "./routes/influencerRoutes.js";
 import resumeRoutes from "./routes/resumeRoutes.js";
+import commonRoutes from "./routes/commonRoutes.js";
 import { seedTamilNaduLocations } from "./services/uploadLocation.js";
 import { startEventReminderCron } from "./jobs/eventRemainder.js";
 import { startJobSuggestionCron } from "./jobs/jobSuggested.js";
@@ -52,7 +53,7 @@ const allowedOrigins = [
   "https://icy-tree-067e50e10.7.azurestaticapps.net",
   "https://salmon-ocean-053a6b810.6.azurestaticapps.net",
   "https://gradenvy.com",
-  "http://192.168.1.13:5173"
+  "http://192.168.1.19:5173"
 ].filter(Boolean);
 
 app.set("trust proxy", true);
@@ -162,6 +163,7 @@ app.use("/api/feedback", feedbackRoutes)
 app.use("/api/subscriptions", subscriptionRoutes)
 app.use("/api/influencer", influencerRoutes)
 app.use("/api/resume", resumeRoutes)
+app.use("/api/common", commonRoutes);
 
 
 //  migrateStatusField()
