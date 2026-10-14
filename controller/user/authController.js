@@ -442,7 +442,7 @@ export const forgotPassword = async (req, res) => {
 
     await user.save();
 
-    await otpService.sendOtp(phone, user.name, otp);
+    await otpService.sendForgotOtp(phone, user.name, otp);
 
     return res.json({
       status: true,
@@ -637,7 +637,7 @@ export const resendOtp = async (req, res) => {
       user.forgot_otp = otp;
       user.forgot_otp_expire = otp_expire;
       user.forgot_status = "otp_pending";
-      await otpService.sendOtp(phone, user.name, otp);
+      await otpService.sendForgotOtp(phone, user.name, otp);
     }
 
     await user.save();

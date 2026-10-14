@@ -100,40 +100,49 @@ export const createSeminarForm = async (req, res, next) => {
         } = rest;
 
         // Validation
+        const isAdmin = req.user?.role === "admin";
+        const resolvedOrganizer = await resolveOrganizerName(organizer, req.user);
+
+        // Core fields are always mandatory across all roles (including admin)
         if (!eventType) throw Object.assign(new Error("Event Type is required"), { status: 400 });
         if (!eventName) throw Object.assign(new Error("Event Name is required"), { status: 400 });
-        const resolvedOrganizer = await resolveOrganizerName(organizer, req.user);
-        if (!mode) throw Object.assign(new Error("Mode is required"), { status: 400 });
-        if ((mode === "Online" || mode === "Hybrid") && !onlinePlatformLink) {
-            throw Object.assign(new Error("Online Platform / Meeting Link is required for Online or Hybrid mode"), { status: 400 });
-        }
-        if (!eventDate) throw Object.assign(new Error("Event Date is required"), { status: 400 });
-        const startOfToday = new Date();
-        startOfToday.setHours(0, 0, 0, 0);
-        if (!isUpdate && new Date(eventDate) < startOfToday) {
-            throw Object.assign(new Error("Event Date cannot be earlier than the current date"), { status: 400 });
-        }
-        if (registrationEndDate && eventDate && new Date(registrationEndDate) > new Date(eventDate)) {
-            throw Object.assign(new Error("Registration End Date cannot be later than Event Date"), { status: 400 });
-        }
-        if (registrationStartDate && registrationEndDate && new Date(registrationStartDate) > new Date(registrationEndDate)) {
-            throw Object.assign(new Error("Registration Start Date cannot be later than Registration End Date"), { status: 400 });
-        }
-        if (!registrationType) throw Object.assign(new Error("Registration Type is required"), { status: 400 });
+        if (!organizer && !resolvedOrganizer) throw Object.assign(new Error("Organizer is required"), { status: 400 });
 
-        if (toCleanString(registrationType).toLowerCase() === "paid") {
-            const payoutCheck = await validateOrganizerPayout(req.user);
-            if (!payoutCheck.hasPayout) {
-                throw Object.assign(new Error(payoutCheck.message), { status: 400 });
+        if (!isAdmin) {
+            if (!mode) throw Object.assign(new Error("Mode is required"), { status: 400 });
+            if ((mode === "Online" || mode === "Hybrid") && !onlinePlatformLink) {
+                throw Object.assign(new Error("Online Platform / Meeting Link is required for Online or Hybrid mode"), { status: 400 });
+            }
+            if (!eventDate) throw Object.assign(new Error("Event Date is required"), { status: 400 });
+            const startOfToday = new Date();
+            startOfToday.setHours(0, 0, 0, 0);
+            if (!isUpdate && new Date(eventDate) < startOfToday) {
+                throw Object.assign(new Error("Event Date cannot be earlier than the current date"), { status: 400 });
+            }
+            if (registrationEndDate && eventDate && new Date(registrationEndDate) > new Date(eventDate)) {
+                throw Object.assign(new Error("Registration End Date cannot be later than Event Date"), { status: 400 });
+            }
+            if (registrationStartDate && registrationEndDate && new Date(registrationStartDate) > new Date(registrationEndDate)) {
+                throw Object.assign(new Error("Registration Start Date cannot be later than Registration End Date"), { status: 400 });
+            }
+            if (!registrationType) throw Object.assign(new Error("Registration Type is required"), { status: 400 });
+
+            if (toCleanString(registrationType).toLowerCase() === "paid") {
+                const payoutCheck = await validateOrganizerPayout(req.user);
+                if (!payoutCheck.hasPayout) {
+                    throw Object.assign(new Error(payoutCheck.message), { status: 400 });
+                }
+            }
+
+            const coverImageFile = req.files?.coverImage?.[0];
+            if (!isUpdate && !coverImageFile) {
+                throw Object.assign(new Error("Cover Image is required"), { status: 400 });
             }
         }
 
         // Handle File
         const coverImageFile = req.files?.coverImage?.[0];
         const signatureUrlFile = req.files?.signatureUrl?.[0];
-        if (!isUpdate && !coverImageFile) {
-            throw Object.assign(new Error("Cover Image is required"), { status: 400 });
-        }
 
         const coverImagePath = coverImageFile ? getUploadedFilePath(coverImageFile) : undefined;
         const signatureUrlPath = signatureUrlFile ? getUploadedFilePath(signatureUrlFile) : undefined;
@@ -164,12 +173,12 @@ export const createSeminarForm = async (req, res, next) => {
             ? ""
             : toCleanString(onlinePlatformLink);
         seminar.externalRegistrationLink = toCleanString(externalRegistrationLink);
-        seminar.eventDate = eventDate;
-        seminar.registrationType = toCleanString(registrationType);
+        seminar.eventDate = eventDate ? new Date(eventDate) : (seminar.eventDate || undefined);
+        seminar.registrationType = toCleanString(registrationType) || "Free";
         seminar.eventStartTime = toCleanString(eventStartTime);
         seminar.eventEndTime = toCleanString(eventEndTime);
-        seminar.registrationStartDate = registrationStartDate || undefined;
-        seminar.registrationEndDate = registrationEndDate || undefined;
+        seminar.registrationStartDate = registrationStartDate ? new Date(registrationStartDate) : undefined;
+        seminar.registrationEndDate = registrationEndDate ? new Date(registrationEndDate) : undefined;
         seminar.totalSeats = Number(totalSeats) || 0;
         
         if (coverImagePath) seminar.coverImage = coverImagePath;

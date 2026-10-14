@@ -103,48 +103,56 @@ export const createCompetitionForm = async (req, res, next) => {
         } = rest;
 
         // Validation
-        if (!eventName) throw Object.assign(new Error("Event Name is required"), { status: 400 });
+        const isAdmin = req.user?.role === "admin";
         const resolvedOrganizer = await resolveOrganizerName(organizer, req.user);
-        if (!mode) throw Object.assign(new Error("Mode is required"), { status: 400 });
-        if (!eventDate) throw Object.assign(new Error("Event Date is required"), { status: 400 });
-        const startOfToday = new Date();
-        startOfToday.setHours(0, 0, 0, 0);
-        if (!isUpdate && new Date(eventDate) < startOfToday) {
-            throw Object.assign(new Error("Event Date cannot be earlier than the current date"), { status: 400 });
-        }
-        if (!eventStartTime) throw Object.assign(new Error("Event Start Time is required"), { status: 400 });
-        if (!registrationType) throw Object.assign(new Error("Registration Type is required"), { status: 400 });
 
-        if (toCleanString(registrationType).toLowerCase() === "paid") {
-            const payoutCheck = await validateOrganizerPayout(req.user);
-            if (!payoutCheck.hasPayout) {
-                throw Object.assign(new Error(payoutCheck.message), { status: 400 });
+        // Core fields are always mandatory across all roles (including admin)
+        if (!eventName) throw Object.assign(new Error("Event Name is required"), { status: 400 });
+        if (!organizer && !resolvedOrganizer) throw Object.assign(new Error("Organizer is required"), { status: 400 });
+
+        if (!isAdmin) {
+            if (!mode) throw Object.assign(new Error("Mode is required"), { status: 400 });
+            if (!eventDate) throw Object.assign(new Error("Event Date is required"), { status: 400 });
+            const startOfToday = new Date();
+            startOfToday.setHours(0, 0, 0, 0);
+            if (!isUpdate && new Date(eventDate) < startOfToday) {
+                throw Object.assign(new Error("Event Date cannot be earlier than the current date"), { status: 400 });
             }
-        }
-        if (!registrationStartDate) throw Object.assign(new Error("Registration Start Date is required"), { status: 400 });
-        if (!registrationEndDate) throw Object.assign(new Error("Registration End Date is required"), { status: 400 });
-        if (registrationEndDate && eventDate && new Date(registrationEndDate) > new Date(eventDate)) {
-            throw Object.assign(new Error("Registration End Date cannot be later than Event Date"), { status: 400 });
-        }
-        if (registrationStartDate && registrationEndDate && new Date(registrationStartDate) > new Date(registrationEndDate)) {
-            throw Object.assign(new Error("Registration Start Date cannot be later than Registration End Date"), { status: 400 });
-        }
+            if (!eventStartTime) throw Object.assign(new Error("Event Start Time is required"), { status: 400 });
+            if (!registrationType) throw Object.assign(new Error("Registration Type is required"), { status: 400 });
 
-        if ((mode === "Online" || mode === "Hybrid") && !onlinePlatformLink) {
-            throw Object.assign(new Error("Online Platform / Meeting Link is required for Online/Hybrid mode"), { status: 400 });
-        }
-        if ((mode === "Offline" || mode === "Hybrid") && (!venueName || !address || !city || !state || !pincode)) {
-            throw Object.assign(new Error("Venue Details (Venue Name, Address, City, State, Pincode) are required for Offline/Hybrid mode"), { status: 400 });
+            if (toCleanString(registrationType).toLowerCase() === "paid") {
+                const payoutCheck = await validateOrganizerPayout(req.user);
+                if (!payoutCheck.hasPayout) {
+                    throw Object.assign(new Error(payoutCheck.message), { status: 400 });
+                }
+            }
+            if (!registrationStartDate) throw Object.assign(new Error("Registration Start Date is required"), { status: 400 });
+            if (!registrationEndDate) throw Object.assign(new Error("Registration End Date is required"), { status: 400 });
+            if (registrationEndDate && eventDate && new Date(registrationEndDate) > new Date(eventDate)) {
+                throw Object.assign(new Error("Registration End Date cannot be later than Event Date"), { status: 400 });
+            }
+            if (registrationStartDate && registrationEndDate && new Date(registrationStartDate) > new Date(registrationEndDate)) {
+                throw Object.assign(new Error("Registration Start Date cannot be later than Registration End Date"), { status: 400 });
+            }
+
+            if ((mode === "Online" || mode === "Hybrid") && !onlinePlatformLink) {
+                throw Object.assign(new Error("Online Platform / Meeting Link is required for Online/Hybrid mode"), { status: 400 });
+            }
+            if ((mode === "Offline" || mode === "Hybrid") && (!venueName || !address || !city || !state || !pincode)) {
+                throw Object.assign(new Error("Venue Details (Venue Name, Address, City, State, Pincode) are required for Offline/Hybrid mode"), { status: 400 });
+            }
+
+            const coverImageFile = req.files?.coverImage?.[0];
+            if (!isUpdate && !coverImageFile) {
+                throw Object.assign(new Error("Cover Image is required"), { status: 400 });
+            }
         }
 
         // Handle Files
         const coverImageFile = req.files?.coverImage?.[0];
         const ruleBookFile = req.files?.ruleBook?.[0];
         const signatureUrlFile = req.files?.signatureUrl?.[0];
-
-        if (!isUpdate && !coverImageFile) {
-            throw Object.assign(new Error("Cover Image is required"), { status: 400 });
-        }
 
         const coverImagePath = coverImageFile ? getUploadedFilePath(coverImageFile) : undefined;
         const ruleBookPath = ruleBookFile ? getUploadedFilePath(ruleBookFile) : undefined;
@@ -169,18 +177,18 @@ export const createCompetitionForm = async (req, res, next) => {
         competition.organizer = resolvedOrganizer || competition.organizer || "Organizer";
         const cleanMode = toCleanString(mode);
         competition.mode = cleanMode;
-        competition.eventDate = eventDate || undefined;
+        competition.eventDate = eventDate ? new Date(eventDate) : (competition.eventDate || undefined);
         competition.eventStartTime = toCleanString(eventStartTime);
-        competition.eventEndDate = eventEndDate || undefined;
+        competition.eventEndDate = eventEndDate ? new Date(eventEndDate) : undefined;
         competition.eventEndTime = toCleanString(eventEndTime);
         competition.onlinePlatformLink = (cleanMode.toLowerCase() === "offline")
             ? ""
             : toCleanString(onlinePlatformLink);
         competition.externalRegistrationLink = toCleanString(externalRegistrationLink);
 
-        competition.registrationType = toCleanString(registrationType);
-        competition.registrationStartDate = registrationStartDate || undefined;
-        competition.registrationEndDate = registrationEndDate || undefined;
+        competition.registrationType = toCleanString(registrationType) || "Free";
+        competition.registrationStartDate = registrationStartDate ? new Date(registrationStartDate) : undefined;
+        competition.registrationEndDate = registrationEndDate ? new Date(registrationEndDate) : undefined;
         competition.totalSeats = Number(totalSeats) || 0;
 
         if (coverImagePath) competition.coverImage = coverImagePath;

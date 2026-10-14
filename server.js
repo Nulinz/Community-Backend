@@ -53,7 +53,7 @@ const allowedOrigins = [
   "https://icy-tree-067e50e10.7.azurestaticapps.net",
   "https://salmon-ocean-053a6b810.6.azurestaticapps.net",
   "https://gradenvy.com",
-  "http://192.168.1.19:5173"
+  "http://192.168.1.8:5173"
 ].filter(Boolean);
 
 app.set("trust proxy", true);
