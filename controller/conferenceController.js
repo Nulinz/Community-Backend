@@ -55,6 +55,7 @@ export const createConferenceForm = async (req, res, next) => {
             individualFees,
             teamFees,
             lateFees,
+            gst,
             prizesAvailable,
             firstPrize,
             secondPrize,
@@ -90,9 +91,12 @@ export const createConferenceForm = async (req, res, next) => {
             signatoryDesignation,
             certificateContentBody,
             eventStartTime,
+            eventEndDate,
             eventEndTime,
             onlinePlatformLink,
-            externalRegistrationLink
+            publicationAvailability,
+            externalRegistrationLink,
+            customFees,
         } = rest;
 
         // Validation
@@ -169,8 +173,10 @@ export const createConferenceForm = async (req, res, next) => {
         conference.onlinePlatformLink = (cleanMode.toLowerCase() === "offline")
             ? ""
             : toCleanString(onlinePlatformLink);
+        conference.publicationAvailability = toCleanString(publicationAvailability);
         conference.externalRegistrationLink = toCleanString(externalRegistrationLink);
         conference.eventDate = eventDate ? new Date(eventDate) : (conference.eventDate || undefined);
+        conference.eventEndDate = eventEndDate ? new Date(eventEndDate) : undefined;
         conference.registrationType = toCleanString(registrationType) || "Free";
         conference.registrationStartDate = registrationStartDate ? new Date(registrationStartDate) : undefined;
         conference.registrationEndDate = registrationEndDate ? new Date(registrationEndDate) : undefined;
@@ -198,6 +204,13 @@ export const createConferenceForm = async (req, res, next) => {
         conference.individualFees = validateFee(individualFees, "Individual Fees");
         conference.teamFees = validateFee(teamFees, "Team Fees");
         conference.lateFees = validateFee(lateFees, "Late Fees");
+        conference.gst = toCleanString(gst) || "No";
+        conference.customFees = parseDynamicArray(customFees)
+            .map((item) => ({
+                feeLabel: toCleanString(item?.feeLabel),
+                feeAmount: validateFee(item?.feeAmount, "Custom Fee Amount"),
+            }))
+            .filter((item) => item.feeLabel || item.feeAmount > 0);
 
         conference.prizesAvailable = toCleanString(prizesAvailable) || "No";
         conference.firstPrize = toCleanString(firstPrize);

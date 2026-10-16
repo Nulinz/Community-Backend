@@ -15,8 +15,14 @@ const scheduleSchema = new mongoose.Schema({
 const inchargeSchema = new mongoose.Schema({
   type: { type: String, trim: true },
   name: { type: String, trim: true },
+  countryCode: { type: String, trim: true, default: "+91" },
   phoneNumber: { type: String, trim: true },
   mailId: { type: String, trim: true },
+});
+
+const customFeeSchema = new mongoose.Schema({
+  feeLabel: { type: String, trim: true },
+  feeAmount: { type: Number, default: 0 },
 });
 
 const seminarSchema = new mongoose.Schema(
@@ -41,6 +47,7 @@ const seminarSchema = new mongoose.Schema(
     mode: { type: String },
     onlinePlatformLink: { type: String, trim: true },
     eventDate: { type: Date },
+    eventEndDate: { type: Date },
     registrationType: {
       type: String,
       enum: ["Free", "Paid"],
@@ -60,6 +67,8 @@ const seminarSchema = new mongoose.Schema(
     individualFees: { type: Number, default: 0 },
     teamFees: { type: Number, default: 0 },
     lateFees: { type: Number, default: 0 },
+    gst: { type: String, trim: true, default: "No" },
+    customFees: [customFeeSchema],
 
     // Prizes
     firstPrize: { type: String, trim: true },

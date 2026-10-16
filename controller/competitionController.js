@@ -56,6 +56,7 @@ export const createCompetitionForm = async (req, res, next) => {
             individualFees,
             teamFees,
             lateFees,
+            gst,
             internshipOpportunity,
             internshipOpportunityDetails,
             placementOpportunity,
@@ -99,7 +100,8 @@ export const createCompetitionForm = async (req, res, next) => {
             eventEndDate,
             eventEndTime,
             onlinePlatformLink,
-            externalRegistrationLink
+            externalRegistrationLink,
+            customFees,
         } = rest;
 
         // Validation
@@ -213,6 +215,13 @@ export const createCompetitionForm = async (req, res, next) => {
         competition.individualFees = validateFee(individualFees, "Individual Fees");
         competition.teamFees = validateFee(teamFees, "Team Fees");
         competition.lateFees = validateFee(lateFees, "Late Fees");
+        competition.gst = toCleanString(gst) || "No";
+        competition.customFees = parseDynamicArray(customFees)
+            .map((item) => ({
+                feeLabel: toCleanString(item?.feeLabel),
+                feeAmount: validateFee(item?.feeAmount, "Custom Fee Amount"),
+            }))
+            .filter((item) => item.feeLabel || item.feeAmount > 0);
         competition.internshipOpportunity = toCleanString(internshipOpportunity);
         competition.internshipOpportunityDetails = toCleanString(internshipOpportunityDetails);
         competition.placementOpportunity = toCleanString(placementOpportunity);

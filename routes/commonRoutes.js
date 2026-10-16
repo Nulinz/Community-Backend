@@ -1,6 +1,6 @@
 import express from "express";
 import { isAuthenticated } from "../middleware/authMiddleware.js";
-import { deleteModuleItem } from "../controller/commonController.js";
+import { deleteModuleItem, deleteModulePost } from "../controller/commonController.js";
 
 const router = express.Router();
 
@@ -12,4 +12,11 @@ const router = express.Router();
  */
 router.delete("/module/:moduleType/:id", isAuthenticated, deleteModuleItem);
 
+/**
+ * Universal module post image deletion route serving Events, Competitions,
+ * Conferences, Seminars, and Companies without duplicating endpoints.
+ */
+router.delete("/module/:moduleType/:id/post", isAuthenticated, deleteModulePost);
+
 export default router;
+

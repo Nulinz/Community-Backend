@@ -60,6 +60,7 @@ export const createSeminarForm = async (req, res, next) => {
             individualFees,
             teamFees,
             lateFees,
+            gst,
             firstPrize,
             secondPrize,
             thirdPrize,
@@ -94,9 +95,11 @@ export const createSeminarForm = async (req, res, next) => {
             signatoryDesignation,
             certificateContentBody,
             eventStartTime,
+            eventEndDate,
             eventEndTime,
             onlinePlatformLink,
-            externalRegistrationLink
+            externalRegistrationLink,
+            customFees,
         } = rest;
 
         // Validation
@@ -174,6 +177,7 @@ export const createSeminarForm = async (req, res, next) => {
             : toCleanString(onlinePlatformLink);
         seminar.externalRegistrationLink = toCleanString(externalRegistrationLink);
         seminar.eventDate = eventDate ? new Date(eventDate) : (seminar.eventDate || undefined);
+        seminar.eventEndDate = eventEndDate ? new Date(eventEndDate) : undefined;
         seminar.registrationType = toCleanString(registrationType) || "Free";
         seminar.eventStartTime = toCleanString(eventStartTime);
         seminar.eventEndTime = toCleanString(eventEndTime);
@@ -202,6 +206,13 @@ export const createSeminarForm = async (req, res, next) => {
         seminar.individualFees = validateFee(individualFees, "Individual Fees");
         seminar.teamFees = validateFee(teamFees, "Team Fees");
         seminar.lateFees = validateFee(lateFees, "Late Fees");
+        seminar.gst = toCleanString(gst) || "No";
+        seminar.customFees = parseDynamicArray(customFees)
+            .map((item) => ({
+                feeLabel: toCleanString(item?.feeLabel),
+                feeAmount: validateFee(item?.feeAmount, "Custom Fee Amount"),
+            }))
+            .filter((item) => item.feeLabel || item.feeAmount > 0);
 
         seminar.firstPrize = toCleanString(firstPrize);
         seminar.secondPrize = toCleanString(secondPrize);

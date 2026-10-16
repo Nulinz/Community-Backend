@@ -58,6 +58,7 @@ export const createEventForm = async (req, res, next) => {
             individualFees,
             teamFees,
             lateFees,
+            gst,
             prizesAvailable,
             firstPrize,
             secondPrize,
@@ -93,9 +94,11 @@ export const createEventForm = async (req, res, next) => {
             signatoryDesignation,
             certificateContentBody,
             eventStartTime,
+            eventEndDate,
             eventEndTime,
             onlinePlatformLink,
-            externalRegistrationLink
+            externalRegistrationLink,
+            customFees,
         } = rest;
 
         const isAdmin = req.user?.role === "admin";
@@ -171,6 +174,7 @@ export const createEventForm = async (req, res, next) => {
             ? ""
             : toCleanString(onlinePlatformLink);
         event.eventDate = eventDate ? new Date(eventDate) : (event.eventDate || undefined);
+        event.eventEndDate = eventEndDate ? new Date(eventEndDate) : undefined;
         event.eventStartTime = toCleanString(eventStartTime);
         event.eventEndTime = toCleanString(eventEndTime);
         event.registrationType = toCleanString(registrationType) || "Free";
@@ -203,6 +207,13 @@ export const createEventForm = async (req, res, next) => {
         event.individualFees = validateFee(individualFees, "Individual Fees");
         event.teamFees = validateFee(teamFees, "Team Fees");
         event.lateFees = validateFee(lateFees, "Late Fees");
+        event.gst = toCleanString(gst) || "No";
+        event.customFees = parseDynamicArray(customFees)
+            .map((item) => ({
+                feeLabel: toCleanString(item?.feeLabel),
+                feeAmount: validateFee(item?.feeAmount, "Custom Fee Amount"),
+            }))
+            .filter((item) => item.feeLabel || item.feeAmount > 0);
 
         event.prizesAvailable = toCleanString(prizesAvailable) || "No";
         event.firstPrize = toCleanString(firstPrize);
