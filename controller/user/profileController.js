@@ -1,3 +1,6 @@
+import fs from "fs/promises";
+import path from "path";
+import mongoose from "mongoose";
 import Resume from "../../models/resumeModel.js";
 import Notification from "../../models/notificationModel.js";
 import UserDetails from "../../models/userDetails.js";
@@ -72,6 +75,75 @@ const getUserResumes = async (req, res) => {
     });
   }
 };
+
+/**
+ * DELETE /api/users/delete-resume/:id or /api/users/delete/:id
+ * Deletes a user's resume record from the database and cleans up the physical file on disk.
+ * Strictly scopes query to `userId: req.user._id` for security and user isolation.
+ */
+const deleteResume = async (req, res) => {
+  try {
+    const userId = req.user?._id;
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({
+        status: false,
+        message: "Resume ID parameter is required",
+      });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        status: false,
+        message: "Invalid resume ID format",
+      });
+    }
+
+    const resume = await Resume.findOne({ _id: id, userId });
+
+    if (!resume) {
+      return res.status(404).json({
+        status: false,
+        message: "Resume not found",
+      });
+    }
+
+    // Safely remove the physical file from disk
+    const targetFilePath = resume.fileUrl || resume.pdfUrl;
+    if (targetFilePath && typeof targetFilePath === "string") {
+      try {
+        let cleanPath = targetFilePath.replace(/\\/g, "/");
+        if (cleanPath.startsWith("/")) {
+          cleanPath = cleanPath.substring(1);
+        }
+        const resolvedPath = path.isAbsolute(cleanPath)
+          ? cleanPath
+          : path.resolve(process.cwd(), cleanPath);
+
+        await fs.unlink(resolvedPath);
+      } catch (fileErr) {
+        console.warn(`[Delete Resume] File cleanup skipped: ${fileErr.message}`);
+      }
+    }
+
+    await Resume.findByIdAndDelete(resume._id);
+
+    return res.status(200).json({
+      status: true,
+      message: "Resume deleted successfully",
+      deletedId: resume._id,
+    });
+  } catch (error) {
+    console.error("Delete Resume Error:", error.message);
+    return res.status(500).json({
+      status: false,
+      message: "Failed to delete resume",
+      error: error.message,
+    });
+  }
+};
+
 const getNotifications = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -401,4 +473,4 @@ const updateUserDetails = async (req, res) => {
   }
 };
 
-export { uploadResume, updateUserDetails, getUserResumes, getNotifications, markAsRead, markAllAsRead, clearAllNotifications, updateProfilePic };
+export { uploadResume, updateUserDetails, getUserResumes, deleteResume, getNotifications, markAsRead, markAllAsRead, clearAllNotifications, updateProfilePic };

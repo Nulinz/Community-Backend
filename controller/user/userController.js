@@ -3423,53 +3423,45 @@ const attachFlags = async (items, type) =>
       is_registered: await checkIsRegistered(item._id),
     }))
   );
+/**
+ * Fetches all active approved events in a single unified list.
+ * Removes internal categorization (technical, non-technical, upcoming)
+ * and returns all events directly with registration and ended flags.
+ */
 const getEventsPage = async (req, res) => {
   try {
     const userId = req.user._id;
-    const now = new Date();
 
-    const upcomingRaw = await Event.find({ isActive: true, status: { $in: ["approved", "Approved"] }, eventDate: { $gte: now } })
-      .sort({ eventDate: 1 })
-      .limit(2)
-      .select("eventName registrationType eventType eventCategory description allowedDepartments organizer mode eventDate eventEndDate eventStartTime eventEndTime onlinePlatformLink externalRegistrationLink coverImage city totalSeats individualFees teamFees registrationStartDate registrationEndDate c_by status isActive createdAt");
+    const eventsRaw = await Event.find({
+      isActive: true,
+      status: { $in: ["approved", "Approved"] },
+    })
+      .sort({ createdAt: -1 })
+      .select(
+        "eventName registrationType eventType eventCategory description allowedDepartments organizer mode eventDate eventEndDate eventStartTime eventEndTime onlinePlatformLink externalRegistrationLink coverImage city totalSeats individualFees teamFees registrationStartDate registrationEndDate c_by status isActive createdAt"
+      );
 
-    const upcomingIds = upcomingRaw.map((e) => e._id);
-
-    const [technicalRaw, nonTechnicalRaw] = await Promise.all([
-      Event.find({ isActive: true, status: { $in: ["approved", "Approved"] }, eventType: "Technical", _id: { $nin: upcomingIds } })
-        .sort({ createdAt: -1 })
-        .select("eventName registrationType eventType eventCategory description allowedDepartments organizer mode eventDate eventEndDate eventStartTime eventEndTime onlinePlatformLink externalRegistrationLink coverImage city totalSeats individualFees teamFees registrationStartDate registrationEndDate c_by status isActive createdAt"),
-
-      Event.find({ isActive: true, status: { $in: ["approved", "Approved"] }, eventType: "Non Technical", _id: { $nin: upcomingIds } })
-        .sort({ createdAt: -1 })
-        .select("eventName registrationType eventType eventCategory description allowedDepartments organizer mode eventDate eventEndDate eventStartTime eventEndTime onlinePlatformLink externalRegistrationLink coverImage city totalSeats individualFees teamFees registrationStartDate registrationEndDate c_by status isActive createdAt"),
-    ]);
-
-    const formatEventItem = async (item) => {
-      const isOnline = item.mode === "Online" || item.mode === "Hybrid";
-      const obj = item.toObject();
-      const isRegistered = await checkIsRegistered(userId, item._id);
-      return {
-        ...obj,
-        eventEndTime: obj.eventEndTime || null,
-        isEnded: checkIsEnded(obj.eventDate, obj.eventEndDate, obj.eventEndTime),
-        meetingLink: isOnline ? (item.onlinePlatformLink || null) : null,
-        onlinePlatformLink: isOnline ? (item.onlinePlatformLink || null) : null,
-        is_registered: isRegistered,
-        isRegistered: isRegistered,
-      };
-    };
-
-    // ✅ attachFlags + is_registered + isEnded for all three
-    const [upcomingEvents, technicalEvents, nonTechnicalEvents] = await Promise.all([
-      Promise.all(upcomingRaw.map(formatEventItem)),
-      Promise.all(technicalRaw.map(formatEventItem)),
-      Promise.all(nonTechnicalRaw.map(formatEventItem)),
-    ]);
+    const data = await Promise.all(
+      eventsRaw.map(async (item) => {
+        const isOnline = item.mode === "Online" || item.mode === "Hybrid";
+        const obj = item.toObject();
+        const isRegistered = await checkIsRegistered(userId, item._id);
+        return {
+          ...obj,
+          eventEndTime: obj.eventEndTime || null,
+          isEnded: checkIsEnded(obj.eventDate, obj.eventEndDate, obj.eventEndTime),
+          meetingLink: isOnline ? (item.onlinePlatformLink || null) : null,
+          onlinePlatformLink: isOnline ? (item.onlinePlatformLink || null) : null,
+          is_registered: isRegistered,
+          isRegistered: isRegistered,
+        };
+      })
+    );
 
     return res.status(200).json({
       status: true,
-      data: { upcomingEvents, technicalEvents, nonTechnicalEvents },
+      count: data.length,
+      data,
     });
   } catch (error) {
     console.error("Events Page API Error:", error.message);
@@ -3481,50 +3473,67 @@ const getEventsPage = async (req, res) => {
   }
 };
 
+
+/**
+ * Fetches all active approved seminars in a single unified list.
+ * Eliminates separate categorization arrays (upcoming, technical, non-technical)
+ * and uses single-pass batch registration lookup with lean queries for high performance.
+ */
 const getSeminarsPage = async (req, res) => {
   try {
-    const userId = req.user._id;
-    const now = new Date();
+    const userId = req.user?._id;
 
-    const upcomingRaw = await Seminar.find({ isActive: true, status: "approved", eventDate: { $gte: now } })
-      .sort({ eventDate: 1 })
-      .limit(2)
-      .select("eventName eventType registrationType organizer mode eventDate eventEndDate eventStartTime eventEndTime externalRegistrationLink coverImage city totalSeats individualFees teamFees registrationEndDate createdAt");
+    const seminarsRaw = await Seminar.find({
+      isActive: true,
+      status: { $in: ["approved", "Approved"] },
+    })
+      .sort({ createdAt: -1 })
+      .select(
+        "eventName registrationType eventType description allowedDepartments organizer mode eventDate eventEndDate eventStartTime eventEndTime onlinePlatformLink externalRegistrationLink coverImage venueAddress address venueName city totalSeats individualFees teamFees lateFees gst registrationStartDate registrationEndDate c_by status isActive createdAt"
+      )
+      .lean();
 
-    const upcomingIds = upcomingRaw.map((s) => s._id);
+    if (!seminarsRaw.length) {
+      return res.status(200).json({
+        status: true,
+        count: 0,
+        data: [],
+      });
+    }
 
-    const [technicalRaw, nonTechnicalRaw] = await Promise.all([
-      Seminar.find({ isActive: true, status: "approved", eventType: "Technical", _id: { $nin: upcomingIds } })
-        .sort({ createdAt: -1 })
-        .select("eventName eventType registrationType city organizer mode eventDate eventEndDate eventStartTime eventEndTime externalRegistrationLink coverImage venueAddress totalSeats individualFees teamFees registrationEndDate createdAt"),
+    const seminarIds = seminarsRaw.map((s) => s._id);
 
-      Seminar.find({ isActive: true, status: "approved", eventType: "Non Technical", _id: { $nin: upcomingIds } })
-        .sort({ createdAt: -1 })
-        .select("eventName eventType registrationType city organizer mode eventDate eventEndDate eventStartTime eventEndTime externalRegistrationLink coverImage venueAddress totalSeats individualFees teamFees registrationEndDate createdAt"),
-    ]);
+    const userRegistrations = userId
+      ? await EventRegistration.find({
+          userId,
+          eventId: { $in: seminarIds },
+        })
+          .select("eventId")
+          .lean()
+      : [];
 
-    const formatSeminarItem = async (item) => {
-      const obj = item.toObject();
-      const isRegistered = await checkIsRegistered(userId, item._id);
+    const registeredIdSet = new Set(
+      userRegistrations.map((r) => r.eventId.toString())
+    );
+
+    const data = seminarsRaw.map((item) => {
+      const isOnline = item.mode === "Online" || item.mode === "Hybrid";
+      const isRegistered = registeredIdSet.has(item._id.toString());
       return {
-        ...obj,
-        eventEndTime: obj.eventEndTime || null,
-        isEnded: checkIsEnded(obj.eventDate, obj.eventEndDate, obj.eventEndTime),
+        ...item,
+        eventEndTime: item.eventEndTime || null,
+        isEnded: checkIsEnded(item.eventDate, item.eventEndDate, item.eventEndTime),
+        meetingLink: isOnline ? (item.onlinePlatformLink || null) : null,
+        onlinePlatformLink: isOnline ? (item.onlinePlatformLink || null) : null,
         is_registered: isRegistered,
         isRegistered: isRegistered,
       };
-    };
-
-    // ✅ attachFlags + is_registered + isEnded for all three
-    const [upcomingSeminars, technicalSeminars, nonTechnicalSeminars] = await Promise.all([
-      Promise.all(upcomingRaw.map(formatSeminarItem)),
-      Promise.all(technicalRaw.map(formatSeminarItem)),
-      Promise.all(nonTechnicalRaw.map(formatSeminarItem)),
-    ]);
+    });
 
     return res.status(200).json({
       status: true,
-      data: { upcomingSeminars, technicalSeminars, nonTechnicalSeminars },
+      count: data.length,
+      data,
     });
   } catch (error) {
     console.error("Seminars Page API Error:", error.message);

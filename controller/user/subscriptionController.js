@@ -4,12 +4,13 @@ import User from "../../models/userModel.js";
 import Payment from "../../models/paymentModel.js";
 import SubscriptionPlan from "../../models/subscriptionPlanModel.js";
 import { triggerMissionNotification } from "../../services/xpService.js";
+import { fulfillSubscriptionPayment } from "../../services/paymentFulfillmentService.js";
 
 /**
  * Initializes and returns a Razorpay client instance.
  * Returns null if API credentials are not set in environment variables.
  */
-const getRazorpayInstance = () => {
+export const getRazorpayInstance = () => {
   const keyId = process.env.RAZORPAY_KEY_ID;
   const keySecret = process.env.RAZORPAY_KEY_SECRET;
 
@@ -45,17 +46,6 @@ export const getSubscriptionPlans = async (req, res, next) => {
           features: ["Access all events & courses", "Priority support", "Pro badge"],
           isActive: true,
         },
-        // {
-        //   planKey: "pro_yearly",
-        //   name: "Pro Annual",
-        //   tier: "pro",
-        //   billingCycle: "yearly",
-        //   durationDays: 365,
-        //   price: 2999,
-        //   currency: "INR",
-        //   features: ["All Monthly features", "Save 16%", "Exclusive webinars"],
-        //   isActive: true,
-        // },
       ];
     }
 
@@ -69,7 +59,78 @@ export const getSubscriptionPlans = async (req, res, next) => {
 };
 
 /**
- * Store payment details sent from the client and activate the user subscription.
+ * Step 1: Pre-Payment Order Creation
+ * Requests an order from Razorpay and logs a Pending payment record in MongoDB.
+ * Attaches userId and planKey inside notes for background webhook recovery.
+ */
+export const createSubscriptionOrder = async (req, res, next) => {
+  try {
+    const userId = req.user?._id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Unauthorized user." });
+    }
+
+    const { planKey = "pro_quarterly", amount } = req.body;
+    const finalAmount = Number(amount) || (planKey === "pro_yearly" ? 2999 : 499);
+
+    const razorpay = getRazorpayInstance();
+    if (!razorpay) {
+      return res.status(500).json({
+        success: false,
+        message: "Payment gateway is not properly configured.",
+      });
+    }
+
+    // Amount passed to Razorpay must be in paise (INR * 100)
+    const options = {
+      amount: Math.round(finalAmount * 100),
+      currency: "INR",
+      receipt: `sub_${userId.toString().slice(-6)}_${Date.now()}`,
+      notes: {
+        userId: userId.toString(),
+        planKey,
+      },
+    };
+
+    const rzpOrder = await razorpay.orders.create(options);
+
+    // Record the initiated transaction in MongoDB as Pending
+    const nowIST = getNowIST();
+    const paymentRecord = await Payment.create({
+      userId,
+      referenceId: userId,
+      referenceType: "Subscription",
+      c_by: userId,
+      amount: finalAmount,
+      currency: "INR",
+      paymentStatus: "Pending",
+      paymentGateway: "Razorpay",
+      orderId: rzpOrder.id,
+      remarks: `Subscription Initiated: ${planKey}`,
+      paymentDate: nowIST,
+      createdAt: nowIST,
+      updatedAt: nowIST,
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        orderId: rzpOrder.id,
+        amount: rzpOrder.amount,
+        currency: rzpOrder.currency,
+        keyId: process.env.RAZORPAY_KEY_ID,
+        paymentRecordId: paymentRecord._id,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Step 2: Instant Client-Side Verification Callback
+ * Called by frontend when the Razorpay modal completes payment.
+ * Employs cryptographic signature verification and idempotent fulfillment.
  */
 export const verifySubscriptionPayment = async (req, res, next) => {
   try {
@@ -81,10 +142,7 @@ export const verifySubscriptionPayment = async (req, res, next) => {
       transactionId,
       orderId,
       signature,
-      paymentGateway = "Razorpay",
       planKey = "pro_quarterly",
-      planName,
-      durationDays,
       amount,
     } = req.body;
 
@@ -93,101 +151,116 @@ export const verifySubscriptionPayment = async (req, res, next) => {
       return res.status(401).json({ success: false, message: "Unauthorized user." });
     }
 
-    const actualPaymentId = razorpay_payment_id || paymentId || transactionId || `PAY_${Date.now()}`;
-    const actualOrderId = razorpay_order_id || orderId || null;
-    const actualSignature = razorpay_signature || signature || null;
+    const actualOrderId = razorpay_order_id || orderId;
+    const actualPaymentId = razorpay_payment_id || paymentId || transactionId;
+    const actualSignature = razorpay_signature || signature;
 
-    // Calculate duration, amount, and plan name from client request with fallbacks
-    const activeDays =
-      Number(durationDays) ||
-      (planKey === "pro_yearly" ? 365 : planKey === "pro_monthly" ? 30 : 90);
-    const finalAmount = Number(amount) || (planKey === "pro_yearly" ? 2999 : 499);
-    const finalPlanName =
-      planName ||
-      (planKey === "pro_yearly"
-        ? "Pro Annual"
-        : planKey === "pro_monthly"
-          ? "Pro Monthly"
-          : "Pro Quarterly");
+    if (!actualOrderId) {
+      return res.status(400).json({ success: false, message: "Missing order identifier." });
+    }
 
-    // ── Plan Extension / Stacking Logic (IST Timezone) ────────────────
-    // Check if the user currently possesses an active, unexpired subscription.
-    // If active days remain, stack the new duration directly onto the existing expiry date.
-    // Otherwise, start fresh from the current moment in Indian Standard Time (IST, UTC+05:30).
-    const existingUser = await User.findById(userId).select("subscription").lean();
-    const currentSub = existingUser?.subscription;
+    // Cryptographic validation of the payment signature when provided
+    if (actualSignature && process.env.RAZORPAY_KEY_SECRET) {
+      const generatedSignature = crypto
+        .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+        .update(`${actualOrderId}|${actualPaymentId}`)
+        .digest("hex");
 
-    const nowIST = getNowIST();
-    const isCurrentlyActive = Boolean(
-      currentSub?.isPlanActive &&
-      currentSub?.expiryDate &&
-      new Date(currentSub.expiryDate) > nowIST
-    );
+      if (generatedSignature !== actualSignature) {
+        return res.status(400).json({
+          success: false,
+          message: "Payment signature validation failed. Potential tampering detected.",
+        });
+      }
+    }
 
-    // If active, anchor on existing expiryDate; otherwise anchor on now in IST
-    const baseDate = isCurrentlyActive ? new Date(currentSub.expiryDate) : nowIST;
-    const expiryDate = new Date(baseDate.getTime() + activeDays * 24 * 60 * 60 * 1000);
-    // Set to end of day in IST (23:59:59.999)
-    expiryDate.setUTCHours(23, 59, 59, 999);
-
-    // Preserve initial startDate if extending active membership; else start now in IST
-    const startDate = isCurrentlyActive && currentSub?.startDate
-      ? new Date(currentSub.startDate)
-      : nowIST;
-
-    const actionText = isCurrentlyActive ? "extended" : "activated";
-
-    // 1. Save Payment record directly to DB in IST
-    const paymentRecord = await Payment.create({
-      userId,
-      referenceId: userId,
-      referenceType: "Subscription",
-      c_by: userId,
-      amount: finalAmount,
-      currency: "INR",
-      paymentStatus: "Success",
-      paymentGateway,
+    // Delegate to shared idempotent fulfillment service
+    const result = await fulfillSubscriptionPayment({
       orderId: actualOrderId,
       paymentId: actualPaymentId,
       signature: actualSignature,
-      transactionId: actualPaymentId,
-      remarks: `Subscription ${actionText}: ${finalPlanName}`,
-      paymentDate: nowIST,
-      createdAt: nowIST,
-      updatedAt: nowIST,
-    });
-
-    // 2. Update User's active subscription status in DB
-    const updatedUser = await User.findByIdAndUpdate(
+      planKey,
+      amount,
       userId,
-      {
-        $set: {
-          subscription: {
-            planName: finalPlanName,
-            isPlanActive: true,
-            startDate,
-            expiryDate,
-          },
-        },
-      },
-      { new: true }
-    ).select("name email subscription");
-
-    // 3. Notify the user that their First Subscription mission reward is ready to claim.
-    //    XP is not auto-credited; the user can manually claim it from the Missions screen.
-    if (!isCurrentlyActive) {
-      triggerMissionNotification(userId, "FIRST_SUBSCRIPTION").catch((err) => {
-        console.error("FIRST_SUBSCRIPTION triggerMissionNotification error:", err?.message);
-      });
-    }
+    });
 
     return res.status(200).json({
       success: true,
-      message: `Subscription ${actionText} successfully!`,
+      message: result.alreadyProcessed
+        ? "Subscription is already active."
+        : "Subscription activated successfully!",
       data: {
-        paymentId: paymentRecord._id,
-        subscription: updatedUser?.subscription,
+        paymentId: result.payment._id,
+        subscription: result.subscription,
       },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Step 3: Smart Check-Status API
+ * Allows the frontend to verify an order's status on demand.
+ * If the database record is still Pending, queries Razorpay API directly
+ * to self-heal and fulfill the order on the spot.
+ */
+export const checkSubscriptionPaymentStatus = async (req, res, next) => {
+  try {
+    const { orderId } = req.body;
+    const userId = req.user?._id;
+
+    if (!orderId) {
+      return res.status(400).json({ success: false, message: "orderId is required." });
+    }
+
+    // 1. Check local database record first
+    const payment = await Payment.findOne({ orderId });
+    if (!payment) {
+      return res.status(404).json({ success: false, message: "Order record not found." });
+    }
+
+    // Fast-path: Webhook or verify-payment already completed fulfillment
+    if (payment.paymentStatus === "Success") {
+      const userDoc = await User.findById(payment.userId).select("subscription").lean();
+      return res.status(200).json({
+        success: true,
+        status: "Success",
+        subscription: userDoc?.subscription,
+      });
+    }
+
+    // 2. On-demand self-healing: Query Razorpay API directly
+    const razorpay = getRazorpayInstance();
+    if (razorpay) {
+      const rzpOrder = await razorpay.orders.fetch(orderId);
+
+      if (rzpOrder && rzpOrder.status === "paid") {
+        // Query payments linked to this order to retrieve the captured paymentId
+        const paymentsList = await razorpay.orders.fetchPayments(orderId);
+        const capturedPayment = paymentsList.items?.find((p) => p.status === "captured");
+
+        const planKey = rzpOrder.notes?.planKey || "pro_quarterly";
+        const fulfilled = await fulfillSubscriptionPayment({
+          orderId,
+          paymentId: capturedPayment?.id || null,
+          planKey,
+          amount: payment.amount,
+          userId: userId || payment.userId,
+        });
+
+        return res.status(200).json({
+          success: true,
+          status: "Success",
+          subscription: fulfilled.subscription,
+        });
+      }
+    }
+
+    // Order is still pending or was not successfully paid
+    return res.status(200).json({
+      success: true,
+      status: payment.paymentStatus,
     });
   } catch (error) {
     next(error);

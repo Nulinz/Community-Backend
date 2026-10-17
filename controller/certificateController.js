@@ -410,3 +410,4 @@ export const getUserCertificates = async (req, res, next) => {
     next(error);
   }
 };
+

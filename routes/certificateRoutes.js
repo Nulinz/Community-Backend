@@ -22,3 +22,5 @@ router.get("/verify/:certificateId", verifyCertificate);
 router.get("/download/:certificateId", downloadCertificate);
 
 export default router;
+
+

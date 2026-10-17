@@ -26,6 +26,7 @@ import adminRoutes from "./routes/adminRoutes.js"
 import certificateRoutes from "./routes/certificateRoutes.js";
 import feedbackRoutes from "./routes/feedbackRoutes.js";
 import subscriptionRoutes from "./routes/subscriptionRoutes.js";
+import webhookRoutes from "./routes/webhookRoutes.js";
 import influencerRoutes from "./routes/influencerRoutes.js";
 import resumeRoutes from "./routes/resumeRoutes.js";
 import commonRoutes from "./routes/commonRoutes.js";
@@ -70,7 +71,14 @@ app.use(
 //  seedConferences()
 //  seedSeminars()
 
-app.use(express.json());
+app.use(
+  express.json({
+    verify: (req, res, buf) => {
+      // Retain unparsed request body buffer for Razorpay HMAC signature validation
+      req.rawBody = buf;
+    },
+  })
+);
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 app.use("/resume", express.static(path.join(process.cwd(), "resume")));
 app.use("/public", express.static(path.join(process.cwd(), "public")));
@@ -161,6 +169,7 @@ app.use("/api/admin", adminRoutes)
 app.use("/api/certificates", certificateRoutes)
 app.use("/api/feedback", feedbackRoutes)
 app.use("/api/subscriptions", subscriptionRoutes)
+app.use("/api/webhooks", webhookRoutes);
 app.use("/api/influencer", influencerRoutes)
 app.use("/api/resume", resumeRoutes)
 app.use("/api/common", commonRoutes);

@@ -64,7 +64,7 @@ import {
   activePing,
 } from "../controller/user/userController.js";
 import fileUploader from "../middleware/fileUploader.js";
-import { clearAllNotifications, getNotifications, getUserResumes, markAsRead, markAllAsRead, updateProfilePic, updateUserDetails, uploadResume } from "../controller/user/profileController.js";
+import { clearAllNotifications, getNotifications, getUserResumes, deleteResume, markAsRead, markAllAsRead, updateProfilePic, updateUserDetails, uploadResume } from "../controller/user/profileController.js";
 import { getUserDetails } from "../controller/userDetailController.js";
 import {
   markEventAttendance,
@@ -236,6 +236,7 @@ router.post(
   updateUserDetails
 );
 router.get("/my-resume", isAuthenticated, getUserResumes);
+router.delete(["/delete-resume/:id", "/delete/:id", "/my-resume/:id"], isAuthenticated, deleteResume);
 router.get("/notifications", isAuthenticated, getNotifications);
 router.get(
   "/my-suggestions",

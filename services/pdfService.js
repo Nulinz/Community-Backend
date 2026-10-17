@@ -2,6 +2,8 @@ import fs from "fs/promises";
 import path from "path";
 import handlebars from "handlebars";
 import puppeteer from "puppeteer";
+import puppeteerCore from "puppeteer-core";
+import chromium from "@sparticuz/chromium";
 
 // Register Handlebars Helpers
 handlebars.registerHelper("renderDots", (rating) => {
@@ -190,13 +192,18 @@ export const renderResumeHTML = async (templateId, formData) => {
 /**
  * Helper to dynamically locate an installed Chromium-compatible browser binary
  * (Chrome, Microsoft Edge, Brave) across Windows, Linux, and macOS.
- * Eliminates missing Chrome cache errors without requiring separate CLI browser installs.
+/**
+ * Helper to dynamically locate all installed Chromium-compatible browser binaries
+ * (Edge, Chrome, Brave) across Windows, Linux, and macOS.
+ * Returns an array of valid paths so if one fails, the launcher tries the next.
  */
-const getSystemBrowserExecutable = async () => {
+const getSystemBrowserExecutables = async () => {
+  const list = [];
+
   if (process.env.PUPPETEER_EXECUTABLE_PATH) {
     try {
       await fs.access(process.env.PUPPETEER_EXECUTABLE_PATH);
-      return process.env.PUPPETEER_EXECUTABLE_PATH;
+      list.push(process.env.PUPPETEER_EXECUTABLE_PATH);
     } catch {}
   }
 
@@ -205,14 +212,14 @@ const getSystemBrowserExecutable = async () => {
   const programFilesX86 = process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)";
 
   const candidatePaths = [
+    // Microsoft Edge locations (first on Windows: standard, stable & preinstalled)
+    path.join(programFilesX86, "Microsoft", "Edge", "Application", "msedge.exe"),
+    path.join(programFiles, "Microsoft", "Edge", "Application", "msedge.exe"),
+    path.join(localAppData, "Microsoft", "Edge", "Application", "msedge.exe"),
     // Standard Google Chrome locations
     path.join(programFiles, "Google", "Chrome", "Application", "chrome.exe"),
     path.join(programFilesX86, "Google", "Chrome", "Application", "chrome.exe"),
     path.join(localAppData, "Google", "Chrome", "Application", "chrome.exe"),
-    // Microsoft Edge locations (standard on all Windows 10/11 environments)
-    path.join(programFilesX86, "Microsoft", "Edge", "Application", "msedge.exe"),
-    path.join(programFiles, "Microsoft", "Edge", "Application", "msedge.exe"),
-    path.join(localAppData, "Microsoft", "Edge", "Application", "msedge.exe"),
     // Brave Browser
     path.join(programFiles, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
     path.join(programFilesX86, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
@@ -221,25 +228,28 @@ const getSystemBrowserExecutable = async () => {
     "/usr/bin/google-chrome-stable",
     "/usr/bin/chromium-browser",
     "/usr/bin/chromium",
-    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-    "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
+    "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
   ];
 
   for (const candidate of candidatePaths) {
     try {
       await fs.access(candidate);
-      return candidate;
+      list.push(candidate);
     } catch {}
   }
 
-  return null;
+  return list;
 };
 
 /**
- * Resilient Puppeteer browser launcher that attempts multiple discovery strategies:
- * 1. Explicitly discovered system executable (Chrome, Edge, Brave).
- * 2. Puppeteer native channel detection ('chrome', 'msedge').
- * 3. Default Puppeteer cache resolution.
+ * Cross-platform resilient Puppeteer browser launcher:
+ * 1. Linux Cloud Environment (Azure App Service / AWS / Docker):
+ *    Uses @sparticuz/chromium + puppeteer-core with precompiled static Chromium
+ *    and built-in graphics libraries, bypassing missing libnss3 / OS package issues.
+ * 2. Explicitly discovered system executables (Edge, Chrome, Brave on Windows/macOS).
+ * 3. Puppeteer native channel detection ('msedge', 'chrome').
+ * 4. Default Puppeteer cache resolution for local dev.
  */
 export const launchPuppeteerBrowser = async (extraArgs = []) => {
   const commonArgs = [
@@ -250,22 +260,45 @@ export const launchPuppeteerBrowser = async (extraArgs = []) => {
     ...extraArgs
   ];
 
-  // 1. Try system executable path if found
-  const execPath = await getSystemBrowserExecutable();
-  if (execPath) {
+  // 1. Linux Cloud Environment (Azure App Service / Ubuntu container)
+  if (process.platform === "linux") {
     try {
-      return await puppeteer.launch({
+      const execPath = await chromium.executablePath();
+      if (execPath) {
+        return await puppeteerCore.launch({
+          args: [
+            ...chromium.args,
+            "--no-first-run",
+            "--no-zygote",
+            "--single-process",
+            ...commonArgs,
+          ],
+          defaultViewport: chromium.defaultViewport,
+          executablePath: execPath,
+          headless: chromium.headless,
+        });
+      }
+    } catch (sparticuzErr) {
+      console.warn("[Chromium] @sparticuz/chromium launch error:", sparticuzErr.message);
+    }
+  }
+
+  // 2. Try candidate system executable paths (loops through Edge, Chrome, Brave)
+  const candidateExecutables = await getSystemBrowserExecutables();
+  for (const execPath of candidateExecutables) {
+    try {
+      return await puppeteerCore.launch({
         executablePath: execPath,
         headless: true,
         args: commonArgs
       });
     } catch (err) {
-      console.warn(`[Puppeteer] Direct launch with ${execPath} failed:`, err.message);
+      console.warn(`[Puppeteer] Direct launch with ${execPath} failed, trying next candidate...`);
     }
   }
 
-  // 2. Try Puppeteer channels (queries OS registry/PATH for installed browsers)
-  for (const channel of ["chrome", "msedge"]) {
+  // 3. Try Puppeteer channels (queries OS registry/PATH for installed browsers)
+  for (const channel of ["msedge", "chrome"]) {
     try {
       return await puppeteer.launch({
         channel,
@@ -277,7 +310,7 @@ export const launchPuppeteerBrowser = async (extraArgs = []) => {
     }
   }
 
-  // 3. Fallback to default Puppeteer bundled browser
+  // 4. Fallback to default Puppeteer bundled browser
   try {
     return await puppeteer.launch({
       headless: "shell",
