@@ -1,6 +1,8 @@
 import User from "../models/userModel.js";
 import Payment from "../models/paymentModel.js";
-import { triggerMissionNotification } from "./xpService.js";
+import EventRegistration from "../models/eventRegistrationModel.js";
+import { awardXP, triggerMissionNotification } from "./xpService.js";
+import { sendAndSaveNotification } from "../helper/sendAndSaveNotification.js";
 
 // Indian Standard Time (IST, UTC+05:30) offset in milliseconds (5.5 hours)
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
@@ -132,3 +134,159 @@ export const fulfillSubscriptionPayment = async ({
     subscription: updatedUser?.subscription,
   };
 };
+
+/**
+ * Event Registration Payment Fulfillment:
+ * Ensures idempotent fulfillment for paid Conferences, Competitions, Seminars, and Events.
+ * Handles the creation of the EventRegistration document if not already recorded, marks the
+ * Payment record as Success, delivers in-app and push notifications, and triggers gamification rewards.
+ */
+export const fulfillEventRegistrationPayment = async ({
+  orderId,
+  paymentId,
+  signature = null,
+  userId,
+  amount,
+}) => {
+  if (!orderId) {
+    throw new Error("Cannot fulfill event registration without an orderId.");
+  }
+
+  // ── IDEMPOTENCY CHECK ──────────────────────────────────────────────────────────
+  const existingPayment = await Payment.findOne({ orderId });
+  if (existingPayment && existingPayment.paymentStatus === "Success") {
+    const existingReg = await EventRegistration.findById(existingPayment.referenceId).lean();
+    return {
+      alreadyProcessed: true,
+      payment: existingPayment,
+      registration: existingReg,
+    };
+  }
+
+  const effectiveUserId = userId || existingPayment?.userId;
+  if (!effectiveUserId) {
+    throw new Error(`Unable to resolve user identifier for event registration order: ${orderId}`);
+  }
+
+  const nowIST = getNowIST();
+  const regData = existingPayment?.metadata?.registrationData || {};
+  const eventId = existingPayment?.eventId || regData.eventId;
+  const eventType = existingPayment?.eventType || regData.eventType || "Event";
+  const finalAmount = Number(amount) || existingPayment?.amount || 0;
+
+  if (!eventId) {
+    throw new Error(`Missing eventId for event registration order: ${orderId}`);
+  }
+
+  // ── 1. ENSURE REGISTRATION RECORD EXISTS ───────────────────────────────────────
+  let registration = await EventRegistration.findOne({
+    userId: effectiveUserId,
+    eventId,
+  });
+
+  if (!registration) {
+    registration = await EventRegistration.create({
+      userId: effectiveUserId,
+      eventId,
+      eventType,
+      fullName: regData.fullName || "User",
+      department: regData.department || "General",
+      c_by: existingPayment?.c_by || regData.c_by || effectiveUserId,
+      collegeName: regData.collegeName || "Institution",
+      year: regData.year || "1",
+      type: regData.type || "Individual",
+      member_count: regData.member_count || 1,
+      phoneNumber: regData.phoneNumber || "",
+      mailId: regData.mailId || "",
+      food: regData.food || "no",
+      foodType: regData.food === "yes" ? regData.foodType : null,
+      accommodation: regData.accommodation || "no",
+      accommodationType: regData.accommodation === "yes" ? regData.accommodationType : null,
+    });
+  }
+
+  // ── 2. UPDATE PAYMENT RECORD TO SUCCESS ─────────────────────────────────────────
+  const paymentRecord = await Payment.findOneAndUpdate(
+    { orderId },
+    {
+      $set: {
+        userId: effectiveUserId,
+        referenceId: registration._id,
+        referenceType: "EventRegistration",
+        eventId,
+        eventType,
+        c_by: existingPayment?.c_by || regData.c_by || effectiveUserId,
+        amount: finalAmount,
+        currency: "INR",
+        paymentStatus: "Success",
+        paymentGateway: "Razorpay",
+        orderId,
+        paymentId: paymentId || existingPayment?.paymentId || null,
+        transactionId: paymentId || existingPayment?.paymentId || null,
+        signature: signature || existingPayment?.signature || null,
+        remarks: `${eventType} registration payment confirmed via Razorpay`,
+        paymentDate: nowIST,
+        updatedAt: nowIST,
+      },
+    },
+    { new: true, upsert: true }
+  );
+
+  // ── 3. DISPATCH IN-APP NOTIFICATION ───────────────────────────────────────────
+  try {
+    await sendAndSaveNotification({
+      senderId: effectiveUserId,
+      receiverId: effectiveUserId,
+      title: "Event Registration Successful",
+      message: `You have successfully registered for the ${eventType}.`,
+      type: "event_registered",
+      reference_id: eventId,
+      metadata: {
+        eventType,
+        registrationId: registration._id,
+        paymentId: paymentRecord._id,
+        amount: finalAmount,
+        food: regData.food || "no",
+        accommodation: regData.accommodation || "no",
+      },
+    });
+  } catch (notifErr) {
+    console.error("Event registration notification dispatch error:", notifErr?.message);
+  }
+
+  // ── 4. GAMIFICATION XP & MISSION TRIGGERS ──────────────────────────────────────
+  try {
+    triggerMissionNotification(effectiveUserId, "FIRST_EVENT_REGISTRATION").catch((err) =>
+      console.error("FIRST_EVENT_REGISTRATION mission error:", err?.message)
+    );
+
+    if (eventType === "Competition") {
+      triggerMissionNotification(effectiveUserId, "FIRST_COMPETITION_REGISTRATION").catch((err) =>
+        console.error("FIRST_COMPETITION_REGISTRATION mission error:", err?.message)
+      );
+    }
+
+    const regActionMap = {
+      Event: "FIRST_EVENT_REGISTRATION",
+      Seminar: "FIRST_EVENT_REGISTRATION",
+      Conference: "FIRST_EVENT_REGISTRATION",
+      Competition: "FIRST_COMPETITION_REGISTRATION",
+    };
+    const regActionKey = regActionMap[eventType] || "FIRST_EVENT_REGISTRATION";
+
+    await awardXP({
+      userId: effectiveUserId,
+      actionKey: regActionKey,
+      referenceId: registration._id,
+    });
+  } catch (xpErr) {
+    console.error("XP Award Error in fulfillEventRegistrationPayment:", xpErr?.message);
+  }
+
+  return {
+    alreadyProcessed: false,
+    payment: paymentRecord,
+    registration,
+  };
+};
+

@@ -1,6 +1,9 @@
 import crypto from "crypto";
 import Payment from "../../models/paymentModel.js";
-import { fulfillSubscriptionPayment } from "../../services/paymentFulfillmentService.js";
+import {
+  fulfillSubscriptionPayment,
+  fulfillEventRegistrationPayment,
+} from "../../services/paymentFulfillmentService.js";
 
 // Indian Standard Time (IST, UTC+05:30) offset in milliseconds (5.5 hours)
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
@@ -9,8 +12,8 @@ const getNowIST = () => new Date(Date.now() + IST_OFFSET_MS);
 /**
  * Controller for receiving and processing asynchronous Razorpay webhook events.
  * Operates completely server-to-server, guaranteeing payment reconciliation and
- * subscription activation even if the user drops off or closes their browser before
- * the client-side callback executes.
+ * fulfillment (Subscriptions & Event/Seminar/Conference/Competition Registrations)
+ * even if the user drops off or closes their browser before the client-side callback executes.
  */
 export const razorpayWebhookHandler = async (req, res) => {
   try {
@@ -54,22 +57,41 @@ export const razorpayWebhookHandler = async (req, res) => {
 
       // Metadata passed during order creation inside the notes dictionary
       const userId = orderEntity?.notes?.userId || paymentEntity?.notes?.userId;
-      const planKey = orderEntity?.notes?.planKey || paymentEntity?.notes?.planKey || "pro_quarterly";
+      const orderType = orderEntity?.notes?.type || paymentEntity?.notes?.type;
 
       if (!orderId) {
         console.warn("Razorpay success webhook skipped: orderId missing in payload.");
         return res.status(200).json({ status: "skipped_no_order_id" });
       }
 
-      await fulfillSubscriptionPayment({
-        orderId,
-        paymentId,
-        userId,
-        planKey,
-        amount,
-      });
+      // Check whether this transaction is an EventRegistration or Subscription
+      let isEventRegistration = orderType === "EventRegistration";
+      if (!isEventRegistration) {
+        const existingPayment = await Payment.findOne({ orderId }).select("referenceType").lean();
+        if (existingPayment?.referenceType === "EventRegistration") {
+          isEventRegistration = true;
+        }
+      }
 
-      console.log(`Razorpay webhook fulfilled order successfully: ${orderId}`);
+      if (isEventRegistration) {
+        await fulfillEventRegistrationPayment({
+          orderId,
+          paymentId,
+          userId,
+          amount,
+        });
+        console.log(`Razorpay webhook fulfilled event registration order successfully: ${orderId}`);
+      } else {
+        const planKey = orderEntity?.notes?.planKey || paymentEntity?.notes?.planKey || "pro_quarterly";
+        await fulfillSubscriptionPayment({
+          orderId,
+          paymentId,
+          userId,
+          planKey,
+          amount,
+        });
+        console.log(`Razorpay webhook fulfilled subscription order successfully: ${orderId}`);
+      }
     }
 
     // ── 3. PROCESS FAILED PAYMENT EVENTS ────────────────────────────────────────

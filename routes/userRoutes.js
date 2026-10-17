@@ -2,6 +2,11 @@ import express from "express";
 import multer from "multer";
 import { getAiTools } from "../controller/user/aiToolsController.js";
 import { getMissions, claimMission, getUserXpSummary, claimSocialFollowXP } from "../controller/user/xpController.js";
+import {
+  createEventRegistrationOrder,
+  verifyEventRegistrationPayment,
+  checkEventRegistrationPaymentStatus,
+} from "../controller/user/eventRegistrationPaymentController.js";
 
 import {
   // createNewPassword,
@@ -188,6 +193,11 @@ router.get("/seminars", isAuthenticated, getSeminarsPage);
 router.get("/locations", getLocations);
 router.post("/event-register", uploader.none(), isAuthenticated, createEventRegistration);
 router.post("/external-event-register", uploader.none(), isAuthenticated, createExternalEventRegistration);
+
+// Razorpay Online Event Registration Flow (Conferences, Competitions, Seminars, Events)
+router.post("/event-registration/create-order", uploader.none(), isAuthenticated, createEventRegistrationOrder);
+router.post("/event-registration/verify-payment", uploader.none(), isAuthenticated, verifyEventRegistrationPayment);
+router.get("/event-registration/check-status/:orderId", isAuthenticated, checkEventRegistrationPaymentStatus);
 
 router.get(
   "/event-technical",
