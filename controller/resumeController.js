@@ -270,19 +270,19 @@ export const generateResume = async (req, res, next) => {
 
     const responseData = savedResume
       ? {
-          ...savedResume.toObject(),
-          fileUrl: relativeUrl,
-          pdfUrl: relativeUrl,
-          downloadUrl,
-        }
+        ...savedResume.toObject(),
+        fileUrl: relativeUrl,
+        pdfUrl: relativeUrl,
+        downloadUrl,
+      }
       : {
-          fileName,
-          fileUrl: relativeUrl,
-          pdfUrl: relativeUrl,
-          downloadUrl,
-          fileSize: pdfBuffer.length,
-          mimeType: "application/pdf",
-        };
+        fileName,
+        fileUrl: relativeUrl,
+        pdfUrl: relativeUrl,
+        downloadUrl,
+        fileSize: pdfBuffer.length,
+        mimeType: "application/pdf",
+      };
 
     return res.status(200).json({
       success: true,

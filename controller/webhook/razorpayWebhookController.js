@@ -73,12 +73,17 @@ export const razorpayWebhookHandler = async (req, res) => {
         }
       }
 
+      const eventId = orderEntity?.notes?.eventId || paymentEntity?.notes?.eventId;
+      const eventType = orderEntity?.notes?.eventType || paymentEntity?.notes?.eventType;
+
       if (isEventRegistration) {
         await fulfillEventRegistrationPayment({
           orderId,
           paymentId,
           userId,
           amount,
+          eventId,
+          eventType,
         });
         console.log(`Razorpay webhook fulfilled event registration order successfully: ${orderId}`);
       } else {
@@ -92,6 +97,37 @@ export const razorpayWebhookHandler = async (req, res) => {
         });
         console.log(`Razorpay webhook fulfilled subscription order successfully: ${orderId}`);
       }
+
+      // Persist comprehensive webhook audit metadata directly on the Payment document
+      await Payment.findOneAndUpdate(
+        { orderId },
+        {
+          $set: {
+            webhookStatus: "Processed",
+            webhookEvent: event,
+            webhookReceivedAt: getNowIST(),
+            webhookDetails: {
+              event,
+              orderId,
+              paymentId,
+              amount,
+              method: paymentEntity?.method || null,
+              bank: paymentEntity?.bank || null,
+              wallet: paymentEntity?.wallet || null,
+              vpa: paymentEntity?.vpa || null,
+              email: paymentEntity?.email || null,
+              contact: paymentEntity?.contact || null,
+              fee: paymentEntity?.fee ? paymentEntity.fee / 100 : 0,
+              tax: paymentEntity?.tax ? paymentEntity.tax / 100 : 0,
+              capturedAt: paymentEntity?.created_at
+                ? new Date(paymentEntity.created_at * 1000)
+                : getNowIST(),
+            },
+            paymentMethod: paymentEntity?.method || undefined,
+            updatedAt: getNowIST(),
+          },
+        }
+      );
     }
 
     // ── 3. PROCESS FAILED PAYMENT EVENTS ────────────────────────────────────────
@@ -110,8 +146,21 @@ export const razorpayWebhookHandler = async (req, res) => {
           {
             $set: {
               paymentStatus: "Failed",
+              webhookStatus: "Failed",
+              webhookEvent: event,
+              webhookReceivedAt: getNowIST(),
               paymentId: paymentEntity.id,
               remarks: `Payment Failed: ${failureReason}`,
+              webhookDetails: {
+                event,
+                orderId,
+                paymentId: paymentEntity.id,
+                errorCode: paymentEntity.error_code || null,
+                errorDescription: failureReason,
+                errorSource: paymentEntity.error_source || null,
+                errorStep: paymentEntity.error_step || null,
+                errorReason: paymentEntity.error_reason || null,
+              },
               updatedAt: getNowIST(),
             },
           }

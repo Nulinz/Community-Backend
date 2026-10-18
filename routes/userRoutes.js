@@ -7,6 +7,10 @@ import {
   verifyEventRegistrationPayment,
   checkEventRegistrationPaymentStatus,
 } from "../controller/user/eventRegistrationPaymentController.js";
+import {
+  getUserTransactionHistory,
+  getTransactionByIdentifier,
+} from "../controller/user/transactionController.js";
 
 import {
   // createNewPassword,
@@ -198,6 +202,17 @@ router.post("/external-event-register", uploader.none(), isAuthenticated, create
 router.post("/event-registration/create-order", uploader.none(), isAuthenticated, createEventRegistrationOrder);
 router.post("/event-registration/verify-payment", uploader.none(), isAuthenticated, verifyEventRegistrationPayment);
 router.get("/event-registration/check-status/:orderId", isAuthenticated, checkEventRegistrationPaymentStatus);
+
+// ─────────────────────────────────────────────
+// User Transactions & Webhook Status Lifecycle
+// ─────────────────────────────────────────────
+/**
+ * GET /api/users/transactions (or /api/user/transactions)
+ * GET /api/users/transaction-history (or /api/user/transaction-history)
+ * Retrieves paginated transaction history for the authenticated user (or specified userId if admin).
+ * Enriched with item details, live webhook delivery status, and payment summary metrics.
+ */
+router.get("/transactions", isAuthenticated, getUserTransactionHistory);
 
 router.get(
   "/event-technical",

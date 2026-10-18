@@ -147,6 +147,8 @@ export const fulfillEventRegistrationPayment = async ({
   signature = null,
   userId,
   amount,
+  eventId: explicitEventId = null,
+  eventType: explicitEventType = null,
 }) => {
   if (!orderId) {
     throw new Error("Cannot fulfill event registration without an orderId.");
@@ -170,8 +172,8 @@ export const fulfillEventRegistrationPayment = async ({
 
   const nowIST = getNowIST();
   const regData = existingPayment?.metadata?.registrationData || {};
-  const eventId = existingPayment?.eventId || regData.eventId;
-  const eventType = existingPayment?.eventType || regData.eventType || "Event";
+  const eventId = explicitEventId || existingPayment?.eventId || regData.eventId;
+  const eventType = explicitEventType || existingPayment?.eventType || regData.eventType || "Event";
   const finalAmount = Number(amount) || existingPayment?.amount || 0;
 
   if (!eventId) {

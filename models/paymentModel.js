@@ -142,6 +142,36 @@ const paymentSchema = new mongoose.Schema(
       default: null,
     },
 
+    // Webhook Audit & Lifecycle Tracking
+    webhookStatus: {
+      type: String,
+      enum: [
+        "NotReceived",
+        "Received",
+        "Processed",
+        "Failed",
+        "Skipped",
+      ],
+      default: "NotReceived",
+      index: true,
+    },
+
+    webhookEvent: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+
+    webhookReceivedAt: {
+      type: Date,
+      default: null,
+    },
+
+    webhookDetails: {
+      type: Object,
+      default: {},
+    },
+
     // Extra Data
     remarks: {
       type: String,
