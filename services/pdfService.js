@@ -1,9 +1,11 @@
 import fs from "fs/promises";
+import { existsSync } from "fs";
+import { tmpdir } from "os";
 import path from "path";
 import handlebars from "handlebars";
 import puppeteer from "puppeteer";
 import puppeteerCore from "puppeteer-core";
-import chromium from "@sparticuz/chromium";
+import chromium, { setupLambdaEnvironment, inflate } from "@sparticuz/chromium";
 
 // Register Handlebars Helpers
 handlebars.registerHelper("renderDots", (rating) => {
@@ -182,8 +184,14 @@ export const normalizeResumeFormData = (input = {}) => {
 export const renderResumeHTML = async (templateId, formData) => {
   const normalizedData = normalizeResumeFormData(formData);
   const safeId = Math.min(Math.max(1, Number(templateId) || 1), 7);
-  const templatePath = path.resolve(process.cwd(), "templates", "resumes", `template${safeId}.html`);
-  const templateContent = await fs.readFile(templatePath, "utf8");
+  const primaryPath = path.resolve(process.cwd(), "templates", "resumes", `template${safeId}.html`);
+  let templateContent;
+  try {
+    templateContent = await fs.readFile(primaryPath, "utf8");
+  } catch (err) {
+    const fallbackPath = path.resolve(process.cwd(), "templates", `template${safeId}.html`);
+    templateContent = await fs.readFile(fallbackPath, "utf8");
+  }
 
   const compiledTemplate = handlebars.compile(templateContent);
   return compiledTemplate(normalizedData);
@@ -263,6 +271,27 @@ export const launchPuppeteerBrowser = async (extraArgs = []) => {
   // 1. Linux Cloud Environment (Azure App Service / Ubuntu container)
   if (process.platform === "linux") {
     try {
+      // Force @sparticuz/chromium to unpack Amazon Linux 2023 shared libraries (libnss3, libatk, etc.)
+      // which is otherwise skipped on Azure App Service because it does not have AWS/Vercel env vars.
+      process.env.AWS_EXECUTION_ENV = "AWS_Lambda_nodejs22.x";
+      chromium.setGraphicsMode = false;
+
+      const al2023LibPath = path.join(tmpdir(), "al2023", "lib");
+      setupLambdaEnvironment(al2023LibPath);
+
+      // Ensure al2023 shared libraries are uncompressed to /tmp/al2023/lib
+      if (!existsSync(al2023LibPath)) {
+        try {
+          const binDir = path.resolve(process.cwd(), "node_modules", "@sparticuz", "chromium", "bin");
+          const al2023TarBr = path.join(binDir, "al2023.tar.br");
+          if (existsSync(al2023TarBr)) {
+            await inflate(al2023TarBr);
+          }
+        } catch (inflateErr) {
+          console.warn("[Chromium] Manual al2023 inflate notice:", inflateErr.message);
+        }
+      }
+
       const execPath = await chromium.executablePath();
       if (execPath) {
         return await puppeteerCore.launch({
@@ -271,7 +300,11 @@ export const launchPuppeteerBrowser = async (extraArgs = []) => {
             "--no-first-run",
             "--no-zygote",
             "--single-process",
-            ...commonArgs,
+            "--disable-dev-shm-usage",
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--disable-gpu",
+            ...extraArgs,
           ],
           defaultViewport: chromium.defaultViewport,
           executablePath: execPath,
@@ -361,17 +394,16 @@ export const generateCertificatePDFBuffer = async (data) => {
 export const generateResumePDFBuffer = async (templateId, formData) => {
   const htmlContent = await renderResumeHTML(templateId, formData);
 
-  const browser = await launchPuppeteerBrowser(["--font-render-hinting=none"]);
+  const browser = await launchPuppeteerBrowser();
 
   try {
     const page = await browser.newPage();
-    await page.emulateMediaType("screen");
     await page.setContent(htmlContent, { waitUntil: "networkidle0" });
 
     const pdfBuffer = await page.pdf({
       format: "A4",
+      landscape: false,
       printBackground: true,
-      preferCSSPageSize: true,
       margin: { top: "0px", right: "0px", bottom: "0px", left: "0px" }
     });
 
