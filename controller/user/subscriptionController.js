@@ -44,7 +44,7 @@ export const getSubscriptionPlans = async (req, res, next) => {
           tier: "pro",
           billingCycle: "90 days",
           durationDays: 90,
-          price: 1,
+          price: 499,
           currency: "INR",
           features: ["Access all events & courses", "Priority support", "Pro badge"],
           isActive: true,
