@@ -1,4 +1,5 @@
 import Competition from "../models/competitionModel.js";
+import mongoose from "mongoose";
 import fs from "fs";
 import path from "path";
 import EventRegistration from "../models/eventRegistrationModel.js";
@@ -371,14 +372,18 @@ export const getAllCompetition = async (req, res, next) => {
 export const getCompetitionById = async (req, res, next) => {
     try {
         const { id } = req.params;
-        const competition = await Competition.findById(id);
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            throw Object.assign(new Error("Invalid Competition ID format"), { status: 400 });
+        }
+
+        const competition = await Competition.findById(id).lean();
 
         if (!competition) {
             throw Object.assign(new Error("Competition not found"), { status: 404 });
         }
 
-
-        const revenue = await getEventFinancials(id)
+        const revenue = await getEventFinancials(id);
 
         const registrations = await EventRegistration.find({
             eventId: id,
@@ -387,6 +392,8 @@ export const getCompetitionById = async (req, res, next) => {
             .populate("userId", "email phone name")
             .sort({ createdAt: -1 })
             .lean();
+
+        const registeredList = await enrichRegistrationsWithUserDetails(registrations);
 
         const competitionData = {
             ...competition,
@@ -403,7 +410,7 @@ export const getCompetitionById = async (req, res, next) => {
                 registrations: {
                     count: registeredList.length,
                     list: registeredList,
-                    revenue
+                    revenue,
                 },
             },
         });
