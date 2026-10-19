@@ -9,6 +9,7 @@ import Competition from "../../models/competitionModel.js";
 import {
   fulfillSubscriptionPayment,
   fulfillEventRegistrationPayment,
+  expireStalePendingPayments,
 } from "../../services/paymentFulfillmentService.js";
 
 // Indian Standard Time (IST, UTC+05:30) offset in milliseconds (5.5 hours)
@@ -200,6 +201,9 @@ export const getUserTransactionHistory = async (req, res, next) => {
     const pageNumber = Math.max(1, parseInt(page, 10) || 1);
     const pageSize = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
     const skip = (pageNumber - 1) * pageSize;
+
+    // Auto-expire pending payments older than 5 minutes for this user
+    await expireStalePendingPayments(targetUserId);
 
     // Execute paginated query and total count in parallel
     const [rawPayments, totalRecords, summaryAgg] = await Promise.all([

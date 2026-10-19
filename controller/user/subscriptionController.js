@@ -4,7 +4,10 @@ import User from "../../models/userModel.js";
 import Payment from "../../models/paymentModel.js";
 import SubscriptionPlan from "../../models/subscriptionPlanModel.js";
 import { triggerMissionNotification } from "../../services/xpService.js";
-import { fulfillSubscriptionPayment } from "../../services/paymentFulfillmentService.js";
+import {
+  fulfillSubscriptionPayment,
+  expireStalePendingPayments,
+} from "../../services/paymentFulfillmentService.js";
 
 /**
  * Initializes and returns a Razorpay client instance.
@@ -41,7 +44,7 @@ export const getSubscriptionPlans = async (req, res, next) => {
           tier: "pro",
           billingCycle: "90 days",
           durationDays: 90,
-          price: 499,
+          price: 1,
           currency: "INR",
           features: ["Access all events & courses", "Priority support", "Pro badge"],
           isActive: true,
@@ -215,6 +218,7 @@ export const checkSubscriptionPaymentStatus = async (req, res, next) => {
     }
 
     // 1. Check local database record first
+    await expireStalePendingPayments(userId);
     const payment = await Payment.findOne({ orderId });
     if (!payment) {
       return res.status(404).json({ success: false, message: "Order record not found." });
@@ -366,7 +370,10 @@ export const getActiveSubscribedUsers = async (req, res, next) => {
 };
 
 /**
- * User: Fetch plan history with currentPlan and previousPlans (current plan excluded from previousPlans)
+ * Fetches user subscription plan tenure and complete transaction history.
+ * Decouples active plan validity (computed strictly from verified 'Success' payments)
+ * from transaction audit records so that newly initiated orders ('Pending' order IDs)
+ * are immediately visible in transaction history without corrupting active plan state.
  */
 export const getUserPlanHistory = async (req, res, next) => {
   try {
@@ -378,12 +385,21 @@ export const getUserPlanHistory = async (req, res, next) => {
 
     const userDoc = await User.findById(userId).select("subscription");
 
-    // Fetch all successful subscription payments sorted by newest first
-    const paymentHistory = await Payment.find({
+    // Automatically transition any pending payments older than 5 minutes to Failed
+    await expireStalePendingPayments(userId);
+
+    // Fetch all subscription payment attempts (Pending, Success, Failed) sorted newest first
+    const allPayments = await Payment.find({
       userId,
       referenceType: "Subscription",
-      paymentStatus: "Success",
-    }).sort({ createdAt: -1 });
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // Isolate verified payments for determining active plan start dates & payment details
+    const successfulPayments = allPayments.filter(
+      (p) => p.paymentStatus === "Success"
+    );
 
     const rawExpiry = userDoc?.subscription?.expiryDate;
     const expiryDate = rawExpiry ? new Date(rawExpiry) : null;
@@ -418,6 +434,9 @@ export const getUserPlanHistory = async (req, res, next) => {
         if (payment.remarks.startsWith("Subscription extended: ")) {
           return payment.remarks.replace("Subscription extended: ", "").trim();
         }
+        if (payment.remarks.startsWith("Subscription Initiated: ")) {
+          return payment.remarks.replace("Subscription Initiated: ", "").trim();
+        }
       }
       if (payment?.metadata?.planName) {
         return payment.metadata.planName;
@@ -430,7 +449,7 @@ export const getUserPlanHistory = async (req, res, next) => {
     if (isCurrentlyActive && userDoc?.subscription) {
       planDetails = {
         planName: userDoc.subscription.planName || "Pro Quarterly",
-        startDate: formatDateOnly(userDoc.subscription.startDate) || formatDateOnly(paymentHistory[0]?.createdAt),
+        startDate: formatDateOnly(userDoc.subscription.startDate) || formatDateOnly(successfulPayments[0]?.createdAt),
         expiryDate: formatDateOnly(endOfDayExpiry),
         isPlanActive: true,
         isExpired: false,
@@ -443,22 +462,25 @@ export const getUserPlanHistory = async (req, res, next) => {
           startDate: userDoc.subscription.startDate,
           expiryDate: userDoc.subscription.expiryDate,
           isPlanActive: true,
-          paymentDetails: paymentHistory[0] || null,
+          paymentDetails: successfulPayments[0] || null,
         },
       ];
 
-      // Exclude current plan's payment from previous plans
-      previousPlans = paymentHistory.slice(1);
-    } else if (isExpired && (rawExpiry || paymentHistory.length > 0)) {
+      // Exclude only the currently active successful payment from previous plans
+      const activePaymentId = successfulPayments[0]?._id?.toString();
+      previousPlans = allPayments.filter(
+        (p) => p._id?.toString() !== activePaymentId
+      );
+    } else if (isExpired && (rawExpiry || successfulPayments.length > 0)) {
       planDetails = {
-        planName: userDoc?.subscription?.planName || (paymentHistory[0] ? extractPlanName(paymentHistory[0]) : "Pro Quarterly"),
-        startDate: formatDateOnly(userDoc?.subscription?.startDate) || formatDateOnly(paymentHistory[0]?.createdAt),
+        planName: userDoc?.subscription?.planName || (successfulPayments[0] ? extractPlanName(successfulPayments[0]) : "Pro Quarterly"),
+        startDate: formatDateOnly(userDoc?.subscription?.startDate) || formatDateOnly(successfulPayments[0]?.createdAt),
         expiryDate: formatDateOnly(endOfDayExpiry),
         isPlanActive: false,
         isExpired: true,
       };
       currentPlan = [];
-      previousPlans = paymentHistory;
+      previousPlans = allPayments;
     } else {
       planDetails = {
         planName: "Free",
@@ -468,7 +490,7 @@ export const getUserPlanHistory = async (req, res, next) => {
         isExpired: false,
       };
       currentPlan = [];
-      previousPlans = paymentHistory;
+      previousPlans = allPayments;
     }
 
     return res.status(200).json({
@@ -477,6 +499,7 @@ export const getUserPlanHistory = async (req, res, next) => {
         planDetails,
         currentPlan,
         previousPlans,
+        transactions: allPayments,
       },
     });
   } catch (error) {

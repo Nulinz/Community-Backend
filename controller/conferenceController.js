@@ -56,6 +56,9 @@ export const createConferenceForm = async (req, res, next) => {
             teamFees,
             lateFees,
             gst,
+            gstPercentage,
+            gstPercent,
+            gstAmount,
             prizesAvailable,
             firstPrize,
             secondPrize,
@@ -204,7 +207,22 @@ export const createConferenceForm = async (req, res, next) => {
         conference.individualFees = validateFee(individualFees, "Individual Fees");
         conference.teamFees = validateFee(teamFees, "Team Fees");
         conference.lateFees = validateFee(lateFees, "Late Fees");
-        conference.gst = toCleanString(gst) || "No";
+        const cleanGst = toCleanString(gst) || "No";
+        conference.gst = cleanGst;
+        if (cleanGst.toLowerCase() === "yes") {
+            const rawPercent = gstPercentage ?? gstPercent ?? 0;
+            const cleanPercent = Number(String(rawPercent).replace("%", "").trim()) || 0;
+            conference.gstPercentage = cleanPercent;
+            const baseFee = Number(conference.individualFees) || Number(conference.teamFees) || 0;
+            const computedGstAmount = (baseFee * cleanPercent) / 100;
+            conference.gstAmount = (gstAmount !== undefined && gstAmount !== null && gstAmount !== "")
+                ? Number(gstAmount) || 0
+                : Math.round(computedGstAmount * 100) / 100;
+        } else {
+            conference.gstPercentage = 0;
+            conference.gstAmount = 0;
+        }
+
         conference.customFees = parseDynamicArray(customFees)
             .map((item) => ({
                 feeLabel: toCleanString(item?.feeLabel),
@@ -350,10 +368,18 @@ export const getConferenceById = async (req, res, next) => {
 
     const registeredList = await enrichRegistrationsWithUserDetails(registrations);
 
+    const conferenceData = {
+      ...conference,
+      gstPercent: conference.gstPercentage || 0,
+      gstAmount: conference.gstAmount !== undefined && conference.gstAmount !== null
+        ? conference.gstAmount
+        : (conference.gst === "Yes" ? Math.round(((Number(conference.individualFees) || Number(conference.teamFees) || 0) * (conference.gstPercentage || 0)) / 100 * 100) / 100 : 0),
+    };
+
     return res.status(200).json({
       success: true,
       data: {
-        conference,
+        conference: conferenceData,
         registrations: {
           count: registeredList.length,
           list: registeredList,

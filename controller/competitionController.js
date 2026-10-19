@@ -57,6 +57,9 @@ export const createCompetitionForm = async (req, res, next) => {
             teamFees,
             lateFees,
             gst,
+            gstPercentage,
+            gstPercent,
+            gstAmount,
             internshipOpportunity,
             internshipOpportunityDetails,
             placementOpportunity,
@@ -215,7 +218,22 @@ export const createCompetitionForm = async (req, res, next) => {
         competition.individualFees = validateFee(individualFees, "Individual Fees");
         competition.teamFees = validateFee(teamFees, "Team Fees");
         competition.lateFees = validateFee(lateFees, "Late Fees");
-        competition.gst = toCleanString(gst) || "No";
+        const cleanGst = toCleanString(gst) || "No";
+        competition.gst = cleanGst;
+        if (cleanGst.toLowerCase() === "yes") {
+            const rawPercent = gstPercentage ?? gstPercent ?? 0;
+            const cleanPercent = Number(String(rawPercent).replace("%", "").trim()) || 0;
+            competition.gstPercentage = cleanPercent;
+            const baseFee = Number(competition.individualFees) || Number(competition.teamFees) || 0;
+            const computedGstAmount = (baseFee * cleanPercent) / 100;
+            competition.gstAmount = (gstAmount !== undefined && gstAmount !== null && gstAmount !== "")
+                ? Number(gstAmount) || 0
+                : Math.round(computedGstAmount * 100) / 100;
+        } else {
+            competition.gstPercentage = 0;
+            competition.gstAmount = 0;
+        }
+
         competition.customFees = parseDynamicArray(customFees)
             .map((item) => ({
                 feeLabel: toCleanString(item?.feeLabel),
@@ -370,12 +388,18 @@ export const getCompetitionById = async (req, res, next) => {
             .sort({ createdAt: -1 })
             .lean();
 
-        const registeredList = await enrichRegistrationsWithUserDetails(registrations);
+        const competitionData = {
+            ...competition,
+            gstPercent: competition.gstPercentage || 0,
+            gstAmount: competition.gstAmount !== undefined && competition.gstAmount !== null
+                ? competition.gstAmount
+                : (competition.gst === "Yes" ? Math.round(((Number(competition.individualFees) || Number(competition.teamFees) || 0) * (competition.gstPercentage || 0)) / 100 * 100) / 100 : 0),
+        };
 
         res.status(200).json({
             success: true,
             data: {
-                competition,
+                competition: competitionData,
                 registrations: {
                     count: registeredList.length,
                     list: registeredList,

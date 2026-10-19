@@ -292,3 +292,43 @@ export const fulfillEventRegistrationPayment = async ({
   };
 };
 
+/**
+ * Auto-expires any 'Pending' payment records for Subscriptions and EventRegistrations
+ * that have exceeded the 5-minute timeout window.
+ * Transitions their paymentStatus to 'Failed' with an explicit timeout reason,
+ * ensuring abandoned checkout sessions never remain in pending limbo permanently.
+ */
+export const expireStalePendingPayments = async (userId = null) => {
+  try {
+    const nowIST = getNowIST();
+    const thresholdIST = new Date(nowIST.getTime() - 5 * 60 * 1000);
+    const thresholdUTC = new Date(Date.now() - 5 * 60 * 1000);
+
+    const filter = {
+      paymentStatus: "Pending",
+      referenceType: { $in: ["Subscription", "EventRegistration"] },
+      $or: [
+        { createdAt: { $lt: thresholdIST } },
+        { createdAt: { $lt: thresholdUTC } },
+      ],
+    };
+
+    if (userId) {
+      filter.userId = userId;
+    }
+
+    const result = await Payment.updateMany(filter, {
+      $set: {
+        paymentStatus: "Failed",
+        remarks: "Payment timed out: session expired after 5 minutes.",
+        updatedAt: nowIST,
+      },
+    });
+
+    return result;
+  } catch (err) {
+    console.error("Error expiring stale pending payments:", err?.message);
+    return null;
+  }
+};
+

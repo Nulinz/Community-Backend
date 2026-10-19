@@ -59,6 +59,9 @@ export const createEventForm = async (req, res, next) => {
             teamFees,
             lateFees,
             gst,
+            gstPercentage,
+            gstPercent,
+            gstAmount,
             prizesAvailable,
             firstPrize,
             secondPrize,
@@ -207,7 +210,22 @@ export const createEventForm = async (req, res, next) => {
         event.individualFees = validateFee(individualFees, "Individual Fees");
         event.teamFees = validateFee(teamFees, "Team Fees");
         event.lateFees = validateFee(lateFees, "Late Fees");
-        event.gst = toCleanString(gst) || "No";
+        const cleanGst = toCleanString(gst) || "No";
+        event.gst = cleanGst;
+        if (cleanGst.toLowerCase() === "yes") {
+            const rawPercent = gstPercentage ?? gstPercent ?? 0;
+            const cleanPercent = Number(String(rawPercent).replace("%", "").trim()) || 0;
+            event.gstPercentage = cleanPercent;
+            const baseFee = Number(event.individualFees) || Number(event.teamFees) || 0;
+            const computedGstAmount = (baseFee * cleanPercent) / 100;
+            event.gstAmount = (gstAmount !== undefined && gstAmount !== null && gstAmount !== "")
+                ? Number(gstAmount) || 0
+                : Math.round(computedGstAmount * 100) / 100;
+        } else {
+            event.gstPercentage = 0;
+            event.gstAmount = 0;
+        }
+
         event.customFees = parseDynamicArray(customFees)
             .map((item) => ({
                 feeLabel: toCleanString(item?.feeLabel),
@@ -336,6 +354,14 @@ export const getEventById = async (req, res, next) => {
             throw Object.assign(new Error("Event not found"), { status: 404 });
         }
         const revenue = await getEventFinancials(id)
+        const eventData = {
+            ...event,
+            gstPercent: event.gstPercentage || 0,
+            gstAmount: event.gstAmount !== undefined && event.gstAmount !== null
+                ? event.gstAmount
+                : (event.gst === "Yes" ? Math.round(((Number(event.individualFees) || Number(event.teamFees) || 0) * (event.gstPercentage || 0)) / 100 * 100) / 100 : 0),
+        };
+
         // ── 2. Get Registered List ──────────────────────────────
         const registrations = await EventRegistration.find({
             eventId: id,
@@ -350,7 +376,7 @@ export const getEventById = async (req, res, next) => {
         return res.status(200).json({
             success: true,
             data: {
-                event,
+                event: eventData,
                 registrations: {
                     count: registeredList.length,
                     list: registeredList,

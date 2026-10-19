@@ -61,6 +61,9 @@ export const createSeminarForm = async (req, res, next) => {
             teamFees,
             lateFees,
             gst,
+            gstPercentage,
+            gstPercent,
+            gstAmount,
             firstPrize,
             secondPrize,
             thirdPrize,
@@ -206,7 +209,22 @@ export const createSeminarForm = async (req, res, next) => {
         seminar.individualFees = validateFee(individualFees, "Individual Fees");
         seminar.teamFees = validateFee(teamFees, "Team Fees");
         seminar.lateFees = validateFee(lateFees, "Late Fees");
-        seminar.gst = toCleanString(gst) || "No";
+        const cleanGst = toCleanString(gst) || "No";
+        seminar.gst = cleanGst;
+        if (cleanGst.toLowerCase() === "yes") {
+            const rawPercent = gstPercentage ?? gstPercent ?? 0;
+            const cleanPercent = Number(String(rawPercent).replace("%", "").trim()) || 0;
+            seminar.gstPercentage = cleanPercent;
+            const baseFee = Number(seminar.individualFees) || Number(seminar.teamFees) || 0;
+            const computedGstAmount = (baseFee * cleanPercent) / 100;
+            seminar.gstAmount = (gstAmount !== undefined && gstAmount !== null && gstAmount !== "")
+                ? Number(gstAmount) || 0
+                : Math.round(computedGstAmount * 100) / 100;
+        } else {
+            seminar.gstPercentage = 0;
+            seminar.gstAmount = 0;
+        }
+
         seminar.customFees = parseDynamicArray(customFees)
             .map((item) => ({
                 feeLabel: toCleanString(item?.feeLabel),
@@ -350,10 +368,18 @@ export const getSeminarById = async (req, res, next) => {
  const revenue=await getEventFinancials(id)
     const registeredList = await enrichRegistrationsWithUserDetails(registrations);
 
+    const seminarData = {
+      ...seminar,
+      gstPercent: seminar.gstPercentage || 0,
+      gstAmount: seminar.gstAmount !== undefined && seminar.gstAmount !== null
+        ? seminar.gstAmount
+        : (seminar.gst === "Yes" ? Math.round(((Number(seminar.individualFees) || Number(seminar.teamFees) || 0) * (seminar.gstPercentage || 0)) / 100 * 100) / 100 : 0),
+    };
+
     return res.status(200).json({
       success: true,
       data: {
-        seminar,
+        seminar: seminarData,
         registrations: {
           count: registeredList.length,
           list: registeredList,

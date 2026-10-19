@@ -6,7 +6,10 @@ import Conference from "../../models/conferenceModel.js";
 import Competition from "../../models/competitionModel.js";
 import Seminar from "../../models/seminarModel.js";
 import Event from "../../models/eventModel.js";
-import { fulfillEventRegistrationPayment } from "../../services/paymentFulfillmentService.js";
+import {
+  fulfillEventRegistrationPayment,
+  expireStalePendingPayments,
+} from "../../services/paymentFulfillmentService.js";
 import { awardXP, triggerMissionNotification } from "../../services/xpService.js";
 import { sendAndSaveNotification } from "../../helper/sendAndSaveNotification.js";
 
@@ -369,6 +372,9 @@ export const checkEventRegistrationPaymentStatus = async (req, res, next) => {
     if (!orderId) {
       return res.status(400).json({ status: false, message: "Order ID is required." });
     }
+
+    // Auto-expire pending orders older than 5 minutes
+    await expireStalePendingPayments(userId);
 
     const paymentRecord = await Payment.findOne({ orderId }).lean();
     if (!paymentRecord) {

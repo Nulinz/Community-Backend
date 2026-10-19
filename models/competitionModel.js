@@ -68,6 +68,8 @@ const competitionSchema = new mongoose.Schema(
     teamFees: { type: Number, default: 0 },
     lateFees: { type: Number, default: 0 },
     gst: { type: String, trim: true, default: "No" },
+    gstPercentage: { type: Number, default: 0 },
+    gstAmount: { type: Number, default: 0 },
     customFees: [customFeeSchema],
 
     // Opportunities

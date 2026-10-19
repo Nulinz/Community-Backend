@@ -56,7 +56,7 @@ const userDashboard = async (req, res) => {
         .sort({ createdAt: -1 })
         .limit(3)
         .select(
-          "eventName coverImage registrationType eventType eventCategory organizer c_by mode description individualFees teamFees lateFees gst totalSeats eventDate city image isActive createdAt"
+          "eventName coverImage registrationType eventType eventCategory organizer c_by mode description individualFees teamFees lateFees gst gstPercentage gstAmount totalSeats eventDate city image isActive createdAt"
         ),
 
       Company.find()
@@ -1671,7 +1671,7 @@ const getAllCompetitions = async (req, res) => {
 
     const competitions = await Competition.find({ isActive: true, status: "approved" })
       .sort({ createdAt: -1 })
-      .select("eventName registrationType coverImage organizer eventDate eventEndDate eventStartTime eventEndTime externalRegistrationLink eligibilityDetails city totalSeats individualFees teamFees lateFees gst mode registrationStartDate createdAt");
+      .select("eventName registrationType coverImage organizer eventDate eventEndDate eventStartTime eventEndTime externalRegistrationLink eligibilityDetails city totalSeats individualFees teamFees lateFees gst gstPercentage gstAmount mode registrationStartDate createdAt");
 
     const data = await Promise.all(
       competitions.map(async (item) => {
@@ -2431,7 +2431,7 @@ const getAllConferences = async (req, res) => {
     const conferences = await Conference.find({ isActive: true, status: "approved" })
       .sort({ createdAt: -1 })
       .select(
-        "eventName organizer registrationType mode eventDate eventEndDate eventStartTime eventEndTime externalRegistrationLink registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees gst city eligibilityDetails teamOrIndividualEvent createdAt"
+        "eventName organizer registrationType mode eventDate eventEndDate eventStartTime eventEndTime externalRegistrationLink registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees gst gstPercentage gstAmount city eligibilityDetails teamOrIndividualEvent createdAt"
       );
 
     const data = await Promise.all(
@@ -2518,7 +2518,7 @@ const getAllTechnicalEvents = async (req, res) => {
     const events = await Event.find({ isActive: true, status: { $in: ["approved", "Approved"] }, eventType: "Technical" })
       .sort({ createdAt: -1 })
       .select(
-        "eventName eventType eventCategory description allowedDepartments organizer mode eventDate eventEndDate eventStartTime eventEndTime onlinePlatformLink externalRegistrationLink registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees gst city eligibilityDetails teamOrIndividualEvent c_by status isActive createdAt"
+        "eventName eventType eventCategory description allowedDepartments organizer mode eventDate eventEndDate eventStartTime eventEndTime onlinePlatformLink externalRegistrationLink registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees gst gstPercentage gstAmount city eligibilityDetails teamOrIndividualEvent c_by status isActive createdAt"
       );
 
     const data = await Promise.all(
@@ -2559,7 +2559,7 @@ const getAllNonTechnicalEvents = async (req, res) => {
     const events = await Event.find({ isActive: true, status: { $in: ["approved", "Approved"] }, eventType: "Non Technical" })
       .sort({ createdAt: -1 })
       .select(
-        "eventName eventType eventCategory description allowedDepartments organizer mode eventDate eventEndDate eventStartTime eventEndTime onlinePlatformLink externalRegistrationLink registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees gst city eligibilityDetails teamOrIndividualEvent c_by status isActive createdAt"
+        "eventName eventType eventCategory description allowedDepartments organizer mode eventDate eventEndDate eventStartTime eventEndTime onlinePlatformLink externalRegistrationLink registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees gst gstPercentage gstAmount city eligibilityDetails teamOrIndividualEvent c_by status isActive createdAt"
       );
 
     const data = await Promise.all(
@@ -2648,7 +2648,7 @@ const getAllTechnicalSeminars = async (req, res) => {
     const seminars = await Seminar.find({ isActive: true, status: "approved", eventType: "Technical" })
       .sort({ createdAt: -1 })
       .select(
-        "eventName eventType organizer mode eventDate eventEndDate eventStartTime eventEndTime externalRegistrationLink registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees gst city eligibilityDetails teamOrIndividualEvent createdAt"
+        "eventName eventType organizer mode eventDate eventEndDate eventStartTime eventEndTime externalRegistrationLink registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees gst gstPercentage gstAmount city eligibilityDetails teamOrIndividualEvent createdAt"
       );
 
     const data = await Promise.all(
@@ -2686,7 +2686,7 @@ const getAllNonTechnicalSeminars = async (req, res) => {
     const seminars = await Seminar.find({ isActive: true, status: "approved", eventType: "Non Technical" })
       .sort({ createdAt: -1 })
       .select(
-        "eventName eventType organizer mode eventDate eventEndDate eventStartTime eventEndTime externalRegistrationLink registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees gst city eligibilityDetails teamOrIndividualEvent createdAt"
+        "eventName eventType organizer mode eventDate eventEndDate eventStartTime eventEndTime externalRegistrationLink registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees gst gstPercentage gstAmount city eligibilityDetails teamOrIndividualEvent createdAt"
       );
 
     const data = await Promise.all(
@@ -3489,7 +3489,7 @@ const getSeminarsPage = async (req, res) => {
     })
       .sort({ createdAt: -1 })
       .select(
-        "eventName registrationType eventType description allowedDepartments organizer mode eventDate eventEndDate eventStartTime eventEndTime onlinePlatformLink externalRegistrationLink coverImage venueAddress address venueName city totalSeats individualFees teamFees lateFees gst registrationStartDate registrationEndDate c_by status isActive createdAt"
+        "eventName registrationType eventType description allowedDepartments organizer mode eventDate eventEndDate eventStartTime eventEndTime onlinePlatformLink externalRegistrationLink coverImage venueAddress address venueName city totalSeats individualFees teamFees lateFees gst gstPercentage gstAmount registrationStartDate registrationEndDate c_by status isActive createdAt"
       )
       .lean();
 
