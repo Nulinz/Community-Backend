@@ -77,7 +77,7 @@ export const getCompanyDashboard = async (req, res) => {
     const userId = req.user._id;
 
     // Get company by userId
-    const company = await Company.findOne({ userId }).select("_id");
+    const company = await Company.findOne({ userId }).select("_id companyName");
     if (!company) {
       return res.status(404).json({
         status: false,
@@ -97,6 +97,19 @@ export const getCompanyDashboard = async (req, res) => {
     // Queries scoped to company user or company ID
     const ownerQuery = { $in: [userId, companyId] };
 
+    const escapedName = company.companyName?.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const nameRegex = escapedName ? new RegExp(`^${escapedName}$`, "i") : null;
+
+    // Filter to count both company-posted and admin-posted active opportunities
+    const activePostingFilter = {
+      isActive: true,
+      $or: [
+        { c_by: userId },
+        ...(nameRegex ? [{ companyName: nameRegex }] : []),
+        ...(nameRegex ? [{ organizer: nameRegex }] : []),
+      ],
+    };
+
     // ── All stats in parallel ──────────────────────────────────
     const [
       totalFollowers,
@@ -110,9 +123,9 @@ export const getCompanyDashboard = async (req, res) => {
       lastApplied,
     ] = await Promise.all([
       CompanyFollow.countDocuments({ companyId: ownerQuery }),
-      Internship.countDocuments({ c_by: userId, isActive: true }),
-      Freelance.countDocuments({ c_by: userId, isActive: true }),
-      Job.countDocuments({ c_by: userId, isActive: true }),
+      Internship.countDocuments(activePostingFilter),
+      Freelance.countDocuments(activePostingFilter),
+      Job.countDocuments(activePostingFilter),
 
       // Live Events: occurring today and active
       Event.countDocuments({
@@ -537,19 +550,31 @@ export const getMyCompany = async (req, res, next) => {
       is_active: userId?.is_active ?? true
     };
 
+    const escapedName = rest.companyName?.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const nameRegex = escapedName ? new RegExp(`^${escapedName}$`, "i") : null;
+
+    // Query both company-posted and admin-posted opportunities for this company
+    const postingFilter = {
+      $or: [
+        ...(companyUserId ? [{ c_by: companyUserId }] : []),
+        ...(nameRegex ? [{ companyName: nameRegex }] : []),
+        ...(nameRegex ? [{ organizer: nameRegex }] : []),
+      ],
+    };
+
     // ── 2. Get Postings (Jobs, Internships, Freelances) concurrently ──
     const [rawJobs, rawInternships, rawFreelances] = await Promise.all([
-      Job.find({ c_by: companyUserId })
+      Job.find(postingFilter)
         .sort({ createdAt: -1 })
         .select("jobTitle domain domains location companyName duration salary salaryType salaryMin salaryMax eligibility mode totalOpenings createdAt")
         .lean(),
 
-      Internship.find({ c_by: companyUserId })
+      Internship.find(postingFilter)
         .sort({ createdAt: -1 })
         .select("jobTitle domain domains location companyName duration salary paymentAmount internshipType eligibility createdAt")
         .lean(),
 
-      Freelance.find({ c_by: companyUserId })
+      Freelance.find(postingFilter)
         .sort({ createdAt: -1 })
         .select("jobTitle domain domains location companyName eligibility jobStartDate jobEndDate duration totalOpenings mode salary createdAt")
         .lean(),
@@ -694,19 +719,31 @@ export const getCompanyById = async (req, res, next) => {
       is_active: userId?.is_active ?? true,
     };
 
+    const escapedName = rest.companyName?.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const nameRegex = escapedName ? new RegExp(`^${escapedName}$`, "i") : null;
+
+    // Query both company-posted and admin-posted opportunities for this company
+    const postingFilter = {
+      $or: [
+        ...(companyUserId ? [{ c_by: companyUserId }] : []),
+        ...(nameRegex ? [{ companyName: nameRegex }] : []),
+        ...(nameRegex ? [{ organizer: nameRegex }] : []),
+      ],
+    };
+
     // ── 2. Get Postings (Jobs, Internships, Freelances) concurrently ──
     const [rawJobs, rawInternships, rawFreelances] = await Promise.all([
-      Job.find({ c_by: companyUserId })
+      Job.find(postingFilter)
         .sort({ createdAt: -1 })
         .select("jobTitle domain domains location companyName duration salary salaryType salaryMin salaryMax eligibility mode totalOpenings createdAt")
         .lean(),
 
-      Internship.find({ c_by: companyUserId })
+      Internship.find(postingFilter)
         .sort({ createdAt: -1 })
         .select("jobTitle domain domains location companyName duration salary paymentAmount internshipType eligibility createdAt")
         .lean(),
 
-      Freelance.find({ c_by: companyUserId })
+      Freelance.find(postingFilter)
         .sort({ createdAt: -1 })
         .select("jobTitle domain domains location companyName eligibility jobStartDate jobEndDate duration totalOpenings mode salary createdAt")
         .lean(),

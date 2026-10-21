@@ -900,7 +900,7 @@ const getSavedJobs = async (req, res) => {
         path: "jobId",
         match: { isActive: true },
         select:
-          "jobTitle domain domains jobType location c_by companyName duration salary salaryType salaryMin salaryMax createdAt jobStartDate jobEndDate totalOpenings mode eligibility",
+          "jobTitle domain domains jobType location c_by companyName companyLogo duration salary salaryType salaryMin salaryMax createdAt jobStartDate jobEndDate totalOpenings mode eligibility",
         populate: {
           path: "c_by",
           select: "role",
@@ -908,62 +908,108 @@ const getSavedJobs = async (req, res) => {
       })
       .sort({ createdAt: -1 });
 
+    const activeSaved = savedJobs.filter((item) => item.jobId);
+    const validJobIds = activeSaved.map((item) => item.jobId._id);
+    const creatorUserIds = activeSaved.map((item) => item.jobId.c_by?._id).filter(Boolean);
+    const companyNames = activeSaved.map((item) => item.jobId.companyName?.trim()).filter(Boolean);
+
+    const userObjectId = mongoose.Types.ObjectId.isValid(userId)
+      ? new mongoose.Types.ObjectId(userId)
+      : userId;
+
+    // Batch lookup application statuses and company branding in parallel to eliminate N+1 queries
+    const [appliedJobs, companiesByCreator, companiesByName] = await Promise.all([
+      validJobIds.length > 0
+        ? AppliedJob.find({
+            $or: [{ userId: userObjectId }, { userId: String(userId) }],
+            jobId: { $in: validJobIds },
+          })
+            .select("jobId")
+            .lean()
+        : [],
+      creatorUserIds.length > 0
+        ? Company.find({
+            $or: [{ userId: { $in: creatorUserIds } }, { c_by: { $in: creatorUserIds } }],
+          })
+            .select("userId c_by companyLogo companyName")
+            .lean()
+        : [],
+      companyNames.length > 0
+        ? Company.find({
+            companyName: { $in: companyNames.map((n) => new RegExp(`^${n}$`, "i")) },
+          })
+            .select("companyLogo companyName")
+            .lean()
+        : [],
+    ]);
+
+    const appliedSet = new Set(appliedJobs.map((a) => String(a.jobId)));
+
+    const companyByCreatorMap = new Map();
+    companiesByCreator.forEach((c) => {
+      if (c.companyLogo) {
+        if (c.userId) companyByCreatorMap.set(String(c.userId), c.companyLogo);
+        if (c.c_by) companyByCreatorMap.set(String(c.c_by), c.companyLogo);
+      }
+    });
+
+    const companyByNameMap = new Map();
+    companiesByName.forEach((c) => {
+      if (c.companyLogo && c.companyName) {
+        companyByNameMap.set(c.companyName.toLowerCase().trim(), c.companyLogo);
+      }
+    });
+
     const STATIC_ADMIN_IMAGE = "referral/assets/index_icon.png";
 
-    // Enrich saved jobs with company branding and application status
-    const enrichedSavedJobs = await Promise.all(
-      savedJobs.map(async (item) => {
-        const job = item.jobId;
-
-        // Skip records where the referenced job is deleted or inactive
-        if (!job) return null;
-
-        let companyImage = null;
-
-        if (job.c_by?.role === "admin") {
-          companyImage = STATIC_ADMIN_IMAGE;
-        } else if (job.c_by?.role === "company") {
-          const company = await Company.findOne({
-            userId: job.c_by._id,
-          })
-            .select("companyLogo")
-            .lean();
-
-          companyImage = company?.companyLogo || null;
-        }
-
-        const fullJobObj = job.toObject();
-        const { domain, salaryMin, salaryMax, ...rawJobObj } = fullJobObj;
-        const itemDomains = Array.isArray(rawJobObj.domains) && rawJobObj.domains.length ? rawJobObj.domains : (domain ? domain.split(",").map(s => s.trim()).filter(Boolean) : []);
-        const jobObj = { ...rawJobObj, domains: itemDomains, salary: formatJobSalary(fullJobObj) };
-        // Use actual jobType from Job (e.g. "Full Time") or fallback to "Internship"
-        const actualJobType = jobObj.jobType || (item.jobType === "Internship" ? "Internship" : "Full Time");
-
-        return {
-          ...item.toObject(),
-          jobType: actualJobType,
-          jobId: {
-            ...jobObj,
-            jobType: actualJobType,
-            companyImage,
-            is_saved: true,
-            isSaved: true,
-            saved: true,
-            is_applied: await checkIsApplied(userId, job._id),
-          },
-        };
-      })
-    );
-
-    // Group items into separate arrays by opportunity type
+    // Enrich saved jobs in memory with dynamic company logos and application statuses
     const job = [];
     const internship = [];
 
-    for (let i = 0; i < savedJobs.length; i++) {
-      const enriched = enrichedSavedJobs[i];
-      if (!enriched) continue;
+    for (const item of savedJobs) {
+      const jobItem = item.jobId;
+      if (!jobItem) continue;
 
-      const originalType = savedJobs[i].jobType?.toLowerCase();
+      const creatorIdStr = jobItem.c_by?._id ? String(jobItem.c_by._id) : null;
+      const normalizedName = jobItem.companyName ? jobItem.companyName.toLowerCase().trim() : null;
+
+      // Dynamic company logo resolution hierarchy:
+      // 1. Direct document companyLogo (explicitly chosen/uploaded during creation)
+      // 2. Matched by companyName from Company collection (case-insensitive)
+      // 3. Matched by creator user ID from Company collection
+      // 4. Fallback to STATIC_ADMIN_IMAGE only if created by admin and no company logo found
+      const dynamicCompanyLogo =
+        jobItem.companyLogo ||
+        (normalizedName && companyByNameMap.get(normalizedName)) ||
+        (creatorIdStr && companyByCreatorMap.get(creatorIdStr)) ||
+        (jobItem.c_by?.role === "admin" ? STATIC_ADMIN_IMAGE : null);
+
+      const fullJobObj = jobItem.toObject();
+      const { domain, salaryMin, salaryMax, ...rawJobObj } = fullJobObj;
+      const itemDomains = Array.isArray(rawJobObj.domains) && rawJobObj.domains.length
+        ? rawJobObj.domains
+        : (domain ? domain.split(",").map((s) => s.trim()).filter(Boolean) : []);
+      const jobObj = { ...rawJobObj, domains: itemDomains, salary: formatJobSalary(fullJobObj) };
+      const actualJobType = jobObj.jobType || (item.jobType === "Internship" ? "Internship" : "Full Time");
+      const isApplied = appliedSet.has(String(jobItem._id));
+
+      const enriched = {
+        ...item.toObject(),
+        jobType: actualJobType,
+        jobId: {
+          ...jobObj,
+          jobType: actualJobType,
+          companyLogo: dynamicCompanyLogo,
+          companyImage: dynamicCompanyLogo,
+          is_saved: true,
+          isSaved: true,
+          saved: true,
+          is_applied: isApplied,
+          isApplied: isApplied,
+        },
+      };
+
+      const originalType = item.jobType?.toLowerCase();
       if (originalType === "job") {
         job.push(enriched);
       } else if (originalType === "internship") {
@@ -995,7 +1041,7 @@ const getSavedJobs = async (req, res) => {
 
 /**
  * Retrieves and returns all saved freelance opportunities for the authenticated user
- * with project details, company branding, and application status.
+ * with project details, dynamic company branding, and application status.
  */
 const getSavedFreelances = async (req, res) => {
   try {
@@ -1010,7 +1056,7 @@ const getSavedFreelances = async (req, res) => {
         path: "jobId",
         match: { isActive: true },
         select:
-          "jobTitle domain domains location c_by companyName duration salary createdAt jobStartDate jobEndDate totalOpenings mode projectType budget budgetType",
+          "jobTitle domain domains location c_by companyName companyLogo duration salary createdAt jobStartDate jobEndDate totalOpenings mode projectType budget budgetType",
         populate: {
           path: "c_by",
           select: "role",
@@ -1018,47 +1064,101 @@ const getSavedFreelances = async (req, res) => {
       })
       .sort({ createdAt: -1 });
 
+    const activeSaved = savedFreelances.filter((item) => item.jobId);
+    const validFreelanceIds = activeSaved.map((item) => item.jobId._id);
+    const creatorUserIds = activeSaved.map((item) => item.jobId.c_by?._id).filter(Boolean);
+    const companyNames = activeSaved.map((item) => item.jobId.companyName?.trim()).filter(Boolean);
+
+    const userObjectId = mongoose.Types.ObjectId.isValid(userId)
+      ? new mongoose.Types.ObjectId(userId)
+      : userId;
+
+    // Batch lookup application statuses and company branding in parallel to eliminate N+1 queries
+    const [appliedJobs, companiesByCreator, companiesByName] = await Promise.all([
+      validFreelanceIds.length > 0
+        ? AppliedJob.find({
+            $or: [{ userId: userObjectId }, { userId: String(userId) }],
+            jobId: { $in: validFreelanceIds },
+          })
+            .select("jobId")
+            .lean()
+        : [],
+      creatorUserIds.length > 0
+        ? Company.find({
+            $or: [{ userId: { $in: creatorUserIds } }, { c_by: { $in: creatorUserIds } }],
+          })
+            .select("userId c_by companyLogo companyName")
+            .lean()
+        : [],
+      companyNames.length > 0
+        ? Company.find({
+            companyName: { $in: companyNames.map((n) => new RegExp(`^${n}$`, "i")) },
+          })
+            .select("companyLogo companyName")
+            .lean()
+        : [],
+    ]);
+
+    const appliedSet = new Set(appliedJobs.map((a) => String(a.jobId)));
+
+    const companyByCreatorMap = new Map();
+    companiesByCreator.forEach((c) => {
+      if (c.companyLogo) {
+        if (c.userId) companyByCreatorMap.set(String(c.userId), c.companyLogo);
+        if (c.c_by) companyByCreatorMap.set(String(c.c_by), c.companyLogo);
+      }
+    });
+
+    const companyByNameMap = new Map();
+    companiesByName.forEach((c) => {
+      if (c.companyLogo && c.companyName) {
+        companyByNameMap.set(c.companyName.toLowerCase().trim(), c.companyLogo);
+      }
+    });
+
     const STATIC_ADMIN_IMAGE = "referral/assets/index_icon.png";
 
-    // Enrich saved freelances with company branding and application status
-    const data = (
-      await Promise.all(
-        savedFreelances.map(async (item) => {
-          const freelance = item.jobId;
+    // Enrich saved freelances in memory with dynamic company logos and application statuses
+    const data = [];
+    for (const item of savedFreelances) {
+      const freelance = item.jobId;
+      if (!freelance) continue;
 
-          // Skip records where the referenced freelance is deleted or inactive
-          if (!freelance) return null;
+      const creatorIdStr = freelance.c_by?._id ? String(freelance.c_by._id) : null;
+      const normalizedName = freelance.companyName ? freelance.companyName.toLowerCase().trim() : null;
 
-          let companyImage = null;
+      // Dynamic company logo resolution hierarchy:
+      // 1. Direct document companyLogo (explicitly chosen/uploaded during creation)
+      // 2. Matched by companyName from Company collection (case-insensitive)
+      // 3. Matched by creator user ID from Company collection
+      // 4. Fallback to STATIC_ADMIN_IMAGE only if created by admin and no company logo found
+      const dynamicCompanyLogo =
+        freelance.companyLogo ||
+        (normalizedName && companyByNameMap.get(normalizedName)) ||
+        (creatorIdStr && companyByCreatorMap.get(creatorIdStr)) ||
+        (freelance.c_by?.role === "admin" ? STATIC_ADMIN_IMAGE : null);
 
-          if (freelance.c_by?.role === "admin") {
-            companyImage = STATIC_ADMIN_IMAGE;
-          } else if (freelance.c_by?.role === "company") {
-            const company = await Company.findOne({
-              userId: freelance.c_by._id,
-            })
-              .select("companyLogo")
-              .lean();
+      const { domain, ...rawFreelanceObj } = freelance.toObject();
+      const itemDomains = Array.isArray(rawFreelanceObj.domains) && rawFreelanceObj.domains.length
+        ? rawFreelanceObj.domains
+        : (domain ? domain.split(",").map((s) => s.trim()).filter(Boolean) : []);
+      const freelanceObj = { ...rawFreelanceObj, domains: itemDomains };
+      const isApplied = appliedSet.has(String(freelance._id));
 
-            companyImage = company?.companyLogo || null;
-          }
-
-          const { domain, ...rawFreelanceObj } = freelance.toObject();
-          const itemDomains = Array.isArray(rawFreelanceObj.domains) && rawFreelanceObj.domains.length ? rawFreelanceObj.domains : (domain ? domain.split(",").map(s => s.trim()).filter(Boolean) : []);
-          const freelanceObj = { ...rawFreelanceObj, domains: itemDomains };
-
-          return {
-            ...item.toObject(),
-            jobId: {
-              ...freelanceObj,
-              companyImage,
-              is_saved: true,
-              is_applied: await checkIsApplied(userId, freelance._id),
-            },
-          };
-        })
-      )
-    ).filter(Boolean);
+      data.push({
+        ...item.toObject(),
+        jobId: {
+          ...freelanceObj,
+          companyLogo: dynamicCompanyLogo,
+          companyImage: dynamicCompanyLogo,
+          is_saved: true,
+          isSaved: true,
+          saved: true,
+          is_applied: isApplied,
+          isApplied: isApplied,
+        },
+      });
+    }
 
     return res.status(200).json({
       success: true,
@@ -1287,7 +1387,7 @@ const getAppliedJobs = async (req, res) => {
         path: "jobId",
         match: { isActive: true },
         select:
-          "jobTitle domain domains location c_by companyName duration salary salaryType salaryMin salaryMax createdAt jobStartDate jobEndDate totalOpenings mode",
+          "jobTitle domain domains location c_by companyName companyLogo duration salary salaryType salaryMin salaryMax createdAt jobStartDate jobEndDate totalOpenings mode",
         populate: {
           path: "c_by",
           select: "role",
@@ -1295,47 +1395,103 @@ const getAppliedJobs = async (req, res) => {
       })
       .sort({ createdAt: -1 });
 
+    const activeApplied = appliedJobs.filter((item) => item.jobId);
+    const validJobIds = activeApplied.map((item) => item.jobId._id);
+    const creatorUserIds = activeApplied.map((item) => item.jobId.c_by?._id).filter(Boolean);
+    const companyNames = activeApplied.map((item) => item.jobId.companyName?.trim()).filter(Boolean);
+
+    const userObjectId = mongoose.Types.ObjectId.isValid(userId)
+      ? new mongoose.Types.ObjectId(userId)
+      : userId;
+
+    // Batch lookup saved statuses and company branding in parallel to eliminate N+1 queries
+    const [savedJobs, companiesByCreator, companiesByName] = await Promise.all([
+      validJobIds.length > 0
+        ? SavedJob.find({
+            $or: [{ userId: userObjectId }, { userId: String(userId) }],
+            jobId: { $in: validJobIds },
+          })
+            .select("jobId")
+            .lean()
+        : [],
+      creatorUserIds.length > 0
+        ? Company.find({
+            $or: [{ userId: { $in: creatorUserIds } }, { c_by: { $in: creatorUserIds } }],
+          })
+            .select("userId c_by companyLogo companyName")
+            .lean()
+        : [],
+      companyNames.length > 0
+        ? Company.find({
+            companyName: { $in: companyNames.map((n) => new RegExp(`^${n}$`, "i")) },
+          })
+            .select("companyLogo companyName")
+            .lean()
+        : [],
+    ]);
+
+    const savedSet = new Set(savedJobs.map((s) => String(s.jobId)));
+
+    const companyByCreatorMap = new Map();
+    companiesByCreator.forEach((c) => {
+      if (c.companyLogo) {
+        if (c.userId) companyByCreatorMap.set(String(c.userId), c.companyLogo);
+        if (c.c_by) companyByCreatorMap.set(String(c.c_by), c.companyLogo);
+      }
+    });
+
+    const companyByNameMap = new Map();
+    companiesByName.forEach((c) => {
+      if (c.companyLogo && c.companyName) {
+        companyByNameMap.set(c.companyName.toLowerCase().trim(), c.companyLogo);
+      }
+    });
+
     const STATIC_ADMIN_IMAGE = "referral/assets/index_icon.png";
 
-    const enrichedAppliedJobs = (
-      await Promise.all(
-        appliedJobs.map(async (item) => {
-          const job = item.jobId;
+    // Enrich applied jobs in memory with dynamic company logos and saved flags
+    const enrichedAppliedJobs = [];
+    for (const item of appliedJobs) {
+      const job = item.jobId;
+      if (!job) continue;
 
-          if (!job) return null;
+      const creatorIdStr = job.c_by?._id ? String(job.c_by._id) : null;
+      const normalizedName = job.companyName ? job.companyName.toLowerCase().trim() : null;
 
-          let companyImage = null;
+      // Dynamic company logo resolution hierarchy:
+      // 1. Direct document companyLogo
+      // 2. Matched by companyName from Company collection (case-insensitive)
+      // 3. Matched by creator user ID from Company collection
+      // 4. Fallback to STATIC_ADMIN_IMAGE only if created by admin and no company logo found
+      const dynamicCompanyLogo =
+        job.companyLogo ||
+        (normalizedName && companyByNameMap.get(normalizedName)) ||
+        (creatorIdStr && companyByCreatorMap.get(creatorIdStr)) ||
+        (job.c_by?.role === "admin" ? STATIC_ADMIN_IMAGE : null);
 
-          if (job.c_by?.role === "admin") {
-            companyImage = STATIC_ADMIN_IMAGE;
-          } else if (job.c_by?.role === "company") {
-            const company = await Company.findOne({
-              userId: job.c_by._id,
-            })
-              .select("companyLogo")
-              .lean();
+      const fullJobObj = job.toObject();
+      const { domain, salaryMin, salaryMax, ...rawJobObj } = fullJobObj;
+      const itemDomains = Array.isArray(rawJobObj.domains) && rawJobObj.domains.length
+        ? rawJobObj.domains
+        : (domain ? domain.split(",").map((s) => s.trim()).filter(Boolean) : []);
 
-            companyImage = company?.companyLogo || null;
-          }
+      const isSaved = savedSet.has(String(job._id));
 
-          const fullJobObj = job.toObject();
-          const { domain, salaryMin, salaryMax, ...rawJobObj } = fullJobObj;
-          const itemDomains = Array.isArray(rawJobObj.domains) && rawJobObj.domains.length ? rawJobObj.domains : (domain ? domain.split(",").map(s => s.trim()).filter(Boolean) : []);
-
-          return {
-            ...item.toObject(),
-            jobId: {
-              ...rawJobObj,
-              domains: itemDomains,
-              salary: formatJobSalary(fullJobObj),
-              companyImage,
-              is_applied: true,
-              is_saved: await checkIsSaved(userId, job._id, item.jobType),
-            },
-          };
-        })
-      )
-    ).filter(Boolean);
+      enrichedAppliedJobs.push({
+        ...item.toObject(),
+        jobId: {
+          ...rawJobObj,
+          domains: itemDomains,
+          salary: formatJobSalary(fullJobObj),
+          companyLogo: dynamicCompanyLogo,
+          companyImage: dynamicCompanyLogo,
+          is_applied: true,
+          isApplied: true,
+          is_saved: isSaved,
+          isSaved: isSaved,
+        },
+      });
+    }
 
     return res.status(200).json({
       status: true,
@@ -1354,7 +1510,7 @@ const getAppliedJobs = async (req, res) => {
 
 /**
  * Retrieves and returns all applied freelance projects for the authenticated user
- * with project details, company branding, and save status.
+ * with project details, dynamic company branding, and save status.
  */
 const getAppliedFreelances = async (req, res) => {
   try {
@@ -1368,7 +1524,7 @@ const getAppliedFreelances = async (req, res) => {
         path: "jobId",
         match: { isActive: true },
         select:
-          "jobTitle domain domains location c_by companyName duration salary createdAt jobStartDate jobEndDate totalOpenings mode projectType budget budgetType",
+          "jobTitle domain domains location c_by companyName companyLogo duration salary createdAt jobStartDate jobEndDate totalOpenings mode projectType budget budgetType",
         populate: {
           path: "c_by",
           select: "role",
@@ -1376,45 +1532,101 @@ const getAppliedFreelances = async (req, res) => {
       })
       .sort({ createdAt: -1 });
 
+    const activeApplied = appliedFreelances.filter((item) => item.jobId);
+    const validFreelanceIds = activeApplied.map((item) => item.jobId._id);
+    const creatorUserIds = activeApplied.map((item) => item.jobId.c_by?._id).filter(Boolean);
+    const companyNames = activeApplied.map((item) => item.jobId.companyName?.trim()).filter(Boolean);
+
+    const userObjectId = mongoose.Types.ObjectId.isValid(userId)
+      ? new mongoose.Types.ObjectId(userId)
+      : userId;
+
+    // Batch lookup saved statuses and company branding in parallel to eliminate N+1 queries
+    const [savedFreelances, companiesByCreator, companiesByName] = await Promise.all([
+      validFreelanceIds.length > 0
+        ? SavedJob.find({
+            $or: [{ userId: userObjectId }, { userId: String(userId) }],
+            jobId: { $in: validFreelanceIds },
+          })
+            .select("jobId")
+            .lean()
+        : [],
+      creatorUserIds.length > 0
+        ? Company.find({
+            $or: [{ userId: { $in: creatorUserIds } }, { c_by: { $in: creatorUserIds } }],
+          })
+            .select("userId c_by companyLogo companyName")
+            .lean()
+        : [],
+      companyNames.length > 0
+        ? Company.find({
+            companyName: { $in: companyNames.map((n) => new RegExp(`^${n}$`, "i")) },
+          })
+            .select("companyLogo companyName")
+            .lean()
+        : [],
+    ]);
+
+    const savedSet = new Set(savedFreelances.map((s) => String(s.jobId)));
+
+    const companyByCreatorMap = new Map();
+    companiesByCreator.forEach((c) => {
+      if (c.companyLogo) {
+        if (c.userId) companyByCreatorMap.set(String(c.userId), c.companyLogo);
+        if (c.c_by) companyByCreatorMap.set(String(c.c_by), c.companyLogo);
+      }
+    });
+
+    const companyByNameMap = new Map();
+    companiesByName.forEach((c) => {
+      if (c.companyLogo && c.companyName) {
+        companyByNameMap.set(c.companyName.toLowerCase().trim(), c.companyLogo);
+      }
+    });
+
     const STATIC_ADMIN_IMAGE = "referral/assets/index_icon.png";
 
-    const enrichedAppliedFreelances = (
-      await Promise.all(
-        appliedFreelances.map(async (item) => {
-          const freelance = item.jobId;
+    // Enrich applied freelances in memory with dynamic company logos and saved flags
+    const enrichedAppliedFreelances = [];
+    for (const item of appliedFreelances) {
+      const freelance = item.jobId;
+      if (!freelance) continue;
 
-          if (!freelance) return null;
+      const creatorIdStr = freelance.c_by?._id ? String(freelance.c_by._id) : null;
+      const normalizedName = freelance.companyName ? freelance.companyName.toLowerCase().trim() : null;
 
-          let companyImage = null;
+      // Dynamic company logo resolution hierarchy:
+      // 1. Direct document companyLogo
+      // 2. Matched by companyName from Company collection (case-insensitive)
+      // 3. Matched by creator user ID from Company collection
+      // 4. Fallback to STATIC_ADMIN_IMAGE only if created by admin and no company logo found
+      const dynamicCompanyLogo =
+        freelance.companyLogo ||
+        (normalizedName && companyByNameMap.get(normalizedName)) ||
+        (creatorIdStr && companyByCreatorMap.get(creatorIdStr)) ||
+        (freelance.c_by?.role === "admin" ? STATIC_ADMIN_IMAGE : null);
 
-          if (freelance.c_by?.role === "admin") {
-            companyImage = STATIC_ADMIN_IMAGE;
-          } else if (freelance.c_by?.role === "company") {
-            const company = await Company.findOne({
-              userId: freelance.c_by._id,
-            })
-              .select("companyLogo")
-              .lean();
+      const { domain, ...rawFreelanceObj } = freelance.toObject();
+      const itemDomains = Array.isArray(rawFreelanceObj.domains) && rawFreelanceObj.domains.length
+        ? rawFreelanceObj.domains
+        : (domain ? domain.split(",").map((s) => s.trim()).filter(Boolean) : []);
 
-            companyImage = company?.companyLogo || null;
-          }
+      const isSaved = savedSet.has(String(freelance._id));
 
-          const { domain, ...rawFreelanceObj } = freelance.toObject();
-          const itemDomains = Array.isArray(rawFreelanceObj.domains) && rawFreelanceObj.domains.length ? rawFreelanceObj.domains : (domain ? domain.split(",").map(s => s.trim()).filter(Boolean) : []);
-
-          return {
-            ...item.toObject(),
-            jobId: {
-              ...rawFreelanceObj,
-              domains: itemDomains,
-              companyImage,
-              is_applied: true,
-              is_saved: await checkIsSaved(userId, freelance._id, "Freelance"),
-            },
-          };
-        })
-      )
-    ).filter(Boolean);
+      enrichedAppliedFreelances.push({
+        ...item.toObject(),
+        jobId: {
+          ...rawFreelanceObj,
+          domains: itemDomains,
+          companyLogo: dynamicCompanyLogo,
+          companyImage: dynamicCompanyLogo,
+          is_applied: true,
+          isApplied: true,
+          is_saved: isSaved,
+          isSaved: isSaved,
+        },
+      });
+    }
 
     return res.status(200).json({
       status: true,
@@ -2365,18 +2577,23 @@ const createExternalEventRegistration = async (req, res) => {
     // ==============================
     // 5. NOTIFICATION & GAMIFICATION XP
     // ==============================
-    await Notification.create({
-      userId,
-      title: "Registration Confirmed",
-      message: `You have successfully registered for the ${resolvedEventType}: ${eventDoc.eventName || eventDoc.title || ""}.`,
-      type: "event_registered",
-      reference_id: eventDoc._id,
-      metadata: {
-        eventType: resolvedEventType,
-        registrationId: registration._id,
-        source: "external",
-      },
-    });
+    try {
+      await sendAndSaveNotification({
+        senderId: userId,
+        receiverId: userId,
+        title: "Registration Confirmed",
+        message: `You have successfully registered for the ${resolvedEventType}: ${eventDoc.eventName || eventDoc.title || ""}.`,
+        type: "event_registered",
+        reference_id: eventDoc._id,
+        metadata: {
+          eventType: resolvedEventType,
+          registrationId: registration._id,
+          source: "external",
+        },
+      });
+    } catch (notifErr) {
+      console.error("External registration notification dispatch warning:", notifErr?.message);
+    }
 
     triggerMissionNotification(userId, "FIRST_EVENT_REGISTRATION").catch((err) =>
       console.error("FIRST_EVENT_REGISTRATION notification error:", err.message)
@@ -3287,33 +3504,48 @@ const getCompanyProfile = async (req, res) => {
       });
     }
 
-    const companyUserId = company.userId; // ✅ the user who owns this company
+    const companyUserId = company.userId; // the user who owns this company
 
     const STATIC_ADMIN_IMAGE = "referral/assets/index_icon.png";
+    const companyResolvedLogo = company.companyLogo || null;
 
     const targetCompanyIds = [companyUserId, company._id].filter(Boolean);
+
+    // Escape special regex characters in company name to safely perform exact case-insensitive match
+    const escapedName = company.companyName?.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const nameRegex = escapedName ? new RegExp(`^${escapedName}$`, "i") : null;
+
+    // Matches opportunities posted directly by the company user OR created by admin under the company's name
+    const postingFilter = {
+      isActive: true,
+      $or: [
+        ...(companyUserId ? [{ c_by: companyUserId }] : []),
+        ...(nameRegex ? [{ companyName: nameRegex }] : []),
+        ...(nameRegex ? [{ organizer: nameRegex }] : []),
+      ],
+    };
 
     // ── Fetch all in parallel ───────────────────────────────────
     const [followCount, isFollowing, jobsRaw, internshipsRaw, freelancesRaw] = await Promise.all([
       CompanyFollow.countDocuments({ companyId: { $in: targetCompanyIds } }),
       CompanyFollow.findOne({ userId, companyId: { $in: targetCompanyIds } }),
 
-      // ✅ Full-time jobs posted by this company
-      Job.find({ isActive: true, c_by: companyUserId })
+      // Full-time jobs posted by this company or by admin for this company
+      Job.find(postingFilter)
         .sort({ createdAt: -1 })
-        .select("jobTitle domain domains totalOpenings mode description c_by location companyName duration salary salaryType salaryMin salaryMax eligibility createdAt")
+        .select("jobTitle domain domains totalOpenings mode description c_by location companyName companyLogo duration salary salaryType salaryMin salaryMax eligibility createdAt")
         .populate("c_by", "role"),
 
-      // ✅ Internships posted by this company
-      Internship.find({ isActive: true, c_by: companyUserId })
+      // Internships posted by this company or by admin for this company
+      Internship.find(postingFilter)
         .sort({ createdAt: -1 })
-        .select("jobTitle domain domains totalOpenings mode description c_by location companyName duration salary paymentAmount internshipType eligibility createdAt")
+        .select("jobTitle domain domains totalOpenings mode description c_by location companyName companyLogo duration salary paymentAmount internshipType eligibility createdAt")
         .populate("c_by", "role"),
 
-      // ✅ Freelance jobs posted by this company
-      Freelance.find({ isActive: true, c_by: companyUserId })
+      // Freelance jobs posted by this company or by admin for this company
+      Freelance.find(postingFilter)
         .sort({ createdAt: -1 })
-        .select("jobTitle domain domains totalOpenings mode description c_by location companyName duration salary eligibility createdAt")
+        .select("jobTitle domain domains totalOpenings mode description c_by location companyName companyLogo duration salary eligibility createdAt")
         .populate("c_by", "role"),
     ]);
 
@@ -3323,15 +3555,7 @@ const getCompanyProfile = async (req, res) => {
         const { domain, ...rawObj } = item.toObject();
         const itemDomains = Array.isArray(rawObj.domains) && rawObj.domains.length ? rawObj.domains : (domain ? domain.split(",").map(s => s.trim()).filter(Boolean) : []);
 
-        let companyImage = null;
-        if (item.c_by?.role === "admin") {
-          companyImage = STATIC_ADMIN_IMAGE;
-        } else if (item.c_by?.role === "company") {
-          const comp = await Company.findOne({ c_by: item.c_by._id })
-            .select("companyLogo")
-            .lean();
-          companyImage = comp?.companyLogo || null;
-        }
+        const companyImage = item.companyLogo || companyResolvedLogo || (item.c_by?.role === "admin" ? STATIC_ADMIN_IMAGE : null);
 
         return {
           ...rawObj,
@@ -3349,15 +3573,7 @@ const getCompanyProfile = async (req, res) => {
         const { domain, ...rawObj } = item.toObject();
         const itemDomains = Array.isArray(rawObj.domains) && rawObj.domains.length ? rawObj.domains : (domain ? domain.split(",").map(s => s.trim()).filter(Boolean) : []);
 
-        let companyImage = null;
-        if (item.c_by?.role === "admin") {
-          companyImage = STATIC_ADMIN_IMAGE;
-        } else if (item.c_by?.role === "company") {
-          const comp = await Company.findOne({ c_by: item.c_by._id })
-            .select("companyLogo")
-            .lean();
-          companyImage = comp?.companyLogo || null;
-        }
+        const companyImage = item.companyLogo || companyResolvedLogo || (item.c_by?.role === "admin" ? STATIC_ADMIN_IMAGE : null);
 
         return {
           ...rawObj,
@@ -3375,15 +3591,7 @@ const getCompanyProfile = async (req, res) => {
         const { domain, ...rawObj } = item.toObject();
         const itemDomains = Array.isArray(rawObj.domains) && rawObj.domains.length ? rawObj.domains : (domain ? domain.split(",").map(s => s.trim()).filter(Boolean) : []);
 
-        let companyImage = null;
-        if (item.c_by?.role === "admin") {
-          companyImage = STATIC_ADMIN_IMAGE;
-        } else if (item.c_by?.role === "company") {
-          const comp = await Company.findOne({ c_by: item.c_by._id })
-            .select("companyLogo")
-            .lean();
-          companyImage = comp?.companyLogo || null;
-        }
+        const companyImage = item.companyLogo || companyResolvedLogo || (item.c_by?.role === "admin" ? STATIC_ADMIN_IMAGE : null);
 
         return {
           ...rawObj,
