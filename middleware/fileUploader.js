@@ -7,6 +7,7 @@ const folderMap = {
   profileImage: "uploads/profile",
   profile_pic: "uploads/profile",
   resume: "uploads/resume",
+  certificate: "uploads/certificates",
   documents: "uploads/documents",
   default: "uploads/others",
 };

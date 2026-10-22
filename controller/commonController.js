@@ -13,6 +13,8 @@ import Internship from "../models/internshipModel.js";
 import Freelance from "../models/freelanceModel.js";
 import Company from "../models/companyModel.js";
 import College from "../models/collegeModel.js";
+import User from "../models/userModel.js";
+import UserDetails from "../models/userDetails.js";
 
 // Cascade relational models
 import EventRegistration from "../models/eventRegistrationModel.js";
@@ -170,6 +172,17 @@ const MODULE_REGISTRY = {
       // Reserved for college-specific cascading operations
     },
   },
+  influencer: {
+    model: User,
+    displayName: "Influencer",
+    category: "user",
+    fileFields: ["profileImage"],
+    cascade: async (id) => {
+      await Promise.allSettled([
+        UserDetails.deleteMany({ userId: id }),
+      ]);
+    },
+  },
 };
 
 /**
@@ -197,6 +210,8 @@ const normalizeModuleType = (type = "") => {
     companies: "company",
     college: "college",
     colleges: "college",
+    influencer: "influencer",
+    influencers: "influencer",
   };
   return aliasMap[clean] || null;
 };

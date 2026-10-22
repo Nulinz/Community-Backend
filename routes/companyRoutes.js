@@ -1,6 +1,18 @@
 import express from "express";
 import { isAuthenticated } from "../middleware/authMiddleware.js";
-import { createCompanyForm, getAllCompany, getCompanyById, addPost, deletePost, setPassword, getMyCompany, toggleCompanyStatus, getCompanyNames, getCompanyDashboard } from "../controller/companyController.js";
+import {
+  createCompanyForm,
+  registerCompany,
+  getAllCompany,
+  getCompanyById,
+  addPost,
+  deletePost,
+  setPassword,
+  getMyCompany,
+  toggleCompanyStatus,
+  getCompanyNames,
+  getCompanyDashboard,
+} from "../controller/companyController.js";
 import { createUpload } from "../middleware/upload.js";
 
 const router = express.Router();
@@ -10,10 +22,14 @@ const uploader = companyUpload.fields([
   { name: "companyLogo", maxCount: 1 },
   { name: "coverImage", maxCount: 1 },
   { name: "signatureUrl", maxCount: 1 },
-])
+]);
 
-router.get("/dashboard",isAuthenticated,getCompanyDashboard)
+router.get("/dashboard", isAuthenticated, getCompanyDashboard);
 
+// Public company self-registration (No auth required)
+router.post("/register", uploader, registerCompany);
+
+// Admin-managed company creation & management
 router.post("/create", isAuthenticated, uploader, createCompanyForm);
 router.get("/get-mine", isAuthenticated, getMyCompany);
 router.get("/all", isAuthenticated, getAllCompany);

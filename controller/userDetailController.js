@@ -47,12 +47,14 @@ export const createUserDetails = async (req, res, next) => {
         const gender = sanitizeInput(req.body.gender);
         const currentStatus = sanitizeInput(req.body.currentStatus);
         const education = sanitizeInput(req.body.education);
-        const ugDegree = sanitizeInput(req.body.ugDegree);
-        const ugFieldOfStudy = sanitizeInput(req.body.ugFieldOfStudy);
-        const ugYear = req.body.ugYear ?? null;
+        const ugDegree = sanitizeInput(req.body.ugDegree || req.body.degree);
+        const ugFieldOfStudy = sanitizeInput(req.body.ugFieldOfStudy || req.body.fieldOfStudy || req.body.department);
+        const ugYear = req.body.ugYear ?? req.body.year ?? null;
+        const ugCollegeName = sanitizeInput(req.body.ugCollegeName || req.body.collegeName);
         const pgDegree = sanitizeInput(req.body.pgDegree);
         const pgFieldOfStudy = sanitizeInput(req.body.pgFieldOfStudy);
         const pgYear = req.body.pgYear ?? null;
+        const pgCollegeName = sanitizeInput(req.body.pgCollegeName);
         const companyName = sanitizeInput(req.body.companyName);
         const jobTitles = toCleanStringArray(req.body.jobTitles);
         const yearOfExperience = req.body.yearOfExperience ?? null;
@@ -95,45 +97,27 @@ export const createUserDetails = async (req, res, next) => {
             throw error;
         }
 
-        if (education === "UG") {
-            if (!ugDegree) {
-                const error = new Error("UG degree is required");
-                error.status = 400;
-                throw error;
-            }
-
-            if (!ugFieldOfStudy) {
-                const error = new Error("UG field of study is required");
-                error.status = 400;
-                throw error;
-            }
-
-            if (!ugYear) {
-                const error = new Error("UG year is required");
-                error.status = 400;
-                throw error;
-            }
+        // Validate primary education fields (required for all education types: UG, PhD, Diploma, ITI, Other, etc.)
+        if (!ugDegree) {
+            const error = new Error("Degree / Course name is required");
+            error.status = 400;
+            throw error;
         }
 
+        if (!ugFieldOfStudy) {
+            const error = new Error("Field of study is required");
+            error.status = 400;
+            throw error;
+        }
+
+        if (!ugYear) {
+            const error = new Error("Passing year is required");
+            error.status = 400;
+            throw error;
+        }
+
+        // Only "PG" additionally requires postgraduate education fields
         if (education === "PG") {
-            if (!ugDegree) {
-                const error = new Error("UG degree is required");
-                error.status = 400;
-                throw error;
-            }
-
-            if (!ugFieldOfStudy) {
-                const error = new Error("UG field of study is required");
-                error.status = 400;
-                throw error;
-            }
-
-            if (!ugYear) {
-                const error = new Error("UG year is required");
-                error.status = 400;
-                throw error;
-            }
-
             if (!pgDegree) {
                 const error = new Error("PG degree is required");
                 error.status = 400;
@@ -184,9 +168,11 @@ export const createUserDetails = async (req, res, next) => {
             ugDegree: ugDegree || null,
             ugFieldOfStudy: ugFieldOfStudy || null,
             ugYear,
-            pgDegree: pgDegree || null,
-            pgFieldOfStudy: pgFieldOfStudy || null,
-            pgYear,
+            ugCollegeName: ugCollegeName || null,
+            pgDegree: education === "PG" ? (pgDegree || null) : null,
+            pgFieldOfStudy: education === "PG" ? (pgFieldOfStudy || null) : null,
+            pgYear: education === "PG" ? pgYear : null,
+            pgCollegeName: education === "PG" ? (pgCollegeName || null) : null,
             companyName: companyName || null,
             jobTitles: jobTitles || [],
             yearOfExperience,
@@ -274,12 +260,14 @@ export const updateUserDetails = async (req, res, next) => {
         const gender = sanitizeInput(req.body.gender);
         const currentStatus = sanitizeInput(req.body.currentStatus);
         const education = sanitizeInput(req.body.education);
-        const ugDegree = sanitizeInput(req.body.ugDegree);
-        const ugFieldOfStudy = sanitizeInput(req.body.ugFieldOfStudy);
-        const ugYear = req.body.ugYear ?? null;
+        const ugDegree = sanitizeInput(req.body.ugDegree || req.body.degree);
+        const ugFieldOfStudy = sanitizeInput(req.body.ugFieldOfStudy || req.body.fieldOfStudy || req.body.department);
+        const ugYear = req.body.ugYear ?? req.body.year ?? null;
+        const ugCollegeName = sanitizeInput(req.body.ugCollegeName || req.body.collegeName);
         const pgDegree = sanitizeInput(req.body.pgDegree);
         const pgFieldOfStudy = sanitizeInput(req.body.pgFieldOfStudy);
         const pgYear = req.body.pgYear ?? null;
+        const pgCollegeName = sanitizeInput(req.body.pgCollegeName);
         const companyName = sanitizeInput(req.body.companyName);
         const jobTitle = sanitizeInput(req.body.jobTitle);
         const yearOfExperience = req.body.yearOfExperience ?? null;
@@ -316,45 +304,27 @@ export const updateUserDetails = async (req, res, next) => {
             throw error;
         }
 
-        if (education === "UG") {
-            if (!ugDegree) {
-                const error = new Error("UG degree is required");
-                error.status = 400;
-                throw error;
-            }
-
-            if (!ugFieldOfStudy) {
-                const error = new Error("UG field of study is required");
-                error.status = 400;
-                throw error;
-            }
-
-            if (!ugYear) {
-                const error = new Error("UG year is required");
-                error.status = 400;
-                throw error;
-            }
+        // Validate primary education fields (required for all education types)
+        if (!ugDegree) {
+            const error = new Error("Degree / Course name is required");
+            error.status = 400;
+            throw error;
         }
 
+        if (!ugFieldOfStudy) {
+            const error = new Error("Field of study is required");
+            error.status = 400;
+            throw error;
+        }
+
+        if (!ugYear) {
+            const error = new Error("Passing year is required");
+            error.status = 400;
+            throw error;
+        }
+
+        // Only "PG" additionally requires postgraduate education fields
         if (education === "PG") {
-            if (!ugDegree) {
-                const error = new Error("UG degree is required");
-                error.status = 400;
-                throw error;
-            }
-
-            if (!ugFieldOfStudy) {
-                const error = new Error("UG field of study is required");
-                error.status = 400;
-                throw error;
-            }
-
-            if (!ugYear) {
-                const error = new Error("UG year is required");
-                error.status = 400;
-                throw error;
-            }
-
             if (!pgDegree) {
                 const error = new Error("PG degree is required");
                 error.status = 400;
@@ -409,9 +379,11 @@ export const updateUserDetails = async (req, res, next) => {
         userDetails.ugDegree = ugDegree || null;
         userDetails.ugFieldOfStudy = ugFieldOfStudy || null;
         userDetails.ugYear = ugYear;
-        userDetails.pgDegree = pgDegree || null;
-        userDetails.pgFieldOfStudy = pgFieldOfStudy || null;
-        userDetails.pgYear = pgYear;
+        userDetails.ugCollegeName = ugCollegeName || userDetails.ugCollegeName || null;
+        userDetails.pgDegree = education === "PG" ? (pgDegree || null) : null;
+        userDetails.pgFieldOfStudy = education === "PG" ? (pgFieldOfStudy || null) : null;
+        userDetails.pgYear = education === "PG" ? pgYear : null;
+        userDetails.pgCollegeName = education === "PG" ? (pgCollegeName || userDetails.pgCollegeName || null) : null;
         userDetails.companyName = companyName || null;
         userDetails.jobTitle = jobTitle || null;
         userDetails.yearOfExperience = yearOfExperience;

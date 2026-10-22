@@ -411,3 +411,116 @@ export const getUserCertificates = async (req, res, next) => {
   }
 };
 
+/**
+ * Handles device-uploaded certificates for an authenticated user.
+ * Stores metadata into the unified Certificate collection with userId linking
+ * so the certificate immediately surfaces under GET /api/certificates/user/:userId.
+ */
+export const uploadCertificate = async (req, res, next) => {
+  try {
+    const userId = req.user?._id;
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: "Certificate file is required.",
+      });
+    }
+
+    const { originalname, path: localFilePath } = req.file;
+
+    // Extract certificate name from uploaded file name without extension
+    const certName = path.parse(originalname).name || originalname || "Certificate";
+
+    // Generate unique ID satisfying Certificate schema requirements
+    const certificateId = `UP-${Date.now()}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
+    const normalizedPath = localFilePath.replace(/\\/g, "/");
+    const fileUrl = normalizedPath.startsWith("/") ? normalizedPath : `/${normalizedPath}`;
+
+    const newCertificate = await Certificate.create({
+      certificateId,
+      userId,
+      createdBy: userId,
+      recipientEmail: req.user?.email || "",
+      name: certName,
+      domain: "Certificate",
+      companyName: "Self Uploaded",
+      issuedDate: new Date(),
+      fileUrl,
+      filePath: localFilePath,
+      verified: true,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Certificate uploaded successfully",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Removes a certificate owned by the authenticated user.
+ * Enforces ownership check against userId/createdBy and cleans up the physical file from disk.
+ */
+export const deleteCertificate = async (req, res, next) => {
+  try {
+    const userId = req.user?._id;
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "Certificate ID parameter is required.",
+      });
+    }
+
+    // Support deletion by either Mongo ObjectId or generated certificateId
+    const isObjectId = mongoose.Types.ObjectId.isValid(id);
+    const filter = {
+      $and: [
+        isObjectId ? { $or: [{ _id: id }, { certificateId: id }] } : { certificateId: id },
+        { $or: [{ userId }, { createdBy: userId }] },
+      ],
+    };
+
+    const certificate = await Certificate.findOne(filter);
+
+    if (!certificate) {
+      return res.status(404).json({
+        success: false,
+        message: "Certificate not found or you are not authorized to delete it.",
+      });
+    }
+
+    // Safely remove physical file from disk to avoid dangling storage
+    const targetPath = certificate.filePath || certificate.fileUrl;
+    if (targetPath && typeof targetPath === "string") {
+      try {
+        let cleanPath = targetPath.replace(/\\/g, "/");
+        if (cleanPath.startsWith("/")) {
+          cleanPath = cleanPath.substring(1);
+        }
+
+        const resolvedPath = path.isAbsolute(cleanPath)
+          ? cleanPath
+          : path.resolve(process.cwd(), cleanPath);
+
+        await fs.unlink(resolvedPath);
+      } catch (fileErr) {
+        console.warn(`[Delete Certificate] Disk cleanup skipped: ${fileErr.message}`);
+      }
+    }
+
+    await Certificate.findByIdAndDelete(certificate._id);
+
+    return res.status(200).json({
+      success: true,
+      message: "Certificate deleted successfully",
+      deletedId: certificate._id,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

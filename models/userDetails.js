@@ -38,7 +38,6 @@ const userDetailsSchema = new mongoose.Schema(
     },
     education: {
       type: String,
-      enum: ["UG", "PG", null],
       default: null,
       trim: true,
     },

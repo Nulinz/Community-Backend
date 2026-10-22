@@ -1,5 +1,6 @@
 import { register } from "module";
 import mongoose from "mongoose";
+import jwt from "jsonwebtoken";
 import Company from "../models/companyModel.js";
 import User from "../models/userModel.js";
 import fs from "fs";
@@ -1101,6 +1102,128 @@ export const toggleCompanyStatus = async (req, res, next) => {
       success: true,
       message: `Account ${user.is_active ? "activated" : "deactivated"} successfully`,
       data: { ...companyObj, is_active: user.is_active }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Public self-registration endpoint for companies.
+ * Creates an associated User account with role 'company', links the new Company
+ * profile (setting c_by and userId to the newly created user), and returns a 30-day JWT.
+ * Defaults verificationStatus to 'Pending' so admins can review/verify from the Admin panel.
+ */
+export const registerCompany = async (req, res, next) => {
+  try {
+    const companyName = toCleanString(req.body?.companyName);
+    const contactPersonName = toCleanString(req.body?.contactPersonName);
+    const email = toCleanString(req.body?.email || req.body?.mailId).toLowerCase();
+    const phone = toCleanString(req.body?.phone || req.body?.phoneNumber);
+    const password = req.body?.password;
+    const companyType = toCleanString(req.body?.companyType) || "Startup";
+    const industry = toCleanString(req.body?.industry || req.body?.sector) || "";
+    const city = toCleanString(req.body?.city) || "N/A";
+    const state = toCleanString(req.body?.state) || "N/A";
+    const pincode = toCleanString(req.body?.pincode) || "000000";
+    const address = toCleanString(req.body?.address) || "";
+    const websiteLink = toCleanString(req.body?.websiteLink) || "";
+    const aboutUs = toCleanString(req.body?.aboutUs) || "";
+
+    // 1. Core validations
+    if (!companyName) {
+      return res.status(400).json({ success: false, message: "Company name is required" });
+    }
+    if (!contactPersonName) {
+      return res.status(400).json({ success: false, message: "Contact person name is required" });
+    }
+    if (!email) {
+      return res.status(400).json({ success: false, message: "Email is required" });
+    }
+    if (!EMAIL_REGEX.test(email)) {
+      return res.status(400).json({ success: false, message: "Email format is invalid" });
+    }
+    if (!phone) {
+      return res.status(400).json({ success: false, message: "Phone number is required" });
+    }
+    if (!PHONE_REGEX.test(phone)) {
+      return res.status(400).json({ success: false, message: "Phone number must be exactly 10 digits" });
+    }
+    if (!password || typeof password !== "string" || password.length < 6) {
+      return res.status(400).json({ success: false, message: "Password is required and must be at least 6 characters" });
+    }
+
+    // 2. Uniqueness check for email and phone
+    const existingUser = await User.findOne({
+      $or: [{ email }, { phone }],
+    });
+
+    if (existingUser) {
+      if (existingUser.email === email) {
+        return res.status(400).json({ success: false, message: "Email already registered with another account" });
+      }
+      if (existingUser.phone === phone) {
+        return res.status(400).json({ success: false, message: "Phone number already registered with another account" });
+      }
+    }
+
+    // 3. Optional Logo file
+    const companyLogoFile = req.files?.companyLogo?.[0];
+    const companyLogo = getUploadedFilePath(companyLogoFile);
+
+    // 4. Create User with role 'company' (pre-save hook hashes password automatically)
+    const newUser = await User.create({
+      name: companyName,
+      email,
+      phone,
+      password,
+      role: "company",
+      is_active: true,
+    });
+
+    // 5. Create Company profile linked to the new user
+    const newCompany = await Company.create({
+      c_by: newUser._id,
+      userId: newUser._id,
+      companyName,
+      companyType,
+      industry,
+      contactPersonName,
+      city,
+      state,
+      pincode,
+      address,
+      websiteLink,
+      aboutUs,
+      companyLogo,
+      verificationStatus: "Pending",
+    });
+
+    // 6. Sign JWT
+    const token = jwt.sign(
+      {
+        id: newUser._id,
+        phone: newUser.phone,
+        role: newUser.role,
+      },
+      process.env.JWT_SECRET || "default_jwt_secret",
+      { expiresIn: "30d" }
+    );
+
+    return res.status(201).json({
+      success: true,
+      message: "Company registered successfully",
+      token,
+      data: {
+        company: newCompany,
+        user: {
+          id: newUser._id,
+          name: newUser.name,
+          email: newUser.email,
+          phone: newUser.phone,
+          role: newUser.role,
+        },
+      },
     });
   } catch (error) {
     next(error);
