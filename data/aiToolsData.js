@@ -183,7 +183,7 @@ export const aiToolsData = [
   // 🔹 Medical & Healthcare
   { name: "Medscape", category: "Medical & Healthcare", redirectionUrl: "https://www.medscape.com", imageUrl: "https://www.google.com/s2/favicons?domain=medscape.com&sz=128" },
   { name: "Merck Manual Professional", category: "Medical & Healthcare", redirectionUrl: "https://www.merckmanuals.com/professional", imageUrl: "https://www.google.com/s2/favicons?domain=merckmanuals.com&sz=128" },
-  { name: "Pathway Medical AI", category: "Medical & Healthcare", redirectionUrl: "https://www.pathway.md", imageUrl: "https://www.google.com/s2/favicons?domain=pathway.md&sz=128" },
+  // { name: "Pathway Medical AI", category: "Medical & Healthcare", redirectionUrl: "https://www.pathway.md", imageUrl: "https://www.google.com/s2/favicons?domain=pathway.md&sz=128" },
   { name: "Glass Health", category: "Medical & Healthcare", redirectionUrl: "https://glass.health", imageUrl: "https://www.google.com/s2/favicons?domain=glass.health&sz=128" },
 
   // 🔹 Biotechnology & Bioinformatics

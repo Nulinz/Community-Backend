@@ -147,7 +147,7 @@ export const getSubscriptionReminderTargets = async () => {
     .lean();
 
   const message =
-    "A new Envy project with a Worth of ₹30,000 is currently available and matches the skills or interests you have shown on GradEnvy. View the project to see the requirements and application details.";
+    "A New Envy project with a Worth of ₹30,000 is currently available and matches the skills or interests you have shown on GradEnvy. View the project to see the requirements and application details.";
 
   return unsubscribedUsers.map((user) => ({
     userId: user._id,

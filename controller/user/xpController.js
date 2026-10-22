@@ -159,11 +159,10 @@ export const getMissions = async (req, res, next) => {
       "FIRST_RESUME_CREATE",
       "FIRST_SAVED_JOB",
       "FIRST_COMPANY_FOLLOW",
-      "FIRST_EVENT_REGISTRATION",
-      "FIRST_COMPETITION_REGISTRATION",
+      // "FIRST_EVENT_REGISTRATION",
+      // "FIRST_COMPETITION_REGISTRATION",
       "FIRST_FREELANCE_APPLICATION",
       "FIRST_SUBSCRIPTION",
-
       "REFERRAL",
     ];
 

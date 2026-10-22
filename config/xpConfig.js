@@ -27,7 +27,7 @@ export const XP_ACTIONS = {
   FIRST_EVENT_REGISTRATION: { xp: 15, label: "Register for your first GradEnvy event", isDaily: false, target: 1, unit: "count" },
   FIRST_EVENT_ATTENDANCE: { xp: 25, label: "Attend event and mark attendance first time", isDaily: false, target: 1, unit: "count" },
   FIRST_FREELANCE_APPLICATION: { xp: 10, label: "Apply for your first Envy freelancing project", isDaily: false, target: 1, unit: "count" },
-  FIRST_COMPETITION_REGISTRATION: { xp: 15, label: "Join your first Envy League competition", isDaily: false, target: 1, unit: "count" },
+  FIRST_COMPETITION_REGISTRATION: { xp: 15, label: "Join your first competition", isDaily: false, target: 1, unit: "count" },
   INTERNSHIPS_AND_JOBS: { xp: 10, label: "Explore Internships & Jobs", isDaily: false, target: 1, unit: "count" },
   REFERRAL: { xp: 20, label: "Referred a Friend", isDaily: false, target: 1, unit: "count", isRepeatable: true },
   FOLLOW_INSTAGRAM: {
