@@ -2985,6 +2985,14 @@ const getSeminarProfile = async (req, res) => {
   }
 };
 
+/**
+ * Retrieves all valid event, seminar, competition, and conference registrations
+ * for the authenticated user (/my-booked).
+ *
+ * Enriches active registrations with event lifecycle timing (isEnded).
+ * Defensively filters out orphaned registrations where the referenced entity was
+ * deleted, and self-heals by purging those dead records asynchronously in the background.
+ */
 const getMyRegistrations = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -2998,8 +3006,13 @@ const getMyRegistrations = async (req, res) => {
           "eventName eventType registrationType totalSeats organizer mode eventDate eventEndDate eventStartTime eventEndTime coverImage city individualFees teamFees isActive",
       });
 
-    const enriched = registrations.map((item) => {
+    const validRegistrations = [];
+    const orphanedRegistrationIds = [];
+
+    // Separate active registrations from orphaned records whose referenced event was deleted
+    for (const item of registrations) {
       const regObj = item.toObject();
+
       if (regObj.eventId && typeof regObj.eventId === "object") {
         regObj.eventId = {
           ...regObj.eventId,
@@ -3010,14 +3023,28 @@ const getMyRegistrations = async (req, res) => {
             regObj.eventId.eventEndTime
           ),
         };
+        validRegistrations.push(regObj);
+      } else {
+        // Collect orphaned registration ID for self-healing background cleanup
+        orphanedRegistrationIds.push(item._id);
       }
-      return regObj;
-    });
+    }
+
+    // Self-healing: Asynchronously purge orphaned registration records so future queries stay optimal
+    if (orphanedRegistrationIds.length > 0) {
+      EventRegistration.deleteMany({ _id: { $in: orphanedRegistrationIds } })
+        .catch((cleanupErr) => {
+          console.error(
+            "[Cleanup Warning] Failed to delete orphaned event registrations:",
+            cleanupErr.message
+          );
+        });
+    }
 
     return res.status(200).json({
       status: true,
-      count: enriched.length,
-      data: enriched,
+      count: validRegistrations.length,
+      data: validRegistrations,
     });
   } catch (error) {
     console.error("My Registrations API Error:", error.message);
