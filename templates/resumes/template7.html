@@ -271,7 +271,8 @@
       <span class="role-title">{{jobTitle}}</span>
       <span class="item-date">{{startDate}} — {{#if endDate}}{{endDate}}{{else}}Present{{/if}}</span>
     </div>
-    <div class="company-line"><span class="company-name">{{companyName}}</span>{{#if location}} • {{location}}{{/if}}</div>
+    <div class="company-line"><span class="company-name">{{companyName}}</span>{{#if location}} • {{location}}{{/if}}
+    </div>
     {{#if groupNote}}<div class="group-note">{{groupNote}}</div>{{/if}}
     {{#if highlights.length}}
     <ul class="bullets">
@@ -301,10 +302,13 @@
       <span class="item-date">{{startDate}}{{#if endDate}} — {{endDate}}{{/if}}</span>
     </div>
     <div class="company-line">
-      <span class="company-name">{{#if institution}}{{institution}}{{else}}{{schoolName}}{{/if}}</span>{{#if location}} • {{location}}{{/if}}
-      {{#if grade}}<span class="gpa-badge">{{grade}}</span>{{else if gpa}}<span class="gpa-badge">{{gpa}} GPA</span>{{/if}}
+      <span class="company-name">{{#if institution}}{{institution}}{{else}}{{schoolName}}{{/if}}</span>{{#if location}}
+      • {{location}}{{/if}}
+      {{#if grade}}<span class="gpa-badge">{{grade}}</span>{{else if gpa}}<span class="gpa-badge">{{gpa}}
+        GPA</span>{{/if}}
     </div>
-    {{#if details}}<div class="coursework">{{details}}</div>{{else if coursework}}<div class="coursework">{{coursework}}</div>{{/if}}
+    {{#if details}}<div class="coursework">{{details}}</div>{{else if coursework}}<div class="coursework">{{coursework}}
+    </div>{{/if}}
   </div>
   {{/each}}
   {{/if}}
@@ -315,7 +319,8 @@
   <div class="card">
     <div class="item-header">
       <span class="role-title">{{#if title}}{{title}}{{else}}{{name}}{{/if}}</span>
-      <span class="item-date">{{#if year}}{{year}}{{else if startDate}}{{startDate}}{{#if endDate}} — {{endDate}}{{/if}}{{/if}}</span>
+      <span class="item-date">{{#if year}}{{year}}{{else if startDate}}{{startDate}}{{#if endDate}} —
+        {{endDate}}{{/if}}{{/if}}</span>
     </div>
     {{#if link}}<a class="project-link" href="{{link}}">{{link}}</a>{{/if}}
     {{#if description}}<p class="project-desc">{{description}}</p>{{/if}}
@@ -353,9 +358,9 @@
     <span class="skill-category">{{category}}</span>
     <div>
       {{#if items.length}}
-        {{#each items}}<span class="pill">{{this}}</span>{{/each}}
+      {{#each items}}<span class="pill">{{this}}</span>{{/each}}
       {{else}}
-        <span class="pill">{{items}}</span>
+      <span class="pill">{{items}}</span>
       {{/if}}
     </div>
     {{/each}}
@@ -405,7 +410,8 @@
       <span class="item-date">{{#if year}}{{year}}{{else}}{{date}}{{/if}}</span>
     </div>
     {{#if issuer}}<div class="award-issuer">{{issuer}}</div>{{/if}}
-    {{#if description}}<div class="award-note">{{description}}</div>{{else if note}}<div class="award-note">{{note}}</div>{{/if}}
+    {{#if description}}<div class="award-note">{{description}}</div>{{else if note}}<div class="award-note">{{note}}
+    </div>{{/if}}
   </div>
   {{/each}}
   {{/if}}

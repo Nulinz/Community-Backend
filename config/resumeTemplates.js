@@ -1,11 +1,11 @@
 export const RESUME_TEMPLATES = [
-  {
-    id: 1,
-    name: "Dark Sleek Modern",
-    category: "Developer / Tech",
-    description: "Sleek dark theme with card containers, custom tag pills, and dot ratings.",
-    previewUrl: "/resume/1.pdf",
-  },
+  // {
+  //   id: 1,
+  //   name: "Dark Sleek Modern",
+  //   category: "Developer / Tech",
+  //   description: "Sleek dark theme with card containers, custom tag pills, and dot ratings.",
+  //   previewUrl: "/resume/1.pdf",
+  // },
   {
     id: 2,
     name: "Clean Two-Column Blue",

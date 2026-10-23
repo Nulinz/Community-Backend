@@ -50,6 +50,15 @@
       align-items: center;
       justify-content: center;
       margin: 0 auto 28px;
+      overflow: hidden;
+    }
+
+    .avatar-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      border-radius: 50%;
     }
 
     .side-section {
@@ -297,9 +306,14 @@
 <body>
   <div class="page">
 
-    <!-- ===== SIDEBAR ===== -->
     <div class="sidebar">
-      <div class="avatar">{{personalInfo.initials}}</div>
+      <div class="avatar">
+        {{#if personalInfo.profileImage}}
+        <img src="{{personalInfo.profileImage}}" alt="{{personalInfo.fullName}}" class="avatar-img" />
+        {{else}}
+        <span>{{#if personalInfo.initials}}{{personalInfo.initials}}{{else}}AM{{/if}}</span>
+        {{/if}}
+      </div>
 
       {{#if skills.length}}
       <div class="side-section">

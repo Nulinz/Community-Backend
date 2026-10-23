@@ -5,8 +5,7 @@ import { generateResumePDFBuffer, renderResumeHTML } from "../services/pdfServic
 import UserDetails from "../models/userDetails.js";
 import Resume from "../models/resumeModel.js";
 import XPLog from "../models/xpLogModel.js";
-import AppError from "../helper/appError.js";
-import { triggerMissionNotification, awardXP } from "../services/xpService.js";
+import { triggerMissionNotification } from "../services/xpService.js";
 
 const DUMMY_RESUME_DATA = {
   personalInfo: {
@@ -116,11 +115,20 @@ export const getResumeTemplates = async (req, res, next) => {
 
 /**
  * Preview saved resume PDF template live in browser
+ * Supports ?html=true query to return live compiled HTML directly
  * GET /api/resume/preview/:templateId
  */
 export const previewResumeTemplate = async (req, res, next) => {
   try {
-    const { templateId = 1 } = req.params;
+    const { templateId = 2 } = req.params;
+
+    // Direct HTML preview bypass if query param is set
+    if (req.query.html === "true") {
+      const htmlContent = await renderResumeHTML(templateId, DUMMY_RESUME_DATA);
+      res.setHeader("Content-Type", "text/html");
+      return res.send(htmlContent);
+    }
+
     const pdfFilePath = path.resolve(process.cwd(), "resume", `${templateId}.pdf`);
 
     try {
@@ -140,26 +148,83 @@ export const previewResumeTemplate = async (req, res, next) => {
 
 /**
  * Generate resume PDF from template and form data
+ * Accepts either nested `{ templateId, formData: { ... } }` or root-level `{ templateId, ...fields }`
  * POST /api/resume/generate
  */
 export const generateResume = async (req, res, next) => {
   try {
-    const { templateId = 1, formData = {} } = req.body;
+    const templateId = Number(req.body?.templateId) || 2;
+    let rawFormData = req.body?.formData || req.body || {};
+
+    // 1. If sent via multipart/form-data, parse the JSON string
+    if (typeof rawFormData === "string") {
+      try {
+        rawFormData = JSON.parse(rawFormData);
+      } catch (jsonErr) {
+        console.warn("[generateResume] Failed to parse stringified formData:", jsonErr.message);
+      }
+    }
+
+    // 2. Resolve uploaded profile image file (if sent as a file by FE)
+    const uploadedFile =
+      req.file ||
+      req.files?.profileImage?.[0] ||
+      req.files?.profilePicture?.[0] ||
+      req.files?.profile_pic?.[0] ||
+      req.files?.image?.[0] ||
+      req.files?.photo?.[0] ||
+      req.files?.avatar?.[0] ||
+      req.files?.file?.[0];
+
+    if (!rawFormData.personalInformation) {
+      rawFormData.personalInformation = {};
+    }
+
+    // Ensure root-level image properties are mapped into personalInformation.profileImage
+    const rootImage =
+      rawFormData.profileImage ||
+      rawFormData.profilePicture ||
+      rawFormData.profile_pic ||
+      rawFormData.photo ||
+      rawFormData.avatar ||
+      rawFormData.image;
+
+    if (rootImage && !rawFormData.personalInformation.profileImage) {
+      rawFormData.personalInformation.profileImage = rootImage;
+    }
+
+    if (uploadedFile) {
+      try {
+        const fileBuffer = await fs.readFile(uploadedFile.path);
+        const mimeType = uploadedFile.mimetype || "image/jpeg";
+        const base64DataUri = `data:${mimeType};base64,${fileBuffer.toString("base64")}`;
+        const relativePath = uploadedFile.path.replace(/\\/g, "/");
+        const fullImageUrl = `${req.protocol}://${req.get("host")}/${relativePath}`;
+
+        // Set strictly inside personalInformation
+        rawFormData.personalInformation.profileImage = base64DataUri;
+        rawFormData.personalInformation.profileImageUrl = fullImageUrl;
+      } catch (fileErr) {
+        console.warn("[generateResume] Notice reading uploaded image file:", fileErr.message);
+      }
+    }
 
     // Auto-fill from UserDetails database model if user is logged in
-    let mergedPayload = { ...formData };
+    let mergedPayload = { ...rawFormData };
     if (req.user?._id) {
       const userProfile = await UserDetails.findOne({ userId: req.user._id }).lean();
       if (userProfile) {
+        const currentPersonalInfo = mergedPayload.personalInformation || mergedPayload.personalInfo || {};
         mergedPayload.personalInformation = {
-          fullName: req.user.name || "",
-          email: req.user.email || "",
-          phoneNumber: req.user.phone || "",
-          city: userProfile.location || "",
-          linkedin: userProfile.linkedin || "",
-          portfolio: userProfile.website || "",
-          jobTitle: userProfile.jobTitle || "",
-          ...mergedPayload.personalInformation,
+          ...currentPersonalInfo,
+          fullName: currentPersonalInfo.fullName || req.user.name || "",
+          profileImage: currentPersonalInfo.profileImage || userProfile.profilePicture || userProfile.avatar || req.user.avatar || "",
+          email: currentPersonalInfo.email || req.user.email || "",
+          phoneNumber: currentPersonalInfo.phoneNumber || currentPersonalInfo.phone || req.user.phone || "",
+          city: currentPersonalInfo.city || currentPersonalInfo.location || userProfile.location || "",
+          linkedin: currentPersonalInfo.linkedin || userProfile.linkedin || "",
+          portfolio: currentPersonalInfo.portfolio || currentPersonalInfo.website || userProfile.website || "",
+          jobTitle: currentPersonalInfo.jobTitle || currentPersonalInfo.title || userProfile.jobTitle || "",
         };
 
         if (!mergedPayload.professionalSummary && userProfile.bio) {
@@ -225,31 +290,15 @@ export const generateResume = async (req, res, next) => {
           action: "FIRST_RESUME_CREATE",
         });
 
-        const wantsDirectClaim =
-          req.body?.claimXp === true ||
-          req.query?.claimXp === "true" ||
-          req.body?.autoClaim === true;
+        xpStatus = {
+          actionKey: "FIRST_RESUME_CREATE",
+          xpReward: 10,
+          alreadyClaimed: Boolean(alreadyClaimed),
+          readyToClaim: !alreadyClaimed,
+        };
 
-        if (wantsDirectClaim && !alreadyClaimed) {
-          // Direct claim requested via payload/query flag
-          const claimResult = await awardXP({ userId, actionKey: "FIRST_RESUME_CREATE" });
-          xpStatus = {
-            actionKey: "FIRST_RESUME_CREATE",
-            xpAwarded: claimResult.xpAwarded || 10,
-            claimed: true,
-            totalXP: claimResult.totalXP,
-            level: claimResult.level,
-            isLevelUp: claimResult.isLevelUp,
-          };
-        } else {
-          xpStatus = {
-            actionKey: "FIRST_RESUME_CREATE",
-            xpReward: 10,
-            alreadyClaimed: Boolean(alreadyClaimed),
-            readyToClaim: !alreadyClaimed,
-          };
-
-          // Notify user via FCM push and in-app notification that 10 XP is ready to claim in Missions
+        // Notify user via FCM push and in-app notification that 10 XP is ready to claim in Missions
+        if (!alreadyClaimed) {
           triggerMissionNotification(userId, "FIRST_RESUME_CREATE").catch((err) =>
             console.error("FIRST_RESUME_CREATE triggerMissionNotification error:", err.message)
           );
