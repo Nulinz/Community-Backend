@@ -12,7 +12,15 @@
   <style>
     @page {
       size: A4;
-      margin: 0;
+      margin-top: 34pt;
+      margin-bottom: 26pt;
+      margin-left: 0;
+      margin-right: 0;
+    }
+
+    @page :first {
+      margin-top: 0;
+      margin-bottom: 26pt;
     }
 
     * {
@@ -139,6 +147,12 @@
 
     .sidebar-col .sidebar-title:first-child {
       margin-top: 0;
+    }
+
+    /* SECTION CONTAINERS */
+    .section-block {
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
 
     /* SUMMARY TEXT */
@@ -270,6 +284,8 @@
     /* SKILLS IN SIDEBAR */
     .skill-group {
       margin-bottom: 6pt;
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
 
     .skill-group:last-child {
@@ -309,6 +325,8 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
 
     .language-name {
@@ -407,7 +425,7 @@
 
       <!-- SUMMARY -->
       {{#if personalInfo.summary}}
-      <div>
+      <div class="section-block">
         <div class="section-title">Summary</div>
         <p class="summary-text">{{personalInfo.summary}}</p>
       </div>
@@ -415,7 +433,7 @@
 
       <!-- EXPERIENCE -->
       {{#if experience.length}}
-      <div>
+      <div class="section-block">
         <div class="section-title">Experience</div>
         {{#each experience}}
         <div class="item">
@@ -441,7 +459,7 @@
 
       <!-- PROJECTS -->
       {{#if projects.length}}
-      <div>
+      <div class="section-block">
         <div class="section-title">Projects</div>
         {{#each projects}}
         <div class="item">
@@ -476,7 +494,7 @@
 
       <!-- EDUCATION -->
       {{#if education.length}}
-      <div>
+      <div class="section-block">
         <div class="section-title">Education</div>
         {{#each education}}
         <div class="item">
@@ -504,7 +522,7 @@
 
       <!-- SKILLS -->
       {{#if skills.length}}
-      <div>
+      <div class="section-block">
         <div class="sidebar-title">Skills</div>
         {{#each skills}}
         <div class="skill-group">
@@ -521,7 +539,7 @@
 
       <!-- LANGUAGES -->
       {{#if languages.length}}
-      <div>
+      <div class="section-block">
         <div class="sidebar-title">Languages</div>
         <div class="languages-list">
           {{#each languages}}
@@ -536,7 +554,7 @@
 
       <!-- CERTIFICATIONS -->
       {{#if certifications.length}}
-      <div>
+      <div class="section-block">
         <div class="sidebar-title">Certifications</div>
         {{#each certifications}}
         <div class="sidebar-item">
@@ -557,7 +575,7 @@
 
       <!-- AWARDS -->
       {{#if awards.length}}
-      <div>
+      <div class="section-block">
         <div class="sidebar-title">Awards</div>
         {{#each awards}}
         <div class="sidebar-item">

@@ -11,7 +11,15 @@
   <style>
     @page {
       size: A4;
-      margin: 0;
+      margin-top: 26pt;
+      margin-bottom: 20pt;
+      margin-left: 0;
+      margin-right: 0;
+    }
+
+    @page :first {
+      margin-top: 0;
+      margin-bottom: 20pt;
     }
 
     * {
@@ -106,6 +114,8 @@
     /* SECTION TITLES & RULES */
     .section {
       margin-top: 7.5pt;
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
 
     .section-title {

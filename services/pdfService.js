@@ -567,7 +567,7 @@ export const generateResumePDFBuffer = async (templateId, formData) => {
       format: "A4",
       landscape: false,
       printBackground: true,
-      margin: { top: "0px", right: "0px", bottom: "0px", left: "0px" }
+      preferCSSPageSize: true
     });
 
     return pdfBuffer;

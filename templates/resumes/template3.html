@@ -7,7 +7,15 @@
   <style>
     @page {
       size: A4;
-      margin: 0;
+      margin-top: 28px;
+      margin-bottom: 24px;
+      margin-left: 0;
+      margin-right: 0;
+    }
+
+    @page :first {
+      margin-top: 0;
+      margin-bottom: 24px;
     }
 
     * {
@@ -104,6 +112,12 @@
       stroke-linejoin: round;
     }
 
+    /* SECTION CONTAINERS */
+    .section-block {
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+
     /* SECTION HEADERS */
     .section-title {
       font-size: 10.5px;
@@ -115,6 +129,8 @@
       padding-bottom: 2px;
       margin-top: 12px;
       margin-bottom: 6px;
+      break-after: avoid;
+      page-break-after: avoid;
     }
 
     .sidebar .section-title:first-child,
@@ -125,6 +141,8 @@
     /* ITEMS & CONTENT */
     .item {
       margin-bottom: 8px;
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
 
     .item-header {
@@ -166,6 +184,8 @@
     /* SIDEBAR ITEM STYLES */
     .skill-group {
       margin-bottom: 8px;
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
 
     .skill-category {
@@ -184,6 +204,8 @@
     .sidebar-item {
       margin-bottom: 8px;
       font-size: 10px;
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
 
     .sidebar-item-title {
@@ -224,53 +246,61 @@
 
       <!-- SKILLS -->
       {{#if skills.length}}
-      <div class="section-title">Skills</div>
-      {{#each skills}}
-      <div class="skill-group">
-        <div class="skill-category">{{category}}</div>
-        <div class="skill-list">
-          {{#if items.length}}
-          {{joinArray items}}
-          {{else}}
-          {{this.items}}
-          {{/if}}
+      <div class="section-block">
+        <div class="section-title">Skills</div>
+        {{#each skills}}
+        <div class="skill-group">
+          <div class="skill-category">{{category}}</div>
+          <div class="skill-list">
+            {{#if items.length}}
+            {{joinArray items}}
+            {{else}}
+            {{this.items}}
+            {{/if}}
+          </div>
         </div>
+        {{/each}}
       </div>
-      {{/each}}
       {{/if}}
 
       <!-- LANGUAGES -->
       {{#if languages.length}}
-      <div class="section-title">Languages</div>
-      {{#each languages}}
-      <div class="sidebar-item">
-        <div class="sidebar-item-title">{{name}}</div>
-        <div class="sidebar-item-sub">{{level}}</div>
+      <div class="section-block">
+        <div class="section-title">Languages</div>
+        {{#each languages}}
+        <div class="sidebar-item">
+          <div class="sidebar-item-title">{{name}}</div>
+          <div class="sidebar-item-sub">{{level}}</div>
+        </div>
+        {{/each}}
       </div>
-      {{/each}}
       {{/if}}
 
       <!-- CERTIFICATIONS -->
       {{#if certifications.length}}
-      <div class="section-title">Certifications</div>
-      {{#each certifications}}
-      <div class="sidebar-item">
-        <div class="sidebar-item-title">{{title}}</div>
-        <div class="sidebar-item-sub">{{issuer}} {{#if year}}• {{year}}{{/if}}</div>
+      <div class="section-block">
+        <div class="section-title">Certifications</div>
+        {{#each certifications}}
+        <div class="sidebar-item">
+          <div class="sidebar-item-title">{{title}}</div>
+          <div class="sidebar-item-sub">{{issuer}} {{#if year}}• {{year}}{{/if}}</div>
+        </div>
+        {{/each}}
       </div>
-      {{/each}}
       {{/if}}
 
       <!-- AWARDS -->
       {{#if awards.length}}
-      <div class="section-title">Awards</div>
-      {{#each awards}}
-      <div class="sidebar-item">
-        <div class="sidebar-item-title">{{title}}</div>
-        <div class="sidebar-item-sub">{{issuer}} {{#if year}}• {{year}}{{/if}}</div>
-        {{#if description}}<div class="sidebar-item-sub">{{description}}</div>{{/if}}
+      <div class="section-block">
+        <div class="section-title">Awards</div>
+        {{#each awards}}
+        <div class="sidebar-item">
+          <div class="sidebar-item-title">{{title}}</div>
+          <div class="sidebar-item-sub">{{issuer}} {{#if year}}• {{year}}{{/if}}</div>
+          {{#if description}}<div class="sidebar-item-sub">{{description}}</div>{{/if}}
+        </div>
+        {{/each}}
       </div>
-      {{/each}}
       {{/if}}
 
     </div>
@@ -312,78 +342,86 @@
 
       <!-- SUMMARY -->
       {{#if personalInfo.summary}}
-      <div class="section-title">Summary</div>
-      <p style="margin-bottom: 8px; color: #222222; font-size: 10.5px;">{{personalInfo.summary}}</p>
+      <div class="section-block">
+        <div class="section-title">Summary</div>
+        <p style="margin-bottom: 8px; color: #222222; font-size: 10.5px;">{{personalInfo.summary}}</p>
+      </div>
       {{/if}}
 
       <!-- EXPERIENCE -->
       {{#if experience.length}}
-      <div class="section-title">Experience</div>
-      {{#each experience}}
-      <div class="item">
-        <div class="item-header">
-          <span>{{jobTitle}}</span>
-          <span class="item-date">{{startDate}} – {{endDate}}</span>
+      <div class="section-block">
+        <div class="section-title">Experience</div>
+        {{#each experience}}
+        <div class="item">
+          <div class="item-header">
+            <span>{{jobTitle}}</span>
+            <span class="item-date">{{startDate}} – {{endDate}}</span>
+          </div>
+          <div class="item-sub-header">
+            <span>{{companyName}}{{#if location}} • {{location}}{{/if}}</span>
+          </div>
+          {{#if description}}<p style="margin-top: 2px; color: #222222; font-size: 10.5px;">{{description}}</p>{{/if}}
+          {{#if highlights.length}}
+          <ul class="bullet-list">
+            {{#each highlights}}<li>{{this}}</li>{{/each}}
+          </ul>
+          {{/if}}
         </div>
-        <div class="item-sub-header">
-          <span>{{companyName}}{{#if location}} • {{location}}{{/if}}</span>
-        </div>
-        {{#if description}}<p style="margin-top: 2px; color: #222222; font-size: 10.5px;">{{description}}</p>{{/if}}
-        {{#if highlights.length}}
-        <ul class="bullet-list">
-          {{#each highlights}}<li>{{this}}</li>{{/each}}
-        </ul>
-        {{/if}}
+        {{/each}}
       </div>
-      {{/each}}
       {{/if}}
 
       <!-- PROJECTS -->
       {{#if projects.length}}
-      <div class="section-title">Projects</div>
-      {{#each projects}}
-      <div class="item">
-        <div class="item-header">
-          <span>{{title}} {{#if link}}<span
-              style="font-weight: normal; font-size: 9.5px; color: #555;">({{link}})</span>{{/if}}</span>
-          <span class="item-date">{{#if dates}}{{dates}}{{else}}{{startDate}} – {{endDate}}{{/if}}</span>
+      <div class="section-block">
+        <div class="section-title">Projects</div>
+        {{#each projects}}
+        <div class="item">
+          <div class="item-header">
+            <span>{{title}} {{#if link}}<span
+                style="font-weight: normal; font-size: 9.5px; color: #555;">({{link}})</span>{{/if}}</span>
+            <span class="item-date">{{#if dates}}{{dates}}{{else}}{{startDate}} – {{endDate}}{{/if}}</span>
+          </div>
+          {{#if subtitle}}<div class="item-sub-header"><span>{{subtitle}}</span></div>{{/if}}
+          {{#if description}}<p style="margin-top: 2px; color: #222222; font-size: 10.5px;">{{description}}</p>{{/if}}
+          {{#if highlights.length}}
+          <ul class="bullet-list">
+            {{#each highlights}}<li>{{this}}</li>{{/each}}
+          </ul>
+          {{/if}}
+          {{#if technologies.length}}
+          <div class="tag-group">
+            {{#each technologies}}<span class="tag">{{this}}</span>{{/each}}
+          </div>
+          {{/if}}
         </div>
-        {{#if subtitle}}<div class="item-sub-header"><span>{{subtitle}}</span></div>{{/if}}
-        {{#if description}}<p style="margin-top: 2px; color: #222222; font-size: 10.5px;">{{description}}</p>{{/if}}
-        {{#if highlights.length}}
-        <ul class="bullet-list">
-          {{#each highlights}}<li>{{this}}</li>{{/each}}
-        </ul>
-        {{/if}}
-        {{#if technologies.length}}
-        <div class="tag-group">
-          {{#each technologies}}<span class="tag">{{this}}</span>{{/each}}
-        </div>
-        {{/if}}
+        {{/each}}
       </div>
-      {{/each}}
       {{/if}}
 
       <!-- EDUCATION -->
       {{#if education.length}}
-      <div class="section-title">Education</div>
-      {{#each education}}
-      <div class="item">
-        <div class="item-header">
-          <span>{{degree}}</span>
-          <span class="item-date">{{startDate}} – {{endDate}}</span>
+      <div class="section-block">
+        <div class="section-title">Education</div>
+        {{#each education}}
+        <div class="item">
+          <div class="item-header">
+            <span>{{degree}}</span>
+            <span class="item-date">{{startDate}} – {{endDate}}</span>
+          </div>
+          <div class="item-sub-header">
+            <span>{{institution}}{{#if location}} • {{location}}{{/if}}</span>
+            {{#if gpa}}<span>{{gpa}} GPA</span>{{/if}}
+          </div>
+          {{#if coursework.length}}
+          <div class="tag-group">
+            {{#each coursework}}<span class="tag">{{this}}</span>{{/each}}
+          </div>
+          {{/if}}
         </div>
-        <div class="item-sub-header">
-          <span>{{institution}}{{#if location}} • {{location}}{{/if}}</span>
-          {{#if gpa}}<span>{{gpa}} GPA</span>{{/if}}
-        </div>
-        {{#if coursework.length}}
-        <div class="tag-group">
-          {{#each coursework}}<span class="tag">{{this}}</span>{{/each}}
-        </div>
-        {{/if}}
+        {{/each}}
       </div>
-      {{/each}}
       {{/if}}
 
     </div>

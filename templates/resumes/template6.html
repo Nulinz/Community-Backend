@@ -7,7 +7,15 @@
   <style>
     @page {
       size: A4;
-      margin: 0;
+      margin-top: 34px;
+      margin-bottom: 34px;
+      margin-left: 0;
+      margin-right: 0;
+    }
+
+    @page :first {
+      margin-top: 0;
+      margin-bottom: 34px;
     }
 
     * {
@@ -63,6 +71,8 @@
 
     .side-section {
       margin-bottom: 22px;
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
 
     .side-title {
@@ -77,6 +87,8 @@
       border-left: 3px solid #38b2ac;
       padding-left: 8px;
       margin-bottom: 10px;
+      break-after: avoid;
+      page-break-after: avoid;
     }
 
     .side-subhead {
@@ -126,6 +138,8 @@
     .cert-item,
     .award-item {
       margin-bottom: 12px;
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
 
     .cert-name,
@@ -192,6 +206,8 @@
 
     .section {
       margin-top: 20px;
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
 
     .section-title {
@@ -206,6 +222,8 @@
       border-left: 3px solid #2b6cb0;
       padding-left: 8px;
       margin-bottom: 10px;
+      break-after: avoid;
+      page-break-after: avoid;
     }
 
     .summary-text {
@@ -215,6 +233,8 @@
 
     .entry {
       margin-bottom: 14px;
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
 
     .entry:last-child {
