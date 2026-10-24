@@ -7,15 +7,11 @@
   <style>
     @page {
       size: A4;
-      margin-top: 34px;
-      margin-bottom: 34px;
-      margin-left: 0;
-      margin-right: 0;
+      margin: 0;
     }
 
     @page :first {
-      margin-top: 0;
-      margin-bottom: 34px;
+      margin: 0;
     }
 
     * {
@@ -26,31 +22,69 @@
       print-color-adjust: exact !important;
     }
 
+    html,
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-      background: #ffffff;
+      background: linear-gradient(to left, #ecfeff 220px, #ffffff 220px) !important;
       color: #1e293b;
       font-size: 11.5px;
       line-height: 1.45;
+    }
+
+    /* Full-bleed repeating sidebar background across all pages */
+    .sidebar-bg {
+      position: fixed;
+      top: 0;
+      bottom: 0;
+      right: 0;
+      width: 220px;
+      background: #ecfeff;
+      z-index: -1;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
+    /* Transparent repeating top spacer so text is protected across all pages without clipping sidebar background */
+    .page-table {
+      width: 100%;
+      border-collapse: collapse;
+      border-spacing: 0;
+    }
+
+    .page-table thead {
+      display: table-header-group;
+    }
+
+    .page-top-spacer {
+      height: 34px;
+      padding: 0;
+      border: none;
+      background: transparent;
+    }
+
+    .page-table-body-cell {
+      padding: 0;
+      border: none;
+      vertical-align: top;
     }
 
     /* Container for Two-Column Layout */
     .container {
       display: flex;
       align-items: stretch;
-      min-height: 100vh;
+      min-height: calc(100vh - 34px);
     }
 
     .main-content {
       flex: 1;
-      padding: 34px 24px 34px 36px;
+      padding: 0 24px 34px 36px;
     }
 
     .sidebar {
       width: 220px;
       flex-shrink: 0;
       background: #ecfeff;
-      padding: 34px 20px;
+      padding: 0 20px 34px 20px;
     }
 
     /* Header Section */
@@ -331,8 +365,18 @@
 </head>
 
 <body>
+  <div class="sidebar-bg"></div>
 
-  <div class="container">
+  <table class="page-table">
+    <thead>
+      <tr>
+        <td class="page-top-spacer"></td>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="page-table-body-cell">
+          <div class="container">
 
     <!-- MAIN CONTENT PANEL -->
     <div class="main-content">
@@ -651,6 +695,10 @@
     </div>
 
   </div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
 
 </body>
 

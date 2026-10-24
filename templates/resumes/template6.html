@@ -7,34 +7,70 @@
   <style>
     @page {
       size: A4;
-      margin-top: 34px;
-      margin-bottom: 34px;
-      margin-left: 0;
-      margin-right: 0;
+      margin: 0;
     }
 
     @page :first {
-      margin-top: 0;
-      margin-bottom: 34px;
+      margin: 0;
     }
 
     * {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
     }
 
+    html,
     body {
       font-family: Arial, sans-serif;
-      background: #fff;
+      background: linear-gradient(to right, #1e2530 240px, #ffffff 240px) !important;
       color: #1a202c;
       font-size: 11px;
       line-height: 1.45;
     }
 
+    /* Full-bleed repeating sidebar background across all pages */
+    .sidebar-bg {
+      position: fixed;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      width: 240px;
+      background: #1e2530;
+      z-index: -1;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
+    /* Transparent repeating top spacer so text is protected across all pages without clipping sidebar background */
+    .page-table {
+      width: 100%;
+      border-collapse: collapse;
+      border-spacing: 0;
+    }
+
+    .page-table thead {
+      display: table-header-group;
+    }
+
+    .page-top-spacer {
+      height: 34px;
+      padding: 0;
+      border: none;
+      background: transparent;
+    }
+
+    .page-table-body-cell {
+      padding: 0;
+      border: none;
+      vertical-align: top;
+    }
+
     .page {
       display: flex;
-      min-height: 100vh;
+      min-height: calc(100vh - 34px);
     }
 
     /* ===== SIDEBAR ===== */
@@ -43,7 +79,7 @@
       flex-shrink: 0;
       background: #1e2530;
       color: #cbd5e0;
-      padding: 32px 22px;
+      padding: 0 22px 34px 22px;
     }
 
     .avatar {
@@ -167,7 +203,7 @@
     /* ===== MAIN ===== */
     .main {
       flex: 1;
-      padding: 34px 36px;
+      padding: 0 36px 34px 36px;
     }
 
     .name {
@@ -324,7 +360,18 @@
 </head>
 
 <body>
-  <div class="page">
+  <div class="sidebar-bg"></div>
+
+  <table class="page-table">
+    <thead>
+      <tr>
+        <td class="page-top-spacer"></td>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="page-table-body-cell">
+          <div class="page">
 
     <div class="sidebar">
       <div class="avatar">
@@ -485,6 +532,10 @@
     </div>
 
   </div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
 </body>
 
 </html>

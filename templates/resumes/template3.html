@@ -7,15 +7,11 @@
   <style>
     @page {
       size: A4;
-      margin-top: 28px;
-      margin-bottom: 24px;
-      margin-left: 0;
-      margin-right: 0;
+      margin: 0;
     }
 
     @page :first {
-      margin-top: 0;
-      margin-bottom: 24px;
+      margin: 0;
     }
 
     * {
@@ -29,17 +25,55 @@
     html,
     body {
       height: 100%;
-      background: #ffffff;
+      background: linear-gradient(to right, #f3f4f6 220px, #ffffff 220px) !important;
       color: #111111;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
       font-size: 11px;
       line-height: 1.35;
     }
 
+    /* Full-bleed repeating sidebar background across all pages */
+    .sidebar-bg {
+      position: fixed;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      width: 220px;
+      background-color: #f3f4f6;
+      border-right: 1px solid #e5e7eb;
+      z-index: -1;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
+    /* Transparent repeating top spacer so text is protected across all pages without clipping sidebar background */
+    .page-table {
+      width: 100%;
+      border-collapse: collapse;
+      border-spacing: 0;
+    }
+
+    .page-table thead {
+      display: table-header-group;
+    }
+
+    .page-top-spacer {
+      height: 28px;
+      padding: 0;
+      border: none;
+      background: transparent;
+    }
+
+    .page-table-body-cell {
+      padding: 0;
+      border: none;
+      vertical-align: top;
+    }
+
     /* Container fills the full A4 height to ensure sidebar spans completely */
     .container {
       display: flex;
-      min-height: 100vh;
+      min-height: calc(100vh - 28px);
       width: 100%;
     }
 
@@ -49,14 +83,14 @@
       flex-shrink: 0;
       background-color: #f3f4f6 !important;
       /* Soft gray sidebar background */
-      padding: 24px 18px;
+      padding: 0 18px 24px;
       border-right: 1px solid #e5e7eb;
     }
 
     /* MAIN CONTENT */
     .main-content {
       flex: 1;
-      padding: 24px 28px;
+      padding: 0 28px 24px;
     }
 
     /* HEADER SECTION */
@@ -238,8 +272,18 @@
 </head>
 
 <body>
+  <div class="sidebar-bg"></div>
 
-  <div class="container">
+  <table class="page-table">
+    <thead>
+      <tr>
+        <td class="page-top-spacer"></td>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="page-table-body-cell">
+          <div class="container">
 
     <!-- LEFT SIDEBAR -->
     <div class="sidebar">
@@ -427,6 +471,10 @@
     </div>
 
   </div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
 
 </body>
 

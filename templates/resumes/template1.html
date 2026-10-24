@@ -6,14 +6,10 @@
   <style>
     @page {
       size: A4;
-      margin-top: 36px;
-      margin-bottom: 36px;
-      margin-left: 0;
-      margin-right: 0;
+      margin: 0;
     }
     @page :first {
-      margin-top: 0;
-      margin-bottom: 36px;
+      margin: 0;
     }
     * {
       box-sizing: border-box;
@@ -32,7 +28,26 @@
       line-height: 1.5;
     }
     body {
-      padding: 36px 40px;
+      padding: 0;
+    }
+    .page-table {
+      width: 100%;
+      border-collapse: collapse;
+      border-spacing: 0;
+    }
+    .page-table thead {
+      display: table-header-group;
+    }
+    .page-top-spacer {
+      height: 36px;
+      padding: 0;
+      border: none;
+      background: transparent;
+    }
+    .page-table-body-cell {
+      padding: 0 40px 36px;
+      border: none;
+      vertical-align: top;
     }
     .header {
       margin-bottom: 22px;
@@ -156,6 +171,15 @@
   </style>
 </head>
 <body>
+  <table class="page-table">
+    <thead>
+      <tr>
+        <td class="page-top-spacer"></td>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="page-table-body-cell">
 
   <!-- HEADER -->
   <div class="header">
@@ -332,6 +356,11 @@
     </div>
   </div>
   {{/if}}
+
+        </td>
+      </tr>
+    </tbody>
+  </table>
 
 </body>
 </html>
