@@ -39,10 +39,21 @@ export const decodeAppleJWS = (jwsString) => {
 };
 
 /**
- * Reads the Apple StoreKit Private Key (.p8 file) from the configured path.
- * Returns null if the file cannot be accessed or is not yet configured.
+ * Reads the Apple StoreKit Private Key (.p8) either directly from an environment variable
+ * (APPLE_PRIVATE_KEY) or from a file on disk (APPLE_PRIVATE_KEY_PATH).
+ * Automatically normalizes escaped newline characters for cloud deployment compatibility.
  */
 export const getApplePrivateKey = () => {
+  // 1. Direct from environment variable (ideal for cloud/containerized deployments)
+  if (process.env.APPLE_PRIVATE_KEY) {
+    let key = process.env.APPLE_PRIVATE_KEY.trim();
+    if (key.includes("\\n")) {
+      key = key.replace(/\\n/g, "\n");
+    }
+    return key;
+  }
+
+  // 2. Fallback to file path on disk (if file exists)
   try {
     const keyPath = process.env.APPLE_PRIVATE_KEY_PATH || "./certs/SubscriptionKey_LWCPYDPKNJ.p8";
     const resolvedPath = path.isAbsolute(keyPath)
