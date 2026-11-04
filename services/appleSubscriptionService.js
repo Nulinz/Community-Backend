@@ -39,35 +39,48 @@ export const decodeAppleJWS = (jwsString) => {
 };
 
 /**
- * Reads the Apple StoreKit Private Key (.p8) either directly from an environment variable
- * (APPLE_PRIVATE_KEY) or from a file on disk (APPLE_PRIVATE_KEY_PATH).
- * Automatically normalizes escaped newline characters for cloud deployment compatibility.
+ * Resolves the Apple StoreKit Private Key (.p8) from APPLE_PRIVATE_KEY_PATH.
+ * Intelligently handles both configurations:
+ * 1. Direct raw key content stored inside APPLE_PRIVATE_KEY_PATH in .env
+ * 2. File path pointing to the .p8 file on disk
+ * Automatically normalizes escaped '\n' newlines for production cloud deployments.
  */
 export const getApplePrivateKey = () => {
-  // 1. Direct from environment variable (ideal for cloud/containerized deployments)
-  if (process.env.APPLE_PRIVATE_KEY) {
-    let key = process.env.APPLE_PRIVATE_KEY.trim();
-    if (key.includes("\\n")) {
-      key = key.replace(/\\n/g, "\n");
+  const candidate = process.env.APPLE_PRIVATE_KEY_PATH;
+
+  if (candidate) {
+    const trimmed = candidate.trim();
+
+    // 1. Direct key content detection: If APPLE_PRIVATE_KEY_PATH contains the PEM header, use it directly in memory
+    if (trimmed.includes("BEGIN PRIVATE KEY") || trimmed.includes("-----BEGIN")) {
+      return trimmed.includes("\\n") ? trimmed.replace(/\\n/g, "\n") : trimmed;
     }
-    return key;
+
+    // 2. File path on disk: If APPLE_PRIVATE_KEY_PATH is a path, read the file
+    try {
+      const resolvedPath = path.isAbsolute(trimmed)
+        ? trimmed
+        : path.join(process.cwd(), trimmed);
+
+      if (fs.existsSync(resolvedPath)) {
+        return fs.readFileSync(resolvedPath, "utf8");
+      }
+    } catch (err) {
+      console.warn("Could not read Apple private key from path:", err.message);
+    }
   }
 
-  // 2. Fallback to file path on disk (if file exists)
+  // 3. Fallback to default certs directory if present
   try {
-    const keyPath = process.env.APPLE_PRIVATE_KEY_PATH || "./certs/SubscriptionKey_LWCPYDPKNJ.p8";
-    const resolvedPath = path.isAbsolute(keyPath)
-      ? keyPath
-      : path.join(process.cwd(), keyPath);
-
-    if (fs.existsSync(resolvedPath)) {
-      return fs.readFileSync(resolvedPath, "utf8");
+    const defaultPath = path.join(process.cwd(), "certs", "SubscriptionKey_LWCPYDPKNJ.p8");
+    if (fs.existsSync(defaultPath)) {
+      return fs.readFileSync(defaultPath, "utf8");
     }
-    return null;
   } catch (error) {
-    console.warn("Apple .p8 private key not found on disk:", error.message);
-    return null;
+    // Ignore fallback errors
   }
+
+  return null;
 };
 
 /**
