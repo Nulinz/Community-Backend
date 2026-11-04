@@ -1,8 +1,14 @@
 import mongoose from "mongoose";
 
+/**
+ * Payment Transaction Schema:
+ * Serves as the single source of truth for all transactional audit logs across
+ * the platform, including Android (Razorpay) and iOS (Apple StoreKit 2) subscriptions,
+ * event registrations, and external checkout lifecycles.
+ */
 const paymentSchema = new mongoose.Schema(
   {
-    // User
+    // User identifier associated with the transaction
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -10,7 +16,7 @@ const paymentSchema = new mongoose.Schema(
       index: true,
     },
 
-    // Common Reference
+    // Reference ID pointing to the subscribed entity or registered event
     referenceId: {
       type: mongoose.Schema.Types.ObjectId,
       required: true,
@@ -44,7 +50,7 @@ const paymentSchema = new mongoose.Schema(
       default: null,
     },
 
-    // Creator
+    // Creator / Performer ID
     c_by: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -52,7 +58,7 @@ const paymentSchema = new mongoose.Schema(
       index: true,
     },
 
-    // Amount
+    // Transaction amount (stored in major currency units, e.g., INR 499)
     amount: {
       type: Number,
       required: true,
@@ -63,14 +69,14 @@ const paymentSchema = new mongoose.Schema(
       default: "INR",
     },
 
-    // Payment Method (Optional)
+    // Payment Method (e.g. "UPI", "Card", "In-App Purchase")
     paymentMethod: {
       type: String,
       default: null,
       trim: true,
     },
 
-    // Status
+    // Status: Unified lifecycle across Android (Razorpay) & iOS (Apple StoreKit)
     paymentStatus: {
       type: String,
       enum: [
@@ -79,12 +85,16 @@ const paymentSchema = new mongoose.Schema(
         "Failed",
         "Cancelled",
         "Refunded",
+        "pending",
+        "captured",
+        "failed",
+        "paid",
       ],
       default: "Pending",
       index: true,
     },
 
-    // Gateway
+    // Gateway identifier supporting both Android (Razorpay) and iOS (Apple StoreKit)
     paymentGateway: {
       type: String,
       enum: [
@@ -93,20 +103,25 @@ const paymentSchema = new mongoose.Schema(
         "Cashfree",
         "PhonePe",
         "Offline",
+        "Apple StoreKit",
+        "Apple",
       ],
       default: "Razorpay",
+      index: true,
     },
 
     transactionId: {
       type: String,
       trim: true,
       default: null,
+      index: true,
     },
 
     orderId: {
       type: String,
       trim: true,
       default: null,
+      index: true,
     },
 
     paymentId: {
@@ -121,7 +136,32 @@ const paymentSchema = new mongoose.Schema(
       default: null,
     },
 
-    // Refund
+    // ── Apple In-App Purchase (StoreKit 2) Specific Properties ────────
+    receipt: {
+      type: String,
+      default: null,
+    },
+
+    productId: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+
+    originalTransactionId: {
+      type: String,
+      trim: true,
+      default: null,
+      index: true,
+    },
+
+    failureReason: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+
+    // Refund Tracking
     refundStatus: {
       type: String,
       enum: [
@@ -197,12 +237,14 @@ const paymentSchema = new mongoose.Schema(
   }
 );
 
-// Indexes
+// Query optimization indexes
 paymentSchema.index({
   userId: 1,
   referenceId: 1,
   referenceType: 1,
 });
+paymentSchema.index({ orderId: 1, paymentGateway: 1 });
+paymentSchema.index({ originalTransactionId: 1 });
 
 const Payment =
   mongoose.models.Payment ||

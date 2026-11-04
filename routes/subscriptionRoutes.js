@@ -5,29 +5,61 @@ import {
   createSubscriptionOrder,
   verifySubscriptionPayment,
   checkSubscriptionPaymentStatus,
+  updateSubscriptionOrderStatus,
+  appleSubscriptionWebhookHandler,
   getActiveSubscribedUsers,
   getUserPlanHistory,
 } from "../controller/user/subscriptionController.js";
 
 const router = express.Router();
 
-// GET /api/subscriptions/plans (Public/Auth)
+/**
+ * Public & Authenticated Plan Information
+ * GET /api/subscriptions/plans
+ */
 router.get("/plans", getSubscriptionPlans);
 
-// POST /api/subscriptions/create-order (Initiates Razorpay order & stores Pending payment record)
+/**
+ * Pre-Payment Order Creation (iOS StoreKit 2 & Android Razorpay)
+ * POST /api/subscriptions/create-order
+ */
 router.post("/create-order", isAuthenticated, createSubscriptionOrder);
 
-// POST /api/subscriptions/verify-payment (Instant frontend modal success callback)
+/**
+ * Instant Client-Side Verification Callback (iOS JWS Token & Android Razorpay Signature)
+ * POST /api/subscriptions/verify-payment
+ */
 router.post("/verify-payment", isAuthenticated, verifySubscriptionPayment);
 
-// POST /api/subscriptions/check-status (On-demand order status verification and self-healing)
+/**
+ * On-demand order status verification and self-healing
+ * POST /api/subscriptions/check-status
+ */
 router.post("/check-status", isAuthenticated, checkSubscriptionPaymentStatus);
 
-// GET /api/subscriptions/active-users (Admin: Fetch all users with isPlanActive = true)
+/**
+ * Order Status Cancellation / Failure Update
+ * POST /api/subscriptions/update-order-status
+ */
+router.post("/update-order-status", isAuthenticated, updateSubscriptionOrderStatus);
+
+/**
+ * Apple StoreKit 2 Server-to-Server V2 Webhook
+ * POST /api/subscriptions/apple-webhook
+ * Note: Must remain unauthenticated so Apple servers can deliver notifications.
+ */
+router.post("/apple-webhook", appleSubscriptionWebhookHandler);
+
+/**
+ * Admin: Fetch all users with isPlanActive = true
+ * GET /api/subscriptions/active-users
+ */
 router.get("/active-users", isAuthenticated, getActiveSubscribedUsers);
 
-// GET /api/subscriptions/history (User: Fetch plan history with currentPlan and previousPlans)
+/**
+ * User: Fetch subscription plan tenure & unified transaction history
+ * GET /api/subscriptions/history
+ */
 router.get("/history", isAuthenticated, getUserPlanHistory);
 
 export default router;
-

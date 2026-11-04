@@ -10,7 +10,8 @@ const getNowIST = () => new Date(Date.now() + IST_OFFSET_MS);
 
 /**
  * Core Payment Fulfillment Service:
- * Centralizes payment settlement and subscription activation logic.
+ * Centralizes payment settlement and subscription activation logic across
+ * Razorpay (Android/Web) and Apple StoreKit 2 (iOS).
  * Ensures strict idempotency across multiple channels (Webhooks, Client Verify,
  * and On-Demand Status Checks) so a user is never double-billed, double-credited,
  * or granted duplicate mission XP rewards.
@@ -22,17 +23,27 @@ export const fulfillSubscriptionPayment = async ({
   planKey = "pro_quarterly",
   amount,
   userId,
+  paymentGateway = "Razorpay",
+  receipt = null,
+  productId = null,
+  originalTransactionId = null,
+  status = null,
 }) => {
   if (!orderId) {
     throw new Error("Cannot fulfill subscription without an orderId.");
   }
 
   // ── IDEMPOTENCY CHECK ──────────────────────────────────────────────────────────
-  // Check if an existing payment record for this orderId is already marked "Success".
+  // Check if an existing payment record for this orderId is already captured/successful.
   // If true, exit immediately to prevent re-stacking days or triggering duplicate rewards.
   const existingPayment = await Payment.findOne({ orderId });
-  if (existingPayment && existingPayment.paymentStatus === "Success") {
-    const existingUser = await User.findById(existingPayment.userId).select("subscription").lean();
+  if (
+    existingPayment &&
+    (existingPayment.paymentStatus === "Success" ||
+      existingPayment.paymentStatus === "captured" ||
+      existingPayment.paymentStatus === "paid")
+  ) {
+    const existingUser = await User.findById(existingPayment.userId).select("subscription isPlanActive planName isSubscribed").lean();
     return {
       alreadyProcessed: true,
       payment: existingPayment,
@@ -60,11 +71,11 @@ export const fulfillSubscriptionPayment = async ({
   // ── SUBSCRIPTION STACKING LOGIC (IST) ──────────────────────────────────────────
   // If the user currently has an active subscription that hasn't expired, stack the new
   // duration on top of their existing expiry date. Otherwise, start fresh from now in IST.
-  const userRecord = await User.findById(effectiveUserId).select("subscription").lean();
+  const userRecord = await User.findById(effectiveUserId).select("subscription isPlanActive").lean();
   const currentSub = userRecord?.subscription;
 
   const isCurrentlyActive = Boolean(
-    currentSub?.isPlanActive &&
+    (currentSub?.isPlanActive || userRecord?.isPlanActive) &&
     currentSub?.expiryDate &&
     new Date(currentSub.expiryDate) > nowIST
   );
@@ -78,8 +89,10 @@ export const fulfillSubscriptionPayment = async ({
     : nowIST;
 
   const actionText = isCurrentlyActive ? "extended" : "activated";
+  const finalGateway = paymentGateway || existingPayment?.paymentGateway || "Razorpay";
+  const targetStatus = status || (finalGateway === "Apple StoreKit" ? "captured" : "Success");
 
-  // ── 1. UPDATE PAYMENT RECORD TO SUCCESS ─────────────────────────────────────────
+  // ── 1. UPDATE PAYMENT RECORD TO SUCCESS / CAPTURED ────────────────────────────
   const paymentRecord = await Payment.findOneAndUpdate(
     { orderId },
     {
@@ -90,13 +103,16 @@ export const fulfillSubscriptionPayment = async ({
         c_by: effectiveUserId,
         amount: finalAmount,
         currency: "INR",
-        paymentStatus: "Success",
-        paymentGateway: "Razorpay",
+        paymentStatus: targetStatus,
+        paymentGateway: finalGateway,
         orderId,
-        paymentId: paymentId || existingPayment?.paymentId || null,
-        transactionId: paymentId || existingPayment?.paymentId || null,
+        paymentId: paymentId || existingPayment?.paymentId || orderId,
+        transactionId: paymentId || existingPayment?.transactionId || orderId,
         signature: signature || existingPayment?.signature || null,
-        remarks: `Subscription ${actionText}: ${planName}`,
+        receipt: receipt || existingPayment?.receipt || null,
+        productId: productId || existingPayment?.productId || (finalGateway === "Apple StoreKit" ? "gradenvy_pro_quarterly" : null),
+        originalTransactionId: originalTransactionId || existingPayment?.originalTransactionId || null,
+        remarks: `Subscription ${actionText}: ${planName} via ${finalGateway}`,
         paymentDate: nowIST,
         updatedAt: nowIST,
       },
@@ -109,16 +125,17 @@ export const fulfillSubscriptionPayment = async ({
     effectiveUserId,
     {
       $set: {
-        subscription: {
-          planName,
-          isPlanActive: true,
-          startDate,
-          expiryDate,
-        },
+        isPlanActive: true,
+        planName,
+        isSubscribed: true,
+        "subscription.planName": planName,
+        "subscription.isPlanActive": true,
+        "subscription.startDate": startDate,
+        "subscription.expiryDate": expiryDate,
       },
     },
     { new: true }
-  ).select("name email subscription");
+  ).select("name email subscription isPlanActive planName isSubscribed");
 
   // ── 3. GAMIFICATION MISSION TRIGGER ───────────────────────────────────────────
   // Notify user that their First Subscription milestone is ready to claim XP
@@ -156,7 +173,12 @@ export const fulfillEventRegistrationPayment = async ({
 
   // ── IDEMPOTENCY CHECK ──────────────────────────────────────────────────────────
   const existingPayment = await Payment.findOne({ orderId });
-  if (existingPayment && existingPayment.paymentStatus === "Success") {
+  if (
+    existingPayment &&
+    (existingPayment.paymentStatus === "Success" ||
+      existingPayment.paymentStatus === "captured" ||
+      existingPayment.paymentStatus === "paid")
+  ) {
     const existingReg = await EventRegistration.findById(existingPayment.referenceId).lean();
     return {
       alreadyProcessed: true,
@@ -293,7 +315,7 @@ export const fulfillEventRegistrationPayment = async ({
 };
 
 /**
- * Auto-expires any 'Pending' payment records for Subscriptions and EventRegistrations
+ * Auto-expires any 'Pending' or 'pending' payment records for Subscriptions and EventRegistrations
  * that have exceeded the 5-minute timeout window.
  * Transitions their paymentStatus to 'Failed' with an explicit timeout reason,
  * ensuring abandoned checkout sessions never remain in pending limbo permanently.
@@ -301,11 +323,11 @@ export const fulfillEventRegistrationPayment = async ({
 export const expireStalePendingPayments = async (userId = null) => {
   try {
     const nowIST = getNowIST();
-    const thresholdIST = new Date(nowIST.getTime() - 5 * 60 * 1000);
-    const thresholdUTC = new Date(Date.now() - 5 * 60 * 1000);
+    const thresholdIST = new Date(nowIST.getTime() - 15 * 60 * 1000);
+    const thresholdUTC = new Date(Date.now() - 15 * 60 * 1000);
 
     const filter = {
-      paymentStatus: "Pending",
+      paymentStatus: { $in: ["Pending", "pending"] },
       referenceType: { $in: ["Subscription", "EventRegistration"] },
       $or: [
         { createdAt: { $lt: thresholdIST } },
@@ -320,7 +342,8 @@ export const expireStalePendingPayments = async (userId = null) => {
     const result = await Payment.updateMany(filter, {
       $set: {
         paymentStatus: "Failed",
-        remarks: "Payment timed out: session expired after 5 minutes.",
+        failureReason: "Payment timed out: session expired after 15 minutes.",
+        remarks: "Payment timed out: session expired after 15 minutes.",
         updatedAt: nowIST,
       },
     });
@@ -331,4 +354,3 @@ export const expireStalePendingPayments = async (userId = null) => {
     return null;
   }
 };
-

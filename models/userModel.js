@@ -191,7 +191,10 @@ const userSchema = new mongoose.Schema(
     linkedin: { type: String, default: "" },
     twitter: { type: String, default: "" },
 
-    // 🔹 SUBSCRIPTION / PLAN INFO
+    // 🔹 SUBSCRIPTION / PLAN INFO (Supports both direct flags and nested object)
+    isPlanActive: { type: Boolean, default: false },
+    planName: { type: String, default: "Free" },
+    isSubscribed: { type: Boolean, default: false },
     subscription: {
       planName: { type: String, default: "Free" },
       isPlanActive: { type: Boolean, default: false },

@@ -25,7 +25,7 @@ export const triggerNotificationDispatch = async (req, res) => {
 
     if (!type || !allowedTypes.includes(type)) {
       return res.status(400).json({
-        success: false,
+        success: false, 
         message: `Invalid notification type. Must be one of: ${allowedTypes.join(", ")}`,
       });
     }
