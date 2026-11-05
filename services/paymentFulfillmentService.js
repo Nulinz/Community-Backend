@@ -323,8 +323,8 @@ export const fulfillEventRegistrationPayment = async ({
 export const expireStalePendingPayments = async (userId = null) => {
   try {
     const nowIST = getNowIST();
-    const thresholdIST = new Date(nowIST.getTime() - 15 * 60 * 1000);
-    const thresholdUTC = new Date(Date.now() - 15 * 60 * 1000);
+    const thresholdIST = new Date(nowIST.getTime() - 2 * 60 * 1000);
+    const thresholdUTC = new Date(Date.now() - 2 * 60 * 1000);
 
     const filter = {
       paymentStatus: { $in: ["Pending", "pending"] },
@@ -342,8 +342,8 @@ export const expireStalePendingPayments = async (userId = null) => {
     const result = await Payment.updateMany(filter, {
       $set: {
         paymentStatus: "Failed",
-        failureReason: "Payment timed out: session expired after 15 minutes.",
-        remarks: "Payment timed out: session expired after 15 minutes.",
+        failureReason: "Payment timed out: session expired after 5 minutes.",
+        remarks: "Payment timed out: session expired after 5 minutes.",
         updatedAt: nowIST,
       },
     });

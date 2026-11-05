@@ -716,7 +716,7 @@ export const getUserPlanHistory = async (req, res, next) => {
 
     const userDoc = await User.findById(userId).select("subscription");
 
-    // Automatically transition any pending payments older than 15 minutes to Failed
+    // Automatically transition any pending payments older than 5 minutes to Failed
     await expireStalePendingPayments(userId);
 
     // Fetch all subscription payment attempts sorted newest first
