@@ -202,7 +202,7 @@ export const verifySubscriptionPayment = async (req, res, next) => {
     const nowIST = getNowIST();
 
     // ==========================================
-    // 1. APPLE IN-APP PURCHASE (iOS) - PURE WEBHOOK MODE
+    // 1. APPLE IN-APP PURCHASE (iOS) - IMMEDIATE ACTIVATION
     // ==========================================
     if (platform === "ios" || receipt || productId === "gradenvy_pro_quarterly") {
       const txData = parseStoreKitTransaction(receipt, req.body);
@@ -215,68 +215,33 @@ export const verifySubscriptionPayment = async (req, res, next) => {
         });
       }
 
-      // Check if the Apple Webhook already arrived and completed fulfillment in background
-      const existingPayment = await Payment.findOne({
-        $or: [
-          { orderId: activeOrderId },
-          { originalTransactionId: txData.originalTransactionId },
-          { transactionId: txData.transactionId },
-        ],
+      // Immediately activate the subscription in MongoDB using shared fulfillment service
+      // Sets paymentStatus = 'captured', saves Apple transactionId, and sets isPlanActive = true on User
+      const result = await fulfillSubscriptionPayment({
+        orderId: activeOrderId,
+        paymentId: txData.transactionId || activeOrderId,
+        planKey: planKey || "pro_quarterly",
+        amount: amount || 499,
+        userId,
+        paymentGateway: "Apple StoreKit",
+        receipt: receipt || null,
+        productId: txData.productId || productId || "gradenvy_pro_quarterly",
+        originalTransactionId: txData.originalTransactionId || null,
+        status: "captured",
       });
-
-      if (
-        existingPayment &&
-        (existingPayment.paymentStatus === "captured" ||
-          existingPayment.paymentStatus === "Success" ||
-          existingPayment.paymentStatus === "paid")
-      ) {
-        const userDoc = await User.findById(existingPayment.userId).select("subscription isPlanActive planName").lean();
-        return res.status(200).json({
-          success: true,
-          message: "Subscription is verified and active via server webhook confirmation.",
-          data: {
-            orderId: activeOrderId,
-            status: existingPayment.paymentStatus,
-            isPlanActive: true,
-            planName: userDoc?.subscription?.planName || "Pro Quarterly",
-            startDate: userDoc?.subscription?.startDate,
-            expiryDate: userDoc?.subscription?.expiryDate,
-          },
-        });
-      }
-
-      // Pure Webhook Mode: Record the transaction receipt and identifiers, but leave status as 'pending'
-      const updatedPayment = await Payment.findOneAndUpdate(
-        { orderId: activeOrderId },
-        {
-          $set: {
-            userId,
-            referenceId: userId,
-            referenceType: "Subscription",
-            c_by: userId,
-            amount: Number(amount) || 499,
-            currency: "INR",
-            paymentGateway: "Apple StoreKit",
-            paymentStatus: "pending", // Remains pending until Apple Server-to-Server Webhook confirms
-            transactionId: txData.transactionId || activeOrderId,
-            originalTransactionId: txData.originalTransactionId || activeOrderId,
-            receipt: receipt || null,
-            productId: txData.productId || productId || "gradenvy_pro_quarterly",
-            remarks: "Receipt received on client; awaiting Apple V2 Server Webhook fulfillment",
-            updatedAt: nowIST,
-          },
-        },
-        { new: true, upsert: true }
-      );
 
       return res.status(200).json({
         success: true,
-        message: "Receipt received successfully. Membership will activate upon server webhook confirmation.",
+        message: result.alreadyProcessed
+          ? "Subscription is already active."
+          : "Pro Membership activated successfully!",
         data: {
           orderId: activeOrderId,
-          status: "pending",
-          isPlanActive: false,
-          paymentRecordId: updatedPayment._id,
+          status: "captured",
+          isPlanActive: true,
+          planName: result.subscription?.planName || "Pro Quarterly",
+          startDate: result.subscription?.startDate,
+          expiryDate: result.subscription?.expiryDate,
         },
       });
     }
@@ -458,7 +423,13 @@ export const appleSubscriptionWebhookHandler = async (req, res, next) => {
         }
 
         if (prevPayment && prevPayment.userId) {
-          const effectiveOrderId = prevPayment.orderId || `ios_webhook_${originalTransactionId}`;
+          // Check if this notification is an auto-renewal (DID_RENEW)
+          // For renewals, generate a distinct orderId so it records as a new transaction in history
+          const isRenewal = notificationType === "DID_RENEW";
+          const effectiveOrderId = isRenewal
+            ? `ios_renew_${transactionInfo.transactionId || Date.now()}`
+            : (prevPayment.orderId || `ios_webhook_${originalTransactionId}`);
+
           await fulfillSubscriptionPayment({
             orderId: effectiveOrderId,
             paymentId: transactionInfo.transactionId || originalTransactionId,

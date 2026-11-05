@@ -128,6 +128,8 @@ export const fulfillSubscriptionPayment = async ({
         isPlanActive: true,
         planName,
         isSubscribed: true,
+        startDate,
+        expiryDate,
         "subscription.planName": planName,
         "subscription.isPlanActive": true,
         "subscription.startDate": startDate,

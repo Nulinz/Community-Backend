@@ -195,6 +195,8 @@ const userSchema = new mongoose.Schema(
     isPlanActive: { type: Boolean, default: false },
     planName: { type: String, default: "Free" },
     isSubscribed: { type: Boolean, default: false },
+    startDate: { type: Date, default: null },
+    expiryDate: { type: Date, default: null },
     subscription: {
       planName: { type: String, default: "Free" },
       isPlanActive: { type: Boolean, default: false },
