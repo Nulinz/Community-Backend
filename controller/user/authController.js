@@ -7,6 +7,27 @@ import otpService from "../../config/sendSMS.js";
 import { awardXP, triggerMissionNotification } from "../../services/xpService.js";
 import { calculateLevelInfo } from "../../config/xpConfig.js";
 
+/**
+ * Checks whether a company profile has all required details populated,
+ * including non-empty arrays for Core Services (whatWeDo) and Technologies.
+ */
+const isCompanyProfileComplete = (comp) => {
+  if (!comp) return false;
+  const hasNonEmptyEntry = (items) =>
+    Array.isArray(items) && items.some((item) => Boolean(String(item || "").trim()));
+
+  return Boolean(
+    String(comp.companyName || "").trim() &&
+    String(comp.companyLogo || "").trim() &&
+    String(comp.aboutUs || "").trim() &&
+    String(comp.address || "").trim() &&
+    String(comp.city || "").trim() &&
+    String(comp.contactPersonName || "").trim() &&
+    hasNonEmptyEntry(comp.whatWeDo) &&
+    hasNonEmptyEntry(comp.technologies)
+  );
+};
+
 // 🔹 Helper function to generate unique 6-8 character referral codes (e.g. JOHN4819)
 const generateUniqueReferralCode = async (name = "USER") => {
   const cleanName = name.replace(/[^a-zA-Z]/g, "").slice(0, 4).toUpperCase();
@@ -684,10 +705,15 @@ export const getCurrentUser = async (req, res) => {
     let collegeName = null;
 
     if (user.role === "company") {
-      const comp = await Company.findOne({ userId: user._id }).select("companyLogo companyName");
+      const comp = await Company.findOne({ userId: user._id }).select(
+        "companyLogo companyName aboutUs address city contactPersonName whatWeDo technologies"
+      );
       if (comp) {
         companyLogo = comp.companyLogo || null;
         companyName = comp.companyName || null;
+
+        // Set details_comp to true only when all required profile fields are populated
+        details_comp = isCompanyProfileComplete(comp);
       }
     } else if (user.role === "college") {
       const col = await College.findOne({ userId: user._id }).select("collegeLogo collegeName");
@@ -697,7 +723,7 @@ export const getCurrentUser = async (req, res) => {
       }
     }
 
-    const levelInfo = calculateLevelInfo(user.xp || 0);
+    const levelInfo = calculateLevelInfo(user.xp || 0, user.level || 1, user.lifetime_xp || user.xp || 0);
 
     return res.status(200).json({
       status: true,
@@ -717,11 +743,15 @@ export const getCurrentUser = async (req, res) => {
           accountStatus: user.is_active ? "active" : "inActive",
           referralCode: userReferralCode,
           register_status: user.register_status,
-          xp: levelInfo.totalXP,
-          level: levelInfo.currentLevel,
+          details_comp,
+          xp: user.xp || 0,
+          lifetime_xp: user.lifetime_xp || user.xp || 0,
+          level: user.level || levelInfo.currentLevel,
           levelInfo: {
             currentLevel: levelInfo.currentLevel,
+            currentXP: levelInfo.currentXP,
             totalXP: levelInfo.totalXP,
+            lifetimeXP: levelInfo.lifetimeXP,
             xpForCurrentLevel: levelInfo.xpForCurrentLevel,
             xpForNextLevel: levelInfo.xpForNextLevel,
             xpNeededForNextLevel: levelInfo.xpNeeded,
@@ -896,12 +926,16 @@ export const webLoginUser = async (req, res) => {
     let companyName = null;
     let collegeLogo = null;
     let collegeName = null;
+    let details_comp = false;
 
     if (user.role === "company") {
-      const comp = await Company.findOne({ userId: user._id }).select("companyLogo companyName");
+      const comp = await Company.findOne({ userId: user._id }).select(
+        "companyLogo companyName aboutUs address city contactPersonName whatWeDo technologies"
+      );
       if (comp) {
         companyLogo = comp.companyLogo || null;
         companyName = comp.companyName || null;
+        details_comp = isCompanyProfileComplete(comp);
       }
     } else if (user.role === "college") {
       const col = await College.findOne({ userId: user._id }).select("collegeLogo collegeName");
@@ -916,6 +950,7 @@ export const webLoginUser = async (req, res) => {
       message: "Login successfully",
       data: {
         accountStatus: "active",
+        details_comp,
         token,
         user: {
           _id: user._id,
@@ -928,6 +963,7 @@ export const webLoginUser = async (req, res) => {
           companyName,
           collegeName,
           accountStatus: "active",
+          details_comp,
           profile_pic: userDetails?.profile_pic
         }
       }

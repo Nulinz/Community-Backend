@@ -1,11 +1,13 @@
 import User from "../models/userModel.js";
 import XPLog from "../models/xpLogModel.js";
 import Notification from "../models/notificationModel.js";
-import { XP_ACTIONS, calculateLevelInfo } from "../config/xpConfig.js";
+import { XP_ACTIONS, LEVEL_REQUIREMENTS, calculateLevelInfo } from "../config/xpConfig.js";
 import { sendAndSaveNotification } from "../helper/sendAndSaveNotification.js";
 
 /**
  * Awards XP to a user defensively, updates total level atomically, and prevents duplicates.
+ * Implements level-specific XP reset (resets to 0 upon level up) with rollover deduction,
+ * while atomically incrementing lifetime_xp so historical totals are never lost.
  * 
  * @param {Object} params
  * @param {string} params.userId - Target user ObjectId
@@ -28,8 +30,8 @@ export const awardXP = async ({ userId, actionKey, referenceId = null }) => {
     return { success: false, reason: "USER_NOT_FOUND" };
   }
 
-  // Dynamically calculate level from XP to ensure guards evaluate against the actual active level
-  const userLevel = calculateLevelInfo(user.xp || 0).currentLevel;
+  // Active level evaluated directly from user.level to prevent false level-1 fallbacks when xp resets
+  const userLevel = user.level || 1;
 
   // Level-based activity guards
   if (actionKey === "ACTIVE_30_MIN" && userLevel !== 1) {
@@ -82,15 +84,25 @@ export const awardXP = async ({ userId, actionKey, referenceId = null }) => {
     referenceId,
   });
 
-  // 4. Atomically recalculate User total XP and Level from all audit logs
-  const updatedLogs = await XPLog.find({ userId }).select("xpEarned").lean();
-  let totalXP = updatedLogs.reduce((sum, log) => sum + (log.xpEarned || 0), 0);
+  // 4. Calculate current level progress and increment lifetime XP
+  let currentLevel = user.level || 1;
+  let currentXP = (user.xp || 0) + actionConfig.xp;
+  let lifetimeXP = (user.lifetime_xp || user.xp || 0) + actionConfig.xp;
+  let hasLeveledUp = false;
 
-  let levelInfo = calculateLevelInfo(totalXP);
-  const isLevelUp = levelInfo.currentLevel > (user.level || 0);
+  // Rollover loop: subtracts required threshold when level advances
+  while (true) {
+    const xpNeeded = LEVEL_REQUIREMENTS[currentLevel] || (currentLevel * 200);
+    if (currentXP < xpNeeded) {
+      break;
+    }
+    currentXP -= xpNeeded;
+    currentLevel += 1;
+    hasLeveledUp = true;
+  }
 
   // Check for Level 2 & Level 3 reach bonuses (+25 XP each)
-  if (levelInfo.currentLevel >= 2) {
+  if (currentLevel >= 2) {
     const level1BonusLogged = await XPLog.findOne({ userId, action: "LEVEL_1_BONUS" });
     if (!level1BonusLogged) {
       await XPLog.create({
@@ -98,11 +110,12 @@ export const awardXP = async ({ userId, actionKey, referenceId = null }) => {
         action: "LEVEL_1_BONUS",
         xpEarned: XP_ACTIONS.LEVEL_1_BONUS.xp,
       });
-      totalXP += XP_ACTIONS.LEVEL_1_BONUS.xp;
+      currentXP += XP_ACTIONS.LEVEL_1_BONUS.xp;
+      lifetimeXP += XP_ACTIONS.LEVEL_1_BONUS.xp;
     }
   }
 
-  if (levelInfo.currentLevel >= 3) {
+  if (currentLevel >= 3) {
     const level2BonusLogged = await XPLog.findOne({ userId, action: "LEVEL_2_BONUS" });
     if (!level2BonusLogged) {
       await XPLog.create({
@@ -110,17 +123,30 @@ export const awardXP = async ({ userId, actionKey, referenceId = null }) => {
         action: "LEVEL_2_BONUS",
         xpEarned: XP_ACTIONS.LEVEL_2_BONUS.xp,
       });
-      totalXP += XP_ACTIONS.LEVEL_2_BONUS.xp;
+      currentXP += XP_ACTIONS.LEVEL_2_BONUS.xp;
+      lifetimeXP += XP_ACTIONS.LEVEL_2_BONUS.xp;
     }
   }
 
-  levelInfo = calculateLevelInfo(totalXP);
-  const finalIsLevelUp = isLevelUp || (levelInfo.currentLevel > (user.level || 0));
+  // Re-check rollover in the rare event that level-up bonus pushed user past the next threshold
+  while (true) {
+    const xpNeeded = LEVEL_REQUIREMENTS[currentLevel] || (currentLevel * 200);
+    if (currentXP < xpNeeded) {
+      break;
+    }
+    currentXP -= xpNeeded;
+    currentLevel += 1;
+    hasLeveledUp = true;
+  }
+
+  const levelInfo = calculateLevelInfo(currentXP, currentLevel, lifetimeXP);
+  const finalIsLevelUp = hasLeveledUp || (currentLevel > (user.level || 0));
 
   // Atomically update user document in MongoDB
   const updateFields = {
-    xp: totalXP,
-    level: levelInfo.currentLevel,
+    xp: currentXP,
+    lifetime_xp: lifetimeXP,
+    level: currentLevel,
   };
   if (finalIsLevelUp) {
     updateFields.show_levelup_animation = true;
@@ -137,8 +163,10 @@ export const awardXP = async ({ userId, actionKey, referenceId = null }) => {
   return {
     success: true,
     xpAwarded: actionConfig.xp,
-    totalXP: updatedUser?.xp ?? totalXP,
-    level: updatedUser?.level ?? levelInfo.currentLevel,
+    currentXP: updatedUser?.xp ?? currentXP,
+    totalXP: updatedUser?.lifetime_xp ?? lifetimeXP,
+    lifetimeXP: updatedUser?.lifetime_xp ?? lifetimeXP,
+    level: updatedUser?.level ?? currentLevel,
     isLevelUp: finalIsLevelUp,
     levelInfo,
   };

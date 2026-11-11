@@ -124,6 +124,11 @@ const eventSchema = new mongoose.Schema(
 
     // Rules & Description
     description: { type: String, trim: true },
+    order_count: {
+      type: Number,
+      default: null,
+      index: true,
+    },
 
     isActive: {
       type: Boolean,

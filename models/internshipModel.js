@@ -24,6 +24,7 @@ const internshipSchema = new mongoose.Schema(
     location: { type: String, required: true, trim: true },
     mode: { type: String, required: true },
     totalOpenings: { type: Number, default: 0 },
+    externalRegistrationLink: { type: String, trim: true, default: "" },
     duration: { type: String },
     internStartDate: { type: Date },
     applicationDeadline: { type: Date },
@@ -41,6 +42,11 @@ const internshipSchema = new mongoose.Schema(
     eligibility: [{ type: String, trim: true }],
     description: { type: String, trim: true },
     certificateAvailability: { type: String, trim: true },
+    order_count: {
+      type: Number,
+      default: null,
+      index: true,
+    },
     isActive: {
       type: Boolean,
       default: true,

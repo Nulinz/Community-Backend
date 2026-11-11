@@ -121,6 +121,11 @@ const seminarSchema = new mongoose.Schema(
     certificateContentBody: { type: String, trim: true, default: "" },
     // Rules & Description
     description: { type: String, trim: true },
+    order_count: {
+      type: Number,
+      default: null,
+      index: true,
+    },
 
     isActive: {
       type: Boolean,

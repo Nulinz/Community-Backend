@@ -124,6 +124,12 @@ const userSchema = new mongoose.Schema(
       index: true,
     },
 
+    lifetime_xp: {
+      type: Number,
+      default: 0,
+      index: true,
+    },
+
     level: {
       type: Number,
       default: 1,

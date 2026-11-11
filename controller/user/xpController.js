@@ -18,12 +18,12 @@ import { sendAndSaveNotification } from "../../helper/sendAndSaveNotification.js
 export const getUserXpSummary = async (req, res, next) => {
   try {
     const userId = req.user._id;
-    const user = await User.findById(userId).select("name email xp level").lean();
+    const user = await User.findById(userId).select("name email xp lifetime_xp level").lean();
     if (!user) {
       return res.status(404).json({ status: false, message: "User not found" });
     }
 
-    const levelInfo = calculateLevelInfo(user.xp || 0);
+    const levelInfo = calculateLevelInfo(user.xp || 0, user.level || 1, user.lifetime_xp || user.xp || 0);
 
     return res.status(200).json({
       status: true,
@@ -31,7 +31,9 @@ export const getUserXpSummary = async (req, res, next) => {
         userId: user._id,
         name: user.name || "",
         email: user.email || "",
-        currentXP: levelInfo.totalXP,
+        currentXP: levelInfo.currentXP,
+        totalXP: levelInfo.totalXP,
+        lifetimeXP: levelInfo.lifetimeXP,
         currentLevel: levelInfo.currentLevel,
         xpForCurrentLevel: levelInfo.xpForCurrentLevel,
         xpForNextLevel: levelInfo.xpForNextLevel,
@@ -60,18 +62,8 @@ export const getMissions = async (req, res, next) => {
       return res.status(404).json({ status: false, message: "User not found" });
     }
 
-    // Calculate current level dynamically from total XP to ensure consistency with userDashboard
-    const levelInfo = calculateLevelInfo(user.xp || 0);
-    const userLevel = levelInfo.currentLevel;
-
-    // Self-healing synchronization: update user document if stored level lagged behind XP calculation
-    if (user.level !== userLevel) {
-      const syncUpdate = { level: userLevel };
-      if (userLevel > (user.level || 0)) {
-        syncUpdate.show_levelup_animation = true;
-      }
-      User.findByIdAndUpdate(userId, { $set: syncUpdate }).exec();
-    }
+    const userLevel = user.level || 1;
+    const levelInfo = calculateLevelInfo(user.xp || 0, userLevel, user.lifetime_xp || user.xp || 0);
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
 
@@ -319,9 +311,9 @@ export const claimMission = async (req, res, next) => {
       return res.status(404).json({ status: false, message: "User not found" });
     }
 
-    // Derive level dynamically from XP to prevent blocking users whose XP progressed to higher tiers
-    const levelInfo = calculateLevelInfo(user.xp || 0);
-    const userLevel = levelInfo.currentLevel;
+    // Evaluate level directly from user.level so active minute guards check against actual level
+    const userLevel = user.level || 1;
+    const levelInfo = calculateLevelInfo(user.xp || 0, userLevel, user.lifetime_xp || user.xp || 0);
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
 

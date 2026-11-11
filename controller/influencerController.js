@@ -24,14 +24,14 @@ export const getInfluencerDashboard = async (req, res, next) => {
     }
 
     const registeredUsers = await User.find(query)
-      .select("name profileImage createdAt is_active xp level")
+      .select("name profileImage createdAt is_active xp lifetime_xp level")
       .lean();
 
     // In-memory reverse-chronological sort for Cosmos DB compatibility
     registeredUsers.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 
     const activeUsersCount = registeredUsers.filter((u) => u.is_active !== false).length;
-    const totalXpEarned = registeredUsers.reduce((sum, u) => sum + (u.xp || 0), 0);
+    const totalXpEarned = registeredUsers.reduce((sum, u) => sum + (u.lifetime_xp ?? u.xp ?? 0), 0);
 
     const totalClicks = influencer.clickCount || influencer.clicks || 0;
     const conversionRate =

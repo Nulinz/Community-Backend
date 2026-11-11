@@ -10,6 +10,7 @@ import User from "../models/userModel.js";
 import Resume from "../models/resumeModel.js";
 import { formatJobSalary } from "../helper/salaryHelper.js";
 import { notifyCompanyFollowers } from "../helper/companyFollowNotification.js";
+import { applyOrderCount, buildStatusQuery, sortByOrderCount } from "../helper/orderCountHelper.js";
 
 const toCleanString = (value) =>
   typeof value === "string" ? value.trim() : "";
@@ -68,6 +69,10 @@ export const createJobForm = async (req, res, next) => {
       learning_outcomes,
       development_benefits,
       development_resources,
+      experienceFrom,
+      experienceTo,
+      experienceRange,
+      externalRegistrationLink,
     } = rest;
 
     if (!jobTitle) throw Object.assign(new Error("Job Title is required"), { status: 400 });
@@ -128,6 +133,26 @@ export const createJobForm = async (req, res, next) => {
     job.location = toCleanString(location) || (cleanMode === "Online" || cleanMode === "Remote" ? cleanMode : "");
     job.mode = cleanMode;
     job.totalOpenings = Number(totalOpenings) || 0;
+
+    // Resolve dragging range experience values (supports separate fields or composite object)
+    let resolvedExpFrom = experienceFrom;
+    let resolvedExpTo = experienceTo;
+    if (experienceRange) {
+      const parsedExp = typeof experienceRange === "string" ? (() => { try { return JSON.parse(experienceRange); } catch { return null; } })() : experienceRange;
+      if (parsedExp && typeof parsedExp === "object") {
+        if (parsedExp.from !== undefined) resolvedExpFrom = parsedExp.from;
+        if (parsedExp.to !== undefined) resolvedExpTo = parsedExp.to;
+      }
+    }
+    const numExpFrom = resolvedExpFrom !== undefined && resolvedExpFrom !== null && resolvedExpFrom !== "" ? Number(resolvedExpFrom) : 0;
+    const numExpTo = resolvedExpTo !== undefined && resolvedExpTo !== null && resolvedExpTo !== "" ? Number(resolvedExpTo) : 0;
+    if (numExpFrom < 0 || numExpTo < 0 || numExpFrom > numExpTo) {
+      throw Object.assign(new Error("Invalid experience range. 'From' must be less than or equal to 'To'"), { status: 400 });
+    }
+    job.experienceFrom = numExpFrom;
+    job.experienceTo = numExpTo;
+    job.externalRegistrationLink = toCleanString(externalRegistrationLink);
+
     job.duration = toCleanString(jobType) === "Contract" ? toCleanString(duration) : "";
     job.jobStartDate = jobStartDate || undefined;
     job.applicationDeadline = applicationDeadline || undefined;
@@ -145,6 +170,7 @@ export const createJobForm = async (req, res, next) => {
     job.learning_outcomes = parseArray(learning_outcomes);
     job.development_benefits = parseArray(development_benefits);
     job.development_resources = parseArray(development_resources);
+    applyOrderCount(job, rest.order_count, req.user?.role);
 
     const savedJob = await job.save();
     const jobObj = savedJob.toObject();
@@ -181,24 +207,7 @@ export const getAllJobs = async (req, res, next) => {
     const user = req.user;
     const { status } = req.query;
 
-    let query = {};
-
-    if (user?.role === "company") {
-      query.c_by = user._id;
-    } else {
-      switch (status) {
-        case "community":
-          query.c_by = user._id;
-          break;
-        case "pending":
-        case "approved":
-        case "rejected":
-          query.status = status;
-          break;
-        default:
-          query.status = "pending";
-      }
-    }
+    const query = buildStatusQuery(user, status, { forceOwnForCompany: true });
 
     const jobs = await Job.find(query)
       .sort({ createdAt: -1 })
@@ -220,6 +229,8 @@ export const getAllJobs = async (req, res, next) => {
         };
       })
     );
+
+    sortByOrderCount(data);
 
     return res.status(200).json({
       success: true,

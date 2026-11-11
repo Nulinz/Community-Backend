@@ -50,6 +50,7 @@ import {
   getCompetitionProfile,
   createEventRegistration,
   createExternalEventRegistration,
+  createExternalJobApplication,
   getAllConferences,
   getConferenceProfile,
   getLocations,
@@ -134,6 +135,7 @@ router.post("/reset-password", uploader.none(), resetPassword);
 router.post("/forgot-otp-verify", uploader.none(), forgotOtpVerify);
 router.post("/change-password", uploader.none(), isAuthenticated, changePassword);
 router.post("/apply-job", uploader.none(), isAuthenticated, applyJob);
+router.post("/external-job-apply", uploader.none(), isAuthenticated, createExternalJobApplication);
 router.get("/my-applied-job", isAuthenticated, getAppliedJobs);
 router.get("/my-applied-freelance", isAuthenticated, getAppliedFreelances);
 

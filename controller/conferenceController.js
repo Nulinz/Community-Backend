@@ -6,6 +6,7 @@ import EventRegistration from "../models/eventRegistrationModel.js";
 import { getEventFinancials } from "../helper/getEventFinancials.js";
 import { validateOrganizerPayout, resolveOrganizerName } from "../helper/payoutValidator.js";
 import { enrichRegistrationsWithUserDetails } from "../helper/resolveUserEducation.js";
+import { applyOrderCount, buildStatusQuery, sortByOrderCount } from "../helper/orderCountHelper.js";
 const toCleanString = (value) =>
     typeof value === "string" ? value.trim() : "";
 
@@ -269,6 +270,7 @@ export const createConferenceForm = async (req, res, next) => {
         conference.incharges = parseDynamicArray(incharges);
 
         conference.description = toCleanString(description);
+        applyOrderCount(conference, rest.order_count, req.user?.role);
 
         await conference.save();
 
@@ -302,20 +304,7 @@ export const getAllConference = async (req, res, next) => {
         const user = req.user;
         const { status } = req.query;
 
-        let query = {};
-
-        switch (status) {
-            case "community":
-                query.c_by = user._id;
-                break;
-            case "pending":
-            case "approved":
-            case "rejected":
-                query.status = status;
-                break;
-            default:
-                query.status = "pending";
-        }
+        const query = buildStatusQuery(user, status);
 
         const conferences = await Conference.find(query).sort({ createdAt: -1 }).lean();
         const confIds = conferences.map((c) => c._id);
@@ -330,6 +319,8 @@ export const getAllConference = async (req, res, next) => {
             ...item,
             registeredCount: countMap.get(String(item._id)) || 0,
         }));
+
+        sortByOrderCount(data);
 
         res.status(200).json({
             success: true,

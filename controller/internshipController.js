@@ -7,6 +7,7 @@ import UserDetails from "../models/userDetails.js";
 import PerformanceEvaluation from "../models/performanceEvaluationModel.js";
 import { notifyJobAudience } from "../helper/jobNotification.js";
 import { notifyCompanyFollowers } from "../helper/companyFollowNotification.js";
+import { applyOrderCount, buildStatusQuery, sortByOrderCount } from "../helper/orderCountHelper.js";
 import Company from "../models/companyModel.js";
 import User from "../models/userModel.js";
 import Resume from "../models/resumeModel.js";
@@ -51,7 +52,8 @@ export const createInternshipForm = async (req, res, next) => {
       benefits,
       learning_outcomes,
       development_benefits,
-      development_resources
+      development_resources,
+      externalRegistrationLink,
     } = rest;
 
     // Validation
@@ -122,6 +124,7 @@ export const createInternshipForm = async (req, res, next) => {
     internship.mode = cleanMode;
     internship.totalOpenings = Number(totalOpenings) || 0;
     internship.duration = toCleanString(duration);
+    internship.externalRegistrationLink = toCleanString(externalRegistrationLink);
     internship.internStartDate = internStartDate || undefined;
     internship.applicationDeadline = applicationDeadline || undefined;
 
@@ -148,7 +151,7 @@ export const createInternshipForm = async (req, res, next) => {
     internship.learning_outcomes = parseArray(learning_outcomes)
     internship.development_benefits = parseArray(development_benefits)
     internship.development_resources = parseArray(development_resources)
-
+    applyOrderCount(internship, rest.order_count, req.user?.role);
 
     const savedInternship = await internship.save();
     const internshipObj = savedInternship.toObject();
@@ -183,20 +186,7 @@ export const getAllInternships = async (req, res, next) => {
     const user = req.user;
     const { status } = req.query;
 
-    let query = {};
-
-    switch (status) {
-      case "community":
-        query.c_by = user._id;
-        break;
-      case "pending":
-      case "approved":
-      case "rejected":
-        query.status = status;
-        break;
-      default:
-        query.status = "pending";
-    }
+    const query = buildStatusQuery(user, status);
 
     const internships = await Internship.find(query)
       .sort({ createdAt: -1 })
@@ -214,6 +204,8 @@ export const getAllInternships = async (req, res, next) => {
         return { ...itemRest, domains: itemDomains, appliedCount };
       })
     );
+
+    sortByOrderCount(data);
 
     res.status(200).json({
       success: true,

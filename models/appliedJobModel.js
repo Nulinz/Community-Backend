@@ -33,6 +33,10 @@ const appliedJobSchema = new mongoose.Schema(
       enum: ["applied", "selected", "rejected"],
       default: "applied",
     },
+    isExternal: {
+      type: Boolean,
+      default: false,
+    },
     portfolios: [
       {
         field_name: {

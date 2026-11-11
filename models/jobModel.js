@@ -25,6 +25,9 @@ const jobSchema = new mongoose.Schema(
     location: { type: String, required: true, trim: true },
     mode: { type: String, required: true },
     totalOpenings: { type: Number, default: 0 },
+    externalRegistrationLink: { type: String, trim: true, default: "" },
+    experienceFrom: { type: Number, default: 0, min: 0 },
+    experienceTo: { type: Number, default: 0, min: 0 },
     duration: { type: String },
     jobStartDate: { type: Date },
     applicationDeadline: { type: Date },
@@ -43,6 +46,11 @@ const jobSchema = new mongoose.Schema(
     eligibility: [{ type: String, trim: true }],
     description: { type: String, trim: true },
     certificateAvailability: { type: String, trim: true },
+    order_count: {
+      type: Number,
+      default: null,
+      index: true,
+    },
     isActive: {
       type: Boolean,
       default: true,

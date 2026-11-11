@@ -6,6 +6,7 @@ import EventRegistration from "../models/eventRegistrationModel.js";
 import { getEventFinancials } from "../helper/getEventFinancials.js";
 import { validateOrganizerPayout, resolveOrganizerName } from "../helper/payoutValidator.js";
 import { enrichRegistrationsWithUserDetails } from "../helper/resolveUserEducation.js";
+import { applyOrderCount, buildStatusQuery, sortByOrderCount } from "../helper/orderCountHelper.js";
 
 const toCleanString = (value) =>
     typeof value === "string" ? value.trim() : "";
@@ -268,6 +269,7 @@ export const createEventForm = async (req, res, next) => {
         event.rounds = parseDynamicArray(rounds);
         event.schedule = parseDynamicArray(schedule);
         event.incharges = parseDynamicArray(incharges);
+        applyOrderCount(event, rest.order_count, req.user?.role);
 
         await event.save();
 
@@ -300,20 +302,7 @@ export const getAllEvents = async (req, res, next) => {
         const user = req.user;
         const { status } = req.query;
 
-        let query = {};
-
-        switch (status) {
-            case "community":
-                query.c_by = user._id;
-                break;
-            case "pending":
-            case "approved":
-            case "rejected":
-                query.status = status;
-                break;
-            default:
-                query.status = "pending";
-        }
+        const query = buildStatusQuery(user, status);
 
         const events = await Event.find(query).sort({ createdAt: -1 }).lean();
         const eventIds = events.map((e) => e._id);
@@ -328,6 +317,8 @@ export const getAllEvents = async (req, res, next) => {
             ...item,
             registeredCount: countMap.get(String(item._id)) || 0,
         }));
+
+        sortByOrderCount(data);
 
         res.status(200).json({
             success: true,

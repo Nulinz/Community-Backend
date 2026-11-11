@@ -127,6 +127,11 @@ const competitionSchema = new mongoose.Schema(
     ruleBook: { type: String },
     additionalRules: { type: String, trim: true },
     description: { type: String, trim: true },
+    order_count: {
+      type: Number,
+      default: null,
+      index: true,
+    },
 
     isActive: {
       type: Boolean,

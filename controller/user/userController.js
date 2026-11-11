@@ -11,6 +11,7 @@ import Resume from "../../models/resumeModel.js";
 import { checkIsSaved } from "../../helper/isSaved.js";
 import { checkIsApplied } from "../../helper/isApplied.js";
 import { formatJobSalary } from "../../helper/salaryHelper.js";
+import { sortByOrderCount } from "../../helper/orderCountHelper.js";
 
 import Competition from "../../models/competitionModel.js";
 import EventRegistration from "../../models/eventRegistrationModel.js";
@@ -171,7 +172,7 @@ const userDashboard = async (req, res) => {
     startOfToday.setHours(0, 0, 0, 0);
 
     const userDoc = await User.findById(userId).select(
-      "xp level lastActiveDate fcm_token subscription show_levelup_animation"
+      "xp lifetime_xp level lastActiveDate fcm_token subscription show_levelup_animation"
     );
     if (userDoc && (!userDoc.lastActiveDate || new Date(userDoc.lastActiveDate) < startOfToday)) {
       userDoc.lastActiveDate = new Date();
@@ -183,7 +184,11 @@ const userDashboard = async (req, res) => {
       console.error("FCM Daily Login dashboard error:", err.message)
     );
 
-    const levelInfo = calculateLevelInfo(userDoc?.xp || 0);
+    const levelInfo = calculateLevelInfo(
+      userDoc?.xp || 0,
+      userDoc?.level || 1,
+      userDoc?.lifetime_xp || userDoc?.xp || 0
+    );
 
     // ── Step 6: Check Subscription Expiry & 5-Day Renewal Reminder ──
     // Evaluates whether the active subscription is within the 5-day expiration window.
@@ -288,7 +293,8 @@ const userDashboard = async (req, res) => {
       data: {
         userXp: {
           xp: userDoc?.xp || 0,
-          level: levelInfo.currentLevel,
+          lifetime_xp: userDoc?.lifetime_xp || userDoc?.xp || 0,
+          level: userDoc?.level || levelInfo.currentLevel,
           progressPercentage: levelInfo.progressPercentage,
           xpForNextLevel: levelInfo.xpForNextLevel,
           xpNeeded: levelInfo.xpNeeded,
@@ -410,7 +416,7 @@ const getJobs = async (req, res) => {
       Job.find({ isActive: true, status: "approved" })
         .sort({ createdAt: -1 })
         .select(
-          "jobTitle domain domains jobType location companyName companyLogo duration salary salaryType salaryMin salaryMax createdAt mode totalOpenings c_by"
+          "jobTitle domain domains jobType location companyName companyLogo duration salary salaryType salaryMin salaryMax createdAt mode totalOpenings experienceFrom experienceTo externalRegistrationLink order_count c_by"
         )
         .populate("c_by", "role"),
       SavedJob.find({
@@ -443,30 +449,48 @@ const getJobs = async (req, res) => {
         ? Company.find({
             $or: [{ userId: { $in: creatorUserIds } }, { c_by: { $in: creatorUserIds } }],
           })
-            .select("userId c_by companyLogo companyName")
+            .select("userId c_by companyLogo companyName verificationStatus")
             .lean()
         : [],
       companyNames.length > 0
         ? Company.find({
             companyName: { $in: companyNames.map((n) => new RegExp(`^${n}$`, "i")) },
           })
-            .select("companyLogo companyName")
+            .select("companyLogo companyName verificationStatus")
             .lean()
         : [],
     ]);
 
     const companyByCreatorMap = new Map();
+    const companyVerificationByCreatorMap = new Map();
     companiesByCreator.forEach((c) => {
       if (c.companyLogo) {
         if (c.userId) companyByCreatorMap.set(String(c.userId), c.companyLogo);
         if (c.c_by) companyByCreatorMap.set(String(c.c_by), c.companyLogo);
       }
+      if (c.verificationStatus && c.userId) {
+        const uid = String(c.userId);
+        const existing = companyVerificationByCreatorMap.get(uid);
+        if (!existing || c.verificationStatus === "Verified") {
+          companyVerificationByCreatorMap.set(uid, c.verificationStatus);
+        }
+      }
     });
 
     const companyByNameMap = new Map();
+    const companyVerificationByNameMap = new Map();
     companiesByName.forEach((c) => {
-      if (c.companyLogo && c.companyName) {
-        companyByNameMap.set(c.companyName.toLowerCase().trim(), c.companyLogo);
+      const cleanName = c.companyName ? c.companyName.toLowerCase().trim() : null;
+      if (cleanName) {
+        if (c.companyLogo) {
+          companyByNameMap.set(cleanName, c.companyLogo);
+        }
+        if (c.verificationStatus) {
+          const existing = companyVerificationByNameMap.get(cleanName);
+          if (!existing || c.verificationStatus === "Verified") {
+            companyVerificationByNameMap.set(cleanName, c.verificationStatus);
+          }
+        }
       }
     });
 
@@ -493,6 +517,11 @@ const getJobs = async (req, res) => {
         (creatorIdStr && companyByCreatorMap.get(creatorIdStr)) ||
         (item.c_by?.role === "admin" ? STATIC_ADMIN_IMAGE : null);
 
+      const resolvedVerificationStatus =
+        (normalizedName && companyVerificationByNameMap.get(normalizedName)) ||
+        (creatorIdStr && companyVerificationByCreatorMap.get(creatorIdStr)) ||
+        (item.c_by?.role === "admin" ? "Verified" : "Pending");
+
       const isSaved = savedSet.has(String(item._id));
       const isApplied = appliedSet.has(String(item._id));
 
@@ -502,10 +531,21 @@ const getJobs = async (req, res) => {
         salary: formatJobSalary(fullJobObj),
         companyLogo: resolvedLogo,
         companyImage: resolvedLogo,
+        verificationStatus: resolvedVerificationStatus,
+        experienceFrom: fullJobObj.experienceFrom ?? 0,
+        experienceTo: fullJobObj.experienceTo ?? 0,
+        experience: fullJobObj.experienceFrom === 0 && fullJobObj.experienceTo === 0
+          ? "Fresher"
+          : `${fullJobObj.experienceFrom ?? 0} - ${fullJobObj.experienceTo ?? 0} Yrs`,
+        externalRegistrationLink: fullJobObj.externalRegistrationLink || "",
+        isExternal: Boolean(fullJobObj.externalRegistrationLink),
+        order_count: fullJobObj.order_count ?? null,
         is_saved: isSaved,
         is_applied: isApplied,
       };
     });
+
+    sortByOrderCount(data);
 
     return res.status(200).json({
       status: true,
@@ -538,7 +578,7 @@ const getAllInternships = async (req, res) => {
       Internship.find({ isActive: true, status: "approved" })
         .sort({ createdAt: -1 })
         .select(
-          "jobTitle domain domains location companyName companyLogo duration salary paymentAmount internshipType eligibility createdAt c_by"
+          "jobTitle domain domains location companyName companyLogo duration salary paymentAmount internshipType eligibility externalRegistrationLink order_count createdAt c_by"
         )
         .populate("c_by", "role"),
       SavedJob.find({
@@ -571,30 +611,48 @@ const getAllInternships = async (req, res) => {
         ? Company.find({
             $or: [{ userId: { $in: creatorUserIds } }, { c_by: { $in: creatorUserIds } }],
           })
-            .select("userId c_by companyLogo companyName")
+            .select("userId c_by companyLogo companyName verificationStatus")
             .lean()
         : [],
       companyNames.length > 0
         ? Company.find({
             companyName: { $in: companyNames.map((n) => new RegExp(`^${n}$`, "i")) },
           })
-            .select("companyLogo companyName")
+            .select("companyLogo companyName verificationStatus")
             .lean()
         : [],
     ]);
 
     const companyByCreatorMap = new Map();
+    const companyVerificationByCreatorMap = new Map();
     companiesByCreator.forEach((c) => {
       if (c.companyLogo) {
         if (c.userId) companyByCreatorMap.set(String(c.userId), c.companyLogo);
         if (c.c_by) companyByCreatorMap.set(String(c.c_by), c.companyLogo);
       }
+      if (c.verificationStatus && c.userId) {
+        const uid = String(c.userId);
+        const existing = companyVerificationByCreatorMap.get(uid);
+        if (!existing || c.verificationStatus === "Verified") {
+          companyVerificationByCreatorMap.set(uid, c.verificationStatus);
+        }
+      }
     });
 
     const companyByNameMap = new Map();
+    const companyVerificationByNameMap = new Map();
     companiesByName.forEach((c) => {
-      if (c.companyLogo && c.companyName) {
-        companyByNameMap.set(c.companyName.toLowerCase().trim(), c.companyLogo);
+      const cleanName = c.companyName ? c.companyName.toLowerCase().trim() : null;
+      if (cleanName) {
+        if (c.companyLogo) {
+          companyByNameMap.set(cleanName, c.companyLogo);
+        }
+        if (c.verificationStatus) {
+          const existing = companyVerificationByNameMap.get(cleanName);
+          if (!existing || c.verificationStatus === "Verified") {
+            companyVerificationByNameMap.set(cleanName, c.verificationStatus);
+          }
+        }
       }
     });
 
@@ -620,6 +678,11 @@ const getAllInternships = async (req, res) => {
         (creatorIdStr && companyByCreatorMap.get(creatorIdStr)) ||
         (item.c_by?.role === "admin" ? STATIC_ADMIN_IMAGE : null);
 
+      const resolvedVerificationStatus =
+        (normalizedName && companyVerificationByNameMap.get(normalizedName)) ||
+        (creatorIdStr && companyVerificationByCreatorMap.get(creatorIdStr)) ||
+        (item.c_by?.role === "admin" ? "Verified" : "Pending");
+
       const isSaved = savedSet.has(String(item._id));
       const isApplied = appliedSet.has(String(item._id));
 
@@ -628,6 +691,15 @@ const getAllInternships = async (req, res) => {
         domains: itemDomains,
         companyLogo: resolvedLogo,
         companyImage: resolvedLogo,
+        verificationStatus: resolvedVerificationStatus,
+        experienceFrom: fullJobObj.experienceFrom ?? 0,
+        experienceTo: fullJobObj.experienceTo ?? 0,
+        experience: fullJobObj.experienceFrom === 0 && fullJobObj.experienceTo === 0
+          ? "Fresher"
+          : `${fullJobObj.experienceFrom ?? 0} - ${fullJobObj.experienceTo ?? 0} Yrs`,
+        externalRegistrationLink: fullJobObj.externalRegistrationLink || "",
+        isExternal: Boolean(fullJobObj.externalRegistrationLink),
+        order_count: fullJobObj.order_count ?? null,
         is_saved: isSaved,
         isSaved: isSaved,
         saved: isSaved,
@@ -636,6 +708,8 @@ const getAllInternships = async (req, res) => {
         applied: isApplied,
       };
     });
+
+    sortByOrderCount(data);
 
     return res.status(200).json({
       status: true,
@@ -704,30 +778,48 @@ const getAllFreelances = async (req, res) => {
         ? Company.find({
           $or: [{ userId: { $in: creatorUserIds } }, { c_by: { $in: creatorUserIds } }],
         })
-          .select("userId c_by companyLogo companyName")
+          .select("userId c_by companyLogo companyName verificationStatus")
           .lean()
         : [],
       companyNames.length > 0
         ? Company.find({
           companyName: { $in: companyNames.map((n) => new RegExp(`^${n}$`, "i")) },
         })
-          .select("companyLogo companyName")
+          .select("companyLogo companyName verificationStatus")
           .lean()
         : [],
     ]);
 
     const companyByCreatorMap = new Map();
+    const companyVerificationByCreatorMap = new Map();
     companiesByCreator.forEach((c) => {
       if (c.companyLogo) {
         if (c.userId) companyByCreatorMap.set(String(c.userId), c.companyLogo);
         if (c.c_by) companyByCreatorMap.set(String(c.c_by), c.companyLogo);
       }
+      if (c.verificationStatus && c.userId) {
+        const uid = String(c.userId);
+        const existing = companyVerificationByCreatorMap.get(uid);
+        if (!existing || c.verificationStatus === "Verified") {
+          companyVerificationByCreatorMap.set(uid, c.verificationStatus);
+        }
+      }
     });
 
     const companyByNameMap = new Map();
+    const companyVerificationByNameMap = new Map();
     companiesByName.forEach((c) => {
-      if (c.companyLogo && c.companyName) {
-        companyByNameMap.set(c.companyName.toLowerCase().trim(), c.companyLogo);
+      const cleanName = c.companyName ? c.companyName.toLowerCase().trim() : null;
+      if (cleanName) {
+        if (c.companyLogo) {
+          companyByNameMap.set(cleanName, c.companyLogo);
+        }
+        if (c.verificationStatus) {
+          const existing = companyVerificationByNameMap.get(cleanName);
+          if (!existing || c.verificationStatus === "Verified") {
+            companyVerificationByNameMap.set(cleanName, c.verificationStatus);
+          }
+        }
       }
     });
 
@@ -749,6 +841,11 @@ const getAllFreelances = async (req, res) => {
         (normalizedName && companyByNameMap.get(normalizedName)) ||
         (item.c_by?.role === "admin" ? STATIC_ADMIN_IMAGE : null);
 
+      const resolvedVerificationStatus =
+        (normalizedName && companyVerificationByNameMap.get(normalizedName)) ||
+        (creatorIdStr && companyVerificationByCreatorMap.get(creatorIdStr)) ||
+        (item.c_by?.role === "admin" ? "Verified" : "Pending");
+
       const isSaved = savedSet.has(String(item._id));
       const isApplied = appliedSet.has(String(item._id));
 
@@ -757,6 +854,7 @@ const getAllFreelances = async (req, res) => {
         domains: itemDomains,
         companyImage: resolvedLogo,
         companyLogo: resolvedLogo,
+        verificationStatus: resolvedVerificationStatus,
         is_saved: isSaved,
         isSaved: isSaved,
         saved: isSaved,
@@ -1784,6 +1882,7 @@ const getJobProfile = async (req, res) => {
       aboutUs: null,
       websiteLink: null,
       companyTagLine: null,
+      verificationStatus: "Pending",
     };
 
     const creatorRole = job.c_by?.role ? String(job.c_by.role).toLowerCase() : null;
@@ -1791,18 +1890,19 @@ const getJobProfile = async (req, res) => {
     if (creatorRole === "admin") {
       companyId = null;
       companyDetails.companyLogo = job.companyLogo || STATIC_ADMIN_IMAGE;
+      companyDetails.verificationStatus = "Verified";
     } else {
       const company =
         (await Company.findOne({
           $or: [{ userId: job.c_by?._id }, { c_by: job.c_by?._id }],
         })
-          .select("_id companyLogo aboutUs websiteLink companyName companyTagLine")
+          .select("_id companyLogo aboutUs websiteLink companyName companyTagLine verificationStatus")
           .lean()) ||
         (job.companyName
           ? await Company.findOne({
               companyName: { $regex: new RegExp(`^${job.companyName.trim()}$`, "i") },
             })
-            .select("_id companyLogo aboutUs websiteLink companyName companyTagLine")
+            .select("_id companyLogo aboutUs websiteLink companyName companyTagLine verificationStatus")
               .lean()
           : null);
 
@@ -1818,6 +1918,7 @@ const getJobProfile = async (req, res) => {
           email: job?.c_by?.email || null,
           phone: job?.c_by?.phone || null,
           companyTagLine: company.companyTagLine || "The Place where innovation arises",
+          verificationStatus: company.verificationStatus || "Pending",
         };
       }
     }
@@ -1859,6 +1960,7 @@ const getJobProfile = async (req, res) => {
 
         // Attached company info including resolved companyId
         company: companyDetails,
+        verificationStatus: companyDetails.verificationStatus || "Pending",
 
         // Interaction flags
         is_saved,             
@@ -1883,7 +1985,7 @@ const getAllCompetitions = async (req, res) => {
 
     const competitions = await Competition.find({ isActive: true, status: "approved" })
       .sort({ createdAt: -1 })
-      .select("eventName registrationType coverImage organizer eventDate eventEndDate eventStartTime eventEndTime externalRegistrationLink eligibilityDetails city totalSeats individualFees teamFees lateFees gst gstPercentage gstAmount mode registrationStartDate createdAt");
+      .select("eventName registrationType coverImage organizer eventDate eventEndDate eventStartTime eventEndTime externalRegistrationLink eligibilityDetails city totalSeats individualFees teamFees lateFees gst gstPercentage gstAmount mode registrationStartDate order_count createdAt");
 
     const data = await Promise.all(
       competitions.map(async (item) => {
@@ -1898,6 +2000,8 @@ const getAllCompetitions = async (req, res) => {
         };
       })
     );
+
+    sortByOrderCount(data);
 
     return res.status(200).json({
       status: true,
@@ -2641,6 +2745,149 @@ const createExternalEventRegistration = async (req, res) => {
     });
   }
 };
+
+/**
+ * Records an external job or internship application click/registration.
+ * Verifies the opportunity, checks for duplicates in AppliedJob, persists
+ * an AppliedJob record with isExternal: true, handles XP/mission awards,
+ * and returns the externalRegistrationLink for the client to open.
+ */
+const createExternalJobApplication = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { jobId, job_id, id, jobType, job_type } = req.body || {};
+    const targetJobId = jobId || job_id || id || req.query?.jobId || req.params?.jobId;
+
+    if (!targetJobId) {
+      return res.status(400).json({
+        status: false,
+        message: "jobId is required",
+      });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(targetJobId)) {
+      return res.status(400).json({
+        status: false,
+        message: "Invalid jobId format",
+      });
+    }
+
+    // Resolve target opportunity and type
+    const rawJobType = jobType || job_type || req.query?.jobType;
+    let resolvedJobType = null;
+    if (rawJobType && typeof rawJobType === "string") {
+      const lower = rawJobType.trim().toLowerCase();
+      if (lower === "internship") resolvedJobType = "Internship";
+      else if (lower === "freelance") resolvedJobType = "Freelance";
+      else if (lower === "job") resolvedJobType = "Job";
+    }
+
+    let jobDoc = null;
+    if (resolvedJobType === "Job") {
+      jobDoc = await Job.findById(targetJobId).select("c_by jobTitle companyName externalRegistrationLink isActive");
+    } else if (resolvedJobType === "Internship") {
+      jobDoc = await Internship.findById(targetJobId).select("c_by jobTitle companyName externalRegistrationLink isActive");
+    } else if (resolvedJobType === "Freelance") {
+      jobDoc = await Freelance.findById(targetJobId).select("c_by jobTitle companyName externalRegistrationLink isActive");
+    } else {
+      // Auto-detect from Job, Internship, or Freelance collections
+      const [j, i, f] = await Promise.all([
+        Job.findById(targetJobId).select("c_by jobTitle companyName externalRegistrationLink isActive").lean(),
+        Internship.findById(targetJobId).select("c_by jobTitle companyName externalRegistrationLink isActive").lean(),
+        Freelance.findById(targetJobId).select("c_by jobTitle companyName externalRegistrationLink isActive").lean(),
+      ]);
+      if (j) {
+        jobDoc = j;
+        resolvedJobType = "Job";
+      } else if (i) {
+        jobDoc = i;
+        resolvedJobType = "Internship";
+      } else if (f) {
+        jobDoc = f;
+        resolvedJobType = "Freelance";
+      }
+    }
+
+    if (!jobDoc) {
+      return res.status(404).json({
+        status: false,
+        message: "Opportunity not found",
+      });
+    }
+
+    const extLink = jobDoc.externalRegistrationLink || "";
+
+    // Check if user already applied
+    const existing = await AppliedJob.findOne({
+      userId,
+      jobId: targetJobId,
+    });
+
+    if (existing) {
+      return res.status(200).json({
+        status: true,
+        alreadyApplied: true,
+        is_applied: true,
+        isApplied: true,
+        message: `You have already applied to this ${resolvedJobType}`,
+        data: {
+          application: existing,
+          jobId: targetJobId,
+          jobType: resolvedJobType,
+          externalRegistrationLink: extLink,
+        },
+      });
+    }
+
+    // Resolve user's latest stored resume if available
+    const latestResume = await Resume.findOne({ userId }).sort({ createdAt: -1 }).select("_id").lean();
+
+    // Create AppliedJob record marked as external
+    const application = await AppliedJob.create({
+      userId,
+      jobId: targetJobId,
+      jobType: resolvedJobType || "Job",
+      resumeId: latestResume?._id || null,
+      c_by: jobDoc.c_by || null,
+      status: "applied",
+      isExternal: true,
+    });
+
+    // XP / Mission tracking
+    try {
+      if (resolvedJobType === "Freelance") {
+        triggerMissionNotification(userId, "FIRST_FREELANCE_APPLICATION").catch((err) =>
+          console.error("FIRST_FREELANCE_APPLICATION notification error:", err.message)
+        );
+      }
+      triggerMissionNotification(userId, "FIRST_JOB_APPLICATION").catch((err) =>
+        console.error("FIRST_JOB_APPLICATION notification error:", err.message)
+      );
+    } catch (_missionErr) {}
+
+    return res.status(201).json({
+      status: true,
+      success: true,
+      is_applied: true,
+      isApplied: true,
+      message: "Application recorded successfully",
+      data: {
+        applicationId: application._id,
+        jobId: targetJobId,
+        jobType: resolvedJobType,
+        externalRegistrationLink: extLink,
+      },
+    });
+  } catch (error) {
+    console.error("External Job Application Error:", error.message);
+    return res.status(500).json({
+      status: false,
+      message: "Failed to record external application",
+      error: error.message,
+    });
+  }
+};
+
 const getAllConferences = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -2648,7 +2895,7 @@ const getAllConferences = async (req, res) => {
     const conferences = await Conference.find({ isActive: true, status: "approved" })
       .sort({ createdAt: -1 })
       .select(
-        "eventName organizer registrationType mode eventDate eventEndDate eventStartTime eventEndTime externalRegistrationLink registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees gst gstPercentage gstAmount city eligibilityDetails teamOrIndividualEvent createdAt"
+        "eventName organizer registrationType mode eventDate eventEndDate eventStartTime eventEndTime externalRegistrationLink registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees gst gstPercentage gstAmount city eligibilityDetails teamOrIndividualEvent order_count createdAt"
       );
 
     const data = await Promise.all(
@@ -2664,6 +2911,8 @@ const getAllConferences = async (req, res) => {
         };
       })
     );
+
+    sortByOrderCount(data);
 
     return res.status(200).json({
       status: true,
@@ -2735,7 +2984,7 @@ const getAllTechnicalEvents = async (req, res) => {
     const events = await Event.find({ isActive: true, status: { $in: ["approved", "Approved"] }, eventType: "Technical" })
       .sort({ createdAt: -1 })
       .select(
-        "eventName eventType eventCategory description allowedDepartments organizer mode eventDate eventEndDate eventStartTime eventEndTime onlinePlatformLink externalRegistrationLink registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees gst gstPercentage gstAmount city eligibilityDetails teamOrIndividualEvent c_by status isActive createdAt"
+        "eventName eventType eventCategory description allowedDepartments organizer mode eventDate eventEndDate eventStartTime eventEndTime onlinePlatformLink externalRegistrationLink registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees gst gstPercentage gstAmount city eligibilityDetails teamOrIndividualEvent c_by status isActive order_count createdAt"
       );
 
     const data = await Promise.all(
@@ -2754,6 +3003,8 @@ const getAllTechnicalEvents = async (req, res) => {
         };
       })
     );
+
+    sortByOrderCount(data);
 
     return res.status(200).json({
       status: true,
@@ -2776,7 +3027,7 @@ const getAllNonTechnicalEvents = async (req, res) => {
     const events = await Event.find({ isActive: true, status: { $in: ["approved", "Approved"] }, eventType: "Non Technical" })
       .sort({ createdAt: -1 })
       .select(
-        "eventName eventType eventCategory description allowedDepartments organizer mode eventDate eventEndDate eventStartTime eventEndTime onlinePlatformLink externalRegistrationLink registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees gst gstPercentage gstAmount city eligibilityDetails teamOrIndividualEvent c_by status isActive createdAt"
+        "eventName eventType eventCategory description allowedDepartments organizer mode eventDate eventEndDate eventStartTime eventEndTime onlinePlatformLink externalRegistrationLink registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees gst gstPercentage gstAmount city eligibilityDetails teamOrIndividualEvent c_by status isActive order_count createdAt"
       );
 
     const data = await Promise.all(
@@ -2795,6 +3046,8 @@ const getAllNonTechnicalEvents = async (req, res) => {
         };
       })
     );
+
+    sortByOrderCount(data);
 
     return res.status(200).json({
       status: true,
@@ -2865,7 +3118,7 @@ const getAllTechnicalSeminars = async (req, res) => {
     const seminars = await Seminar.find({ isActive: true, status: "approved", eventType: "Technical" })
       .sort({ createdAt: -1 })
       .select(
-        "eventName eventType organizer mode eventDate eventEndDate eventStartTime eventEndTime externalRegistrationLink registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees gst gstPercentage gstAmount city eligibilityDetails teamOrIndividualEvent createdAt"
+        "eventName eventType organizer mode eventDate eventEndDate eventStartTime eventEndTime externalRegistrationLink registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees gst gstPercentage gstAmount city eligibilityDetails teamOrIndividualEvent order_count createdAt"
       );
 
     const data = await Promise.all(
@@ -2881,6 +3134,8 @@ const getAllTechnicalSeminars = async (req, res) => {
         };
       })
     );
+
+    sortByOrderCount(data);
 
     return res.status(200).json({
       status: true,
@@ -2903,7 +3158,7 @@ const getAllNonTechnicalSeminars = async (req, res) => {
     const seminars = await Seminar.find({ isActive: true, status: "approved", eventType: "Non Technical" })
       .sort({ createdAt: -1 })
       .select(
-        "eventName eventType organizer mode eventDate eventEndDate eventStartTime eventEndTime externalRegistrationLink registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees gst gstPercentage gstAmount city eligibilityDetails teamOrIndividualEvent createdAt"
+        "eventName eventType organizer mode eventDate eventEndDate eventStartTime eventEndTime externalRegistrationLink registrationType registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees gst gstPercentage gstAmount city eligibilityDetails teamOrIndividualEvent order_count createdAt"
       );
 
     const data = await Promise.all(
@@ -2919,6 +3174,8 @@ const getAllNonTechnicalSeminars = async (req, res) => {
         };
       })
     );
+
+    sortByOrderCount(data);
 
     return res.status(200).json({
       status: true,
@@ -3072,7 +3329,7 @@ const getAllCompanies = async (req, res) => {
       .populate("userId", "is_active")
       .sort({ createdAt: -1 })
       .select(
-        "companyName companyType companyTagLine companyCultureTags companyLogo coverImage city state technologies yearFounded websiteLink userId isActive is_active createdAt domains employees"
+        "companyName companyType companyTagLine companyCultureTags companyLogo coverImage city state technologies yearFounded websiteLink userId isActive is_active createdAt domains employees order_count verificationStatus"
       )
       .lean();
 
@@ -3219,10 +3476,26 @@ const getAllCompanies = async (req, res) => {
 
       return {
         ...c,
+        verificationStatus: c.verificationStatus || "Pending",
         total_followers: totalFollowers,
         opputunities: totalOpportunities,
         is_following: isFollowing,
       };
+    });
+
+    // Sort by order_count ascending (1 appears first, then 2, 3...); unranked companies fall back to newest first
+    enrichedCompanies.sort((a, b) => {
+      const orderA = a.order_count !== null && a.order_count !== undefined && Number(a.order_count) > 0
+        ? Number(a.order_count)
+        : Infinity;
+      const orderB = b.order_count !== null && b.order_count !== undefined && Number(b.order_count) > 0
+        ? Number(b.order_count)
+        : Infinity;
+
+      if (orderA !== orderB) {
+        return orderA - orderB;
+      }
+      return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
     });
 
     return res.status(200).json({
@@ -3343,7 +3616,7 @@ const getFollowingList = async (req, res) => {
       ],
     })
       .select(
-        "companyName companyType companyTagLine companyCultureTags companyLogo coverImage city state location industry websiteLink technologies yearFounded employees isActive is_admin_company userId createdAt"
+        "companyName companyType companyTagLine companyCultureTags companyLogo coverImage city state location industry websiteLink technologies yearFounded employees isActive is_admin_company userId createdAt verificationStatus"
       )
       .lean();
 
@@ -3383,6 +3656,7 @@ const getFollowingList = async (req, res) => {
           employees: "1-10",
           yearFounded: null,
           isActive: true,
+          verificationStatus: "Verified",
         });
       });
     }
@@ -3443,6 +3717,7 @@ const getFollowingList = async (req, res) => {
         technologies: Array.isArray(comp.technologies) ? comp.technologies : [],
         employees: comp.employees || "",
         yearFounded: comp.yearFounded || null,
+        verificationStatus: comp.verificationStatus || "Pending",
         followersCount: totalFollowers,
         is_following: true,
         followedAt: record.createdAt,
@@ -3634,6 +3909,7 @@ const getCompanyProfile = async (req, res) => {
       status: true,
       data: {
         ...company.toObject(),
+        verificationStatus: company.verificationStatus || "Pending",
         followCount,
         is_following: !!isFollowing,
         jobs,          // ✅ full-time jobs by this company
@@ -3673,7 +3949,7 @@ const getEventsPage = async (req, res) => {
     })
       .sort({ createdAt: -1 })
       .select(
-        "eventName registrationType eventType eventCategory description allowedDepartments organizer mode eventDate eventEndDate eventStartTime eventEndTime onlinePlatformLink externalRegistrationLink coverImage city totalSeats individualFees teamFees registrationStartDate registrationEndDate c_by status isActive createdAt"
+        "eventName registrationType eventType eventCategory description allowedDepartments organizer mode eventDate eventEndDate eventStartTime eventEndTime onlinePlatformLink externalRegistrationLink coverImage city totalSeats individualFees teamFees registrationStartDate registrationEndDate c_by status isActive order_count createdAt"
       );
 
     const data = await Promise.all(
@@ -3692,6 +3968,8 @@ const getEventsPage = async (req, res) => {
         };
       })
     );
+
+    sortByOrderCount(data);
 
     return res.status(200).json({
       status: true,
@@ -3724,7 +4002,7 @@ const getSeminarsPage = async (req, res) => {
     })
       .sort({ createdAt: -1 })
       .select(
-        "eventName registrationType eventType description allowedDepartments organizer mode eventDate eventEndDate eventStartTime eventEndTime onlinePlatformLink externalRegistrationLink coverImage venueAddress address venueName city totalSeats individualFees teamFees lateFees gst gstPercentage gstAmount registrationStartDate registrationEndDate c_by status isActive createdAt"
+        "eventName registrationType eventType description allowedDepartments organizer mode eventDate eventEndDate eventStartTime eventEndTime onlinePlatformLink externalRegistrationLink coverImage venueAddress address venueName city totalSeats individualFees teamFees lateFees gst gstPercentage gstAmount registrationStartDate registrationEndDate c_by status isActive order_count createdAt"
       )
       .lean();
 
@@ -3764,6 +4042,8 @@ const getSeminarsPage = async (req, res) => {
         isRegistered: isRegistered,
       };
     });
+
+    sortByOrderCount(data);
 
     return res.status(200).json({
       status: true,
@@ -4253,9 +4533,9 @@ const activePing = async (req, res, next) => {
     user.lastActiveDate = now;
     await user.save();
 
-    // Derive active level dynamically from XP so the correct tier mission notification triggers
-    const levelInfo = calculateLevelInfo(user.xp || 0);
-    const userLevel = levelInfo.currentLevel;
+    // Active level evaluated directly from user.level so the correct tier mission notification triggers
+    const userLevel = user.level || 1;
+    const levelInfo = calculateLevelInfo(user.xp || 0, userLevel, user.lifetime_xp || user.xp || 0);
     let activeTimeMissionKey = "ACTIVE_30_MIN";
     let targetMins = 30;
     if (userLevel === 2) {
@@ -4542,6 +4822,7 @@ export {
   getCompetitionProfile,
   createEventRegistration,
   createExternalEventRegistration,
+  createExternalJobApplication,
   getAllConferences,
   getConferenceProfile,
   getAllTechnicalEvents,

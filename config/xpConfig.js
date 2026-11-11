@@ -49,50 +49,64 @@ export const XP_ACTIONS = {
 };
 
 /**
- * Calculates level metadata and progress percentage based on total XP.
- * Formula: Level = Math.floor(Math.sqrt(totalXP / 100)) + 1
+ * Required XP within each level to advance to the next level.
+ * Level 1 requires 200 XP to reach Level 2.
+ * Level 2 requires 400 XP to reach Level 3.
+ * Level 3 requires 600 XP to reach Level 4, and so on.
  */
-export const calculateLevelInfo = (totalXP = 0) => {
-  const safeXP = Math.max(0, Number(totalXP) || 0);
+export const LEVEL_REQUIREMENTS = {
+  1: 200,
+  2: 400,
+  3: 600,
+  4: 800,
+};
 
-  let currentLevel = 0;
-  let xpForCurrentLevel = 0;
-  let xpForNextLevel = 200;
+/**
+ * Calculates level metadata and progress percentage.
+ * Operates on current level XP (which resets to 0 upon level up)
+ * while also returning the persistent lifetime XP.
+ */
+export const calculateLevelInfo = (currentXP = 0, currentLevel, lifetimeXP) => {
+  let safeLevel = 1;
+  let safeXP = 0;
+  let safeLifetimeXP = 0;
 
-  if (safeXP >= 600) {
-    currentLevel = 4;
-    xpForCurrentLevel = 600;
-    xpForNextLevel = 600;
-  } else if (safeXP >= 400) {
-    currentLevel = 3;
-    xpForCurrentLevel = 400;
-    xpForNextLevel = 600;
-  } else if (safeXP >= 200) {
-    currentLevel = 2;
-    xpForCurrentLevel = 200;
-    xpForNextLevel = 400;
+  if (currentLevel !== undefined && currentLevel !== null) {
+    safeLevel = Math.max(1, Number(currentLevel) || 1);
+    safeXP = Math.max(0, Number(currentXP) || 0);
+    safeLifetimeXP = lifetimeXP !== undefined && lifetimeXP !== null
+      ? Math.max(0, Number(lifetimeXP) || 0)
+      : safeXP;
   } else {
-    currentLevel = 1;
-    xpForCurrentLevel = 0;
-    xpForNextLevel = 200;
+    // Graceful fallback for single-argument cumulative callers
+    let remaining = Math.max(0, Number(currentXP) || 0);
+    safeLifetimeXP = remaining;
+    let lvl = 1;
+    while (true) {
+      const needed = LEVEL_REQUIREMENTS[lvl] || (lvl * 200);
+      if (remaining < needed) break;
+      remaining -= needed;
+      lvl += 1;
+    }
+    safeLevel = lvl;
+    safeXP = remaining;
   }
 
-  const levelProgressXP = safeXP - xpForCurrentLevel;
-  const levelTotalXPNeeded = xpForNextLevel - xpForCurrentLevel;
+  const xpForNextLevel = LEVEL_REQUIREMENTS[safeLevel] || (safeLevel * 200);
+  const xpNeeded = Math.max(0, xpForNextLevel - safeXP);
   const progressPercentage =
-    levelTotalXPNeeded > 0
-      ? Math.min(
-          100,
-          Math.max(0, Math.round((levelProgressXP / levelTotalXPNeeded) * 100))
-        )
+    xpForNextLevel > 0
+      ? Math.min(100, Math.max(0, Math.round((safeXP / xpForNextLevel) * 100)))
       : 100;
 
   return {
-    currentLevel,
-    totalXP: safeXP,
-    xpForCurrentLevel,
+    currentLevel: safeLevel,
+    currentXP: safeXP,
+    totalXP: safeLifetimeXP,
+    lifetimeXP: safeLifetimeXP,
+    xpForCurrentLevel: 0,
     xpForNextLevel,
-    xpNeeded: Math.max(0, xpForNextLevel - safeXP),
+    xpNeeded,
     progressPercentage,
   };
 };

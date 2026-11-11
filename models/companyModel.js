@@ -193,6 +193,11 @@ const companySchema = new mongoose.Schema(
       type: mongoose.Schema.Types.Mixed,
       default: null,
     },
+    order_count: {
+      type: Number,
+      default: null,
+      index: true,
+    },
     isActive: {
       type: Boolean,
       default: true,

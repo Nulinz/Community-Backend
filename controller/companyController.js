@@ -248,6 +248,9 @@ export const createCompanyForm = async (req, res, next) => {
     const city = toCleanString(req.body?.city);
     const state = toCleanString(req.body?.state);
     const pincode = toCleanString(req.body?.pincode);
+    const order_count = req.body?.order_count !== undefined && req.body?.order_count !== null && req.body?.order_count !== ""
+      ? Number(req.body.order_count)
+      : null;
 
     // ==============================
     // ACCOUNT DETAILS
@@ -409,6 +412,9 @@ export const createCompanyForm = async (req, res, next) => {
       company.signatoryName = signatoryName;
       company.signatoryDesignation = signatoryDesignation;
       company.certificateContentBody = certificateContentBody;
+      if (order_count !== undefined) {
+        company.order_count = order_count;
+      }
 
       await company.save();
     } else {
@@ -448,6 +454,7 @@ export const createCompanyForm = async (req, res, next) => {
         accountNumber,
         ifscCode,
         verificationStatus,
+        order_count: order_count ?? null,
       });
     }
 
@@ -494,6 +501,21 @@ export const getAllCompany = async (req, res, next) => {
         role: userId?.role || "",
         is_active: userId?.is_active ?? true
       };
+    });
+
+    // Sort by order_count ascending (1 first, then 2, 3...); unranked companies fall back to newest first
+    flattenedCompanies.sort((a, b) => {
+      const orderA = a.order_count !== null && a.order_count !== undefined && Number(a.order_count) > 0
+        ? Number(a.order_count)
+        : Infinity;
+      const orderB = b.order_count !== null && b.order_count !== undefined && Number(b.order_count) > 0
+        ? Number(b.order_count)
+        : Infinity;
+
+      if (orderA !== orderB) {
+        return orderA - orderB;
+      }
+      return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
     });
 
     res.status(200).json({

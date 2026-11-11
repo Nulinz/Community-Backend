@@ -208,10 +208,10 @@ export const getUserDetails = async (req, res, next) => {
         const userId = req?.user?._id;
         const [userDetails, user] = await Promise.all([
             UserDetails.findOne({ userId }),
-            User.findById(userId).select("name email phone xp level").lean(),
+            User.findById(userId).select("name email phone xp lifetime_xp level").lean(),
         ]);
 
-        const levelInfo = calculateLevelInfo(user?.xp || 0);
+        const levelInfo = calculateLevelInfo(user?.xp || 0, user?.level || 1, user?.lifetime_xp || user?.xp || 0);
 
         const detailsObj = userDetails ? userDetails.toObject() : {
             userId,
@@ -234,11 +234,14 @@ export const getUserDetails = async (req, res, next) => {
                 name: user?.name || req?.user?.name,
                 email: user?.email || req?.user?.email,
                 phone: user?.phone || req?.user?.phone,
-                xp: levelInfo.totalXP,
+                xp: user?.xp || 0,
+                lifetime_xp: user?.lifetime_xp || user?.xp || 0,
                 level: levelInfo.currentLevel,
                 levelInfo: {
                     currentLevel: levelInfo.currentLevel,
+                    currentXP: levelInfo.currentXP,
                     totalXP: levelInfo.totalXP,
+                    lifetimeXP: levelInfo.lifetimeXP,
                     xpForCurrentLevel: levelInfo.xpForCurrentLevel,
                     xpForNextLevel: levelInfo.xpForNextLevel,
                     xpNeededForNextLevel: levelInfo.xpNeeded,
