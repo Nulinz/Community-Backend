@@ -1,7 +1,9 @@
 import express from "express";
+import multer from "multer";
 import { isAuthenticated } from "../middleware/authMiddleware.js";
 import {
   createJobForm,
+  bulkUploadJobs,
   getAllJobs,
   getJobById,
   toggleJobStatus,
@@ -20,7 +22,13 @@ const router = express.Router();
 const opportunityUpload = createUpload("opportunity");
 const jobUploader = opportunityUpload.fields([{ name: "companyLogo", maxCount: 1 }]);
 
+const excelUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
+
 router.post("/create", isAuthenticated, jobUploader, createJobForm);
+router.post("/bulk-upload", isAuthenticated, excelUpload.single("file"), bulkUploadJobs);
 router.get("/all", isAuthenticated, getAllJobs);
 router.get("/getById/:id", isAuthenticated, getJobById);
 router.patch("/toggle-status/:id", isAuthenticated, toggleJobStatus);

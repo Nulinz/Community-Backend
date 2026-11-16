@@ -102,6 +102,7 @@ export const createEventForm = async (req, res, next) => {
             eventEndTime,
             onlinePlatformLink,
             externalRegistrationLink,
+            rulesUrl,
             customFees,
         } = rest;
 
@@ -264,6 +265,7 @@ export const createEventForm = async (req, res, next) => {
         event.teamOrIndividualEvent = toCleanString(teamOrIndividualEvent) || "Individual";
         event.teamSizeMinimum = Number(teamSizeMinimum) || 0;
         event.teamSizeMaximum = Number(teamSizeMaximum) || 0;
+        event.rulesUrl = toCleanString(rulesUrl);
         event.description = toCleanString(description);
 
         event.rounds = parseDynamicArray(rounds);

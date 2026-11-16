@@ -24,6 +24,31 @@ const parseDynamicArray = (value) => {
     return [];
 };
 
+/**
+ * Normalizes dynamic rule rows [{ rule: "..." }] into a clean array of rule strings.
+ * Handles JSON strings, structured row objects, and newline-separated strings.
+ */
+const parseRulesArray = (value) => {
+    const list = parseDynamicArray(value);
+    if (Array.isArray(list) && list.length > 0) {
+        return list
+            .map((item) => {
+                if (typeof item === "string") return item.trim();
+                return (item?.rule || item?.point || Object.values(item)[0] || "").trim();
+            })
+            .filter(Boolean);
+    }
+    if (typeof value === "string") {
+        const trimmed = value.trim();
+        if (!trimmed) return [];
+        return trimmed
+            .split(/\r?\n/)
+            .map((line) => line.replace(/^[\s\-•*]+/, "").trim())
+            .filter(Boolean);
+    }
+    return [];
+};
+
 const getUploadedFilePath = (file) => {
     if (!file?.path) return "";
     return path.relative(process.cwd(), file.path).replace(/\\/g, "/");
@@ -92,6 +117,7 @@ export const createCompetitionForm = async (req, res, next) => {
             teamOrIndividualEvent,
             teamSizeMinimum,
             teamSizeMaximum,
+            rulesUrl,
             additionalRules,
             description,
             rounds,
@@ -277,7 +303,9 @@ export const createCompetitionForm = async (req, res, next) => {
         competition.teamSizeMinimum = Number(teamSizeMinimum) || 0;
         competition.teamSizeMaximum = Number(teamSizeMaximum) || 0;
 
-        competition.additionalRules = toCleanString(additionalRules);
+        competition.rulesUrl = toCleanString(rulesUrl);
+        const rulesInput = additionalRules ?? rest.rule ?? rest.rules;
+        competition.additionalRules = parseRulesArray(rulesInput);
         competition.description = toCleanString(description);
         competition.certificateAvailability = toCleanString(certificateAvailability) || "No";
         competition.signatoryName = toCleanString(signatoryName);
@@ -388,6 +416,9 @@ export const getCompetitionById = async (req, res, next) => {
 
         const competitionData = {
             ...competition,
+            ruleBook: competition.ruleBook || "",
+            rulesUrl: competition.rulesUrl || "",
+            additionalRules: competition.additionalRules || [],
             gstPercent: competition.gstPercentage || 0,
             gstAmount: competition.gstAmount !== undefined && competition.gstAmount !== null
                 ? competition.gstAmount

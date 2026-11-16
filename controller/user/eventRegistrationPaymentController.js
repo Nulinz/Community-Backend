@@ -103,10 +103,10 @@ export const createEventRegistrationOrder = async (req, res, next) => {
       });
     }
 
-    if (!["Team", "Individual"].includes(type)) {
+    if (!["Team", "Individual", "Custom"].includes(type)) {
       return res.status(400).json({
         status: false,
-        message: "type must be Team or Individual.",
+        message: "type must be Team, Individual, or Custom.",
       });
     }
 

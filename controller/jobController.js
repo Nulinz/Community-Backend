@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import path from "path";
+import * as XLSX from "xlsx";
 import Job from "../models/jobModel.js";
 import AppliedJob from "../models/appliedJobModel.js";
 import Attendance from "../models/attendanceModel.js";
@@ -729,6 +730,190 @@ export const getPerformanceEvaluation = async (req, res, next) => {
     return res.status(200).json({
       status: true,
       data: evaluation,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Bulk upload jobs from an Excel (.xlsx / .xls) or CSV spreadsheet.
+ * Parses headers flexibly, validates rows, and bulk-inserts valid records.
+ */
+export const bulkUploadJobs = async (req, res, next) => {
+  try {
+    const file = req.file || req.files?.file?.[0];
+    if (!file?.buffer) {
+      return res.status(400).json({
+        success: false,
+        message: "Please upload an Excel (.xlsx, .xls) or CSV file under field 'file'",
+      });
+    }
+
+    const workbook = XLSX.read(file.buffer, { type: "buffer", cellDates: true });
+    const sheetName = workbook.SheetNames[0];
+    if (!sheetName) {
+      return res.status(400).json({
+        success: false,
+        message: "Uploaded workbook does not contain any sheets",
+      });
+    }
+
+    const rawRows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: "" });
+    if (!rawRows || rawRows.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "The uploaded sheet is empty",
+      });
+    }
+
+    const userId = req.user._id;
+    const defaultStatus = req.user?.role === "admin" ? "approved" : "pending";
+
+    // Helper to find column values with flexible case & spacing aliases
+    const getField = (row, ...aliases) => {
+      const keys = Object.keys(row);
+      for (const alias of aliases) {
+        const cleanAlias = alias.toLowerCase().replace(/[\s_-]/g, "");
+        const matchedKey = keys.find(
+          (k) => k.toLowerCase().replace(/[\s_-]/g, "") === cleanAlias
+        );
+        if (matchedKey && row[matchedKey] !== undefined && row[matchedKey] !== null) {
+          const val = String(row[matchedKey]).trim();
+          if (val) return val;
+        }
+      }
+      return "";
+    };
+
+    const parseList = (val) => {
+      if (Array.isArray(val)) return val.map((s) => String(s).trim()).filter(Boolean);
+      if (typeof val === "string") {
+        return val.split(/[,;\n]/).map((s) => s.trim()).filter(Boolean);
+      }
+      return [];
+    };
+
+    const parseDateVal = (val) => {
+      if (!val) return undefined;
+      if (val instanceof Date && !isNaN(val.getTime())) return val;
+      const d = new Date(val);
+      return !isNaN(d.getTime()) ? d : undefined;
+    };
+
+    const validJobs = [];
+    const errors = [];
+
+    rawRows.forEach((row, idx) => {
+      const rowNumber = idx + 2; // Row 1 is header
+
+      const jobTitle = getField(row, "jobTitle", "Job Title", "Title", "role");
+      const companyName = getField(row, "companyName", "Company Name", "Company", "organizer", "Organizer");
+      let mode = getField(row, "mode", "Mode", "Work Mode") || "Offline";
+      mode = mode.charAt(0).toUpperCase() + mode.slice(1).toLowerCase();
+      if (!["Online", "Offline", "Hybrid"].includes(mode)) {
+        mode = "Offline";
+      }
+
+      const location = getField(row, "location", "Location", "City", "Job Location");
+
+      // Validations
+      if (!jobTitle) {
+        errors.push({ row: rowNumber, error: "Job Title is required" });
+        return;
+      }
+      if (!companyName) {
+        errors.push({ row: rowNumber, error: "Company Name is required" });
+        return;
+      }
+      if ((mode === "Offline" || mode === "Hybrid") && !location) {
+        errors.push({ row: rowNumber, error: `Location is required for ${mode} mode` });
+        return;
+      }
+
+      const salaryMin = Number(getField(row, "salaryMin", "Salary Min", "Min Salary")) || 0;
+      const salaryMax = Number(getField(row, "salaryMax", "Salary Max", "Max Salary")) || 0;
+      const salary = Number(getField(row, "salary", "Salary", "Fixed Salary")) || 0;
+      const salaryType = getField(row, "salaryType", "Salary Type") || "Fixed amount";
+
+      const experienceFrom = Number(getField(row, "experienceFrom", "Experience From", "Min Experience")) || 0;
+      const experienceTo = Number(getField(row, "experienceTo", "Experience To", "Max Experience")) || 0;
+      const totalOpenings = Number(getField(row, "totalOpenings", "Total Openings", "Openings", "Vacancies")) || 1;
+
+      const skills = parseList(getField(row, "skills", "Skill Set", "skill_set", "Skill"));
+      const domains = parseList(getField(row, "domains", "Domains", "Domain"));
+      const responsibilities = parseList(getField(row, "responsibilities", "Responsibilities", "Job Responsibilities"));
+      const eligibility = parseList(getField(row, "eligibility", "Eligibility", "Eligibility Criteria"));
+
+      const jobType = getField(row, "jobType", "Job Type", "Type", "Employment Type") || "Full Time";
+      const jobCategory = getField(row, "jobCategory", "Job Category", "Category") || "Jobs";
+      const description = getField(row, "description", "Description", "Job Description");
+      const externalLink = getField(row, "externalRegistrationLink", "External Link", "Apply Link", "Registration Link");
+
+      const deadline = parseDateVal(row["Application Deadline"] || row["applicationDeadline"] || row["Deadline"] || getField(row, "deadline"));
+      const startDate = parseDateVal(row["Job Start Date"] || row["jobStartDate"] || row["Start Date"] || getField(row, "startDate"));
+
+      validJobs.push({
+        c_by: userId,
+        status: defaultStatus,
+        jobTitle,
+        companyName,
+        organizer: companyName,
+        jobType,
+        jobCategory,
+        mode,
+        location: location || "N/A",
+        totalOpenings,
+        experienceFrom,
+        experienceTo,
+        salary,
+        salaryMin,
+        salaryMax,
+        salaryType,
+        applicationDeadline: deadline,
+        jobStartDate: startDate,
+        skill_set: skills,
+        domains,
+        responsibilities,
+        eligibility,
+        description,
+        externalRegistrationLink: externalLink,
+        isActive: true,
+      });
+    });
+
+    let createdJobs = [];
+    if (validJobs.length > 0) {
+      // Resolve existing company logos if company exists in DB
+      const distinctNames = [...new Set(validJobs.map((j) => j.companyName).filter(Boolean))];
+      if (distinctNames.length > 0) {
+        const matchedCompanies = await Company.find({
+          companyName: { $in: distinctNames.map((n) => new RegExp(`^${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i")) },
+        })
+          .select("companyName companyLogo")
+          .lean();
+
+        const logoMap = new Map();
+        matchedCompanies.forEach((c) => {
+          if (c.companyName && c.companyLogo) {
+            logoMap.set(c.companyName.toLowerCase().trim(), c.companyLogo);
+          }
+        });
+
+        validJobs.forEach((job) => {
+          const cleanName = job.companyName ? job.companyName.toLowerCase().trim() : "";
+          if (!job.companyLogo && logoMap.has(cleanName)) {
+            job.companyLogo = logoMap.get(cleanName);
+          }
+        });
+      }
+
+      createdJobs = await Job.insertMany(validJobs);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Bulk upload completed: ${createdJobs.length} jobs created successfully.${errors.length ? ` ${errors.length} rows had errors.` : ""}`,
     });
   } catch (error) {
     next(error);

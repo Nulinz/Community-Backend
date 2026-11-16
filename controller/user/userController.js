@@ -520,7 +520,7 @@ const getJobs = async (req, res) => {
       const resolvedVerificationStatus =
         (normalizedName && companyVerificationByNameMap.get(normalizedName)) ||
         (creatorIdStr && companyVerificationByCreatorMap.get(creatorIdStr)) ||
-        (item.c_by?.role === "admin" ? "Verified" : "Pending");
+        "Pending";
 
       const isSaved = savedSet.has(String(item._id));
       const isApplied = appliedSet.has(String(item._id));
@@ -578,7 +578,7 @@ const getAllInternships = async (req, res) => {
       Internship.find({ isActive: true, status: "approved" })
         .sort({ createdAt: -1 })
         .select(
-          "jobTitle domain domains location companyName companyLogo duration salary paymentAmount internshipType eligibility externalRegistrationLink order_count createdAt c_by"
+          "jobTitle domain domains location companyName companyLogo duration salary paymentAmount internshipType eligibility externalRegistrationLink order_count createdAt c_by mode totalOpenings"
         )
         .populate("c_by", "role"),
       SavedJob.find({
@@ -657,7 +657,8 @@ const getAllInternships = async (req, res) => {
     });
 
     const data = internships.map((item) => {
-      const { domain, ...restObj } = item.toObject();
+      const fullJobObj = item.toObject();
+      const { domain, ...restObj } = fullJobObj;
       const itemDomains = Array.isArray(restObj.domains) && restObj.domains.length
         ? restObj.domains
         : (domain ? domain.split(",").map((s) => s.trim()).filter(Boolean) : []);
@@ -681,7 +682,7 @@ const getAllInternships = async (req, res) => {
       const resolvedVerificationStatus =
         (normalizedName && companyVerificationByNameMap.get(normalizedName)) ||
         (creatorIdStr && companyVerificationByCreatorMap.get(creatorIdStr)) ||
-        (item.c_by?.role === "admin" ? "Verified" : "Pending");
+        "Pending";
 
       const isSaved = savedSet.has(String(item._id));
       const isApplied = appliedSet.has(String(item._id));
@@ -844,7 +845,7 @@ const getAllFreelances = async (req, res) => {
       const resolvedVerificationStatus =
         (normalizedName && companyVerificationByNameMap.get(normalizedName)) ||
         (creatorIdStr && companyVerificationByCreatorMap.get(creatorIdStr)) ||
-        (item.c_by?.role === "admin" ? "Verified" : "Pending");
+        "Pending";
 
       const isSaved = savedSet.has(String(item._id));
       const isApplied = appliedSet.has(String(item._id));
@@ -1887,40 +1888,39 @@ const getJobProfile = async (req, res) => {
 
     const creatorRole = job.c_by?.role ? String(job.c_by.role).toLowerCase() : null;
 
-    if (creatorRole === "admin") {
-      companyId = null;
-      companyDetails.companyLogo = job.companyLogo || STATIC_ADMIN_IMAGE;
-      companyDetails.verificationStatus = "Verified";
-    } else {
-      const company =
-        (await Company.findOne({
-          $or: [{ userId: job.c_by?._id }, { c_by: job.c_by?._id }],
-        })
-          .select("_id companyLogo aboutUs websiteLink companyName companyTagLine verificationStatus")
-          .lean()) ||
-        (job.companyName
-          ? await Company.findOne({
-              companyName: { $regex: new RegExp(`^${job.companyName.trim()}$`, "i") },
-            })
+    const company =
+      (job.c_by?._id
+        ? await Company.findOne({
+            $or: [{ userId: job.c_by._id }, { c_by: job.c_by._id }],
+          })
             .select("_id companyLogo aboutUs websiteLink companyName companyTagLine verificationStatus")
-              .lean()
-          : null);
+            .lean()
+        : null) ||
+      (job.companyName
+        ? await Company.findOne({
+            companyName: { $regex: new RegExp(`^${job.companyName.trim()}$`, "i") },
+          })
+            .select("_id companyLogo aboutUs websiteLink companyName companyTagLine verificationStatus")
+            .lean()
+        : null);
 
-      if (company) {
-        companyId = company._id ? String(company._id) : null;
-        companyDetails = {
-          _id: company._id,
-          companyId,
-          companyLogo: company.companyLogo || null,
-          aboutUs: company.aboutUs || null,
-          website: company.websiteLink || null,
-          websiteLink: company.websiteLink || null,
-          email: job?.c_by?.email || null,
-          phone: job?.c_by?.phone || null,
-          companyTagLine: company.companyTagLine || "The Place where innovation arises",
-          verificationStatus: company.verificationStatus || "Pending",
-        };
-      }
+    if (company) {
+      companyId = company._id ? String(company._id) : null;
+      companyDetails = {
+        _id: company._id,
+        companyId,
+        companyLogo: company.companyLogo || job.companyLogo || (creatorRole === "admin" ? STATIC_ADMIN_IMAGE : null),
+        aboutUs: company.aboutUs || null,
+        website: company.websiteLink || null,
+        websiteLink: company.websiteLink || null,
+        email: job?.c_by?.email || null,
+        phone: job?.c_by?.phone || null,
+        companyTagLine: company.companyTagLine || "The Place where innovation arises",
+        verificationStatus: company.verificationStatus || "Pending",
+      };
+    } else {
+      companyDetails.companyLogo = job.companyLogo || (creatorRole === "admin" ? STATIC_ADMIN_IMAGE : null);
+      companyDetails.verificationStatus = "Pending";
     }
 
     // ── Parallel Checks ─────────────────────────────
@@ -1985,7 +1985,7 @@ const getAllCompetitions = async (req, res) => {
 
     const competitions = await Competition.find({ isActive: true, status: "approved" })
       .sort({ createdAt: -1 })
-      .select("eventName registrationType coverImage organizer eventDate eventEndDate eventStartTime eventEndTime externalRegistrationLink eligibilityDetails city totalSeats individualFees teamFees lateFees gst gstPercentage gstAmount mode registrationStartDate order_count createdAt");
+      .select("eventName registrationType coverImage organizer customFees rulesUrl eventDate eventEndDate eventStartTime eventEndTime externalRegistrationLink eligibilityDetails city totalSeats individualFees teamFees lateFees gst gstPercentage gstAmount mode registrationStartDate order_count createdAt");
 
     const data = await Promise.all(
       competitions.map(async (item) => {
@@ -2132,10 +2132,10 @@ const createEventRegistration = async (req, res) => {
     // REGISTRATION TYPE VALIDATION
     // ==============================
 
-    if (!["Team", "Individual"].includes(type)) {
+    if (!["Team", "Individual", "Custom"].includes(type)) {
       return res.status(400).json({
         status: false,
-        message: "type must be Team or Individual",
+        message: "type must be Team, Individual or Custom",
       });
     }
 
@@ -2251,41 +2251,38 @@ const createEventRegistration = async (req, res) => {
     // TEAM / INDIVIDUAL VALIDATION
     // ==============================
 
-    if (eventDoc.teamOrIndividualEvent === "Team") {
-
-      // Only Team allowed
-      if (type !== "Team") {
-        return res.status(400).json({
-          status: false,
-          message:
-            "This event allows only team registration",
-        });
-      }
-
-    } else if (
-      eventDoc.teamOrIndividualEvent === "Individual"
-    ) {
-
-      // Only Individual allowed
-      if (type !== "Individual") {
-        return res.status(400).json({
-          status: false,
-          message:
-            "This event allows only individual registration",
-        });
-      }
-
-    } else if (
-      eventDoc.teamOrIndividualEvent === "Both"
-    ) {
-
-      // Both allowed
-      if (!["Team", "Individual"].includes(type)) {
-        return res.status(400).json({
-          status: false,
-          message:
-            "type must be Team or Individual",
-        });
+    if (type !== "Custom") {
+      if (eventDoc.teamOrIndividualEvent === "Team") {
+        // Only Team allowed
+        if (type !== "Team") {
+          return res.status(400).json({
+            status: false,
+            message:
+              "This event allows only team registration",
+          });
+        }
+      } else if (
+        eventDoc.teamOrIndividualEvent === "Individual"
+      ) {
+        // Only Individual allowed
+        if (type !== "Individual") {
+          return res.status(400).json({
+            status: false,
+            message:
+              "This event allows only individual registration",
+          });
+        }
+      } else if (
+        eventDoc.teamOrIndividualEvent === "Both"
+      ) {
+        // Both allowed
+        if (!["Team", "Individual"].includes(type)) {
+          return res.status(400).json({
+            status: false,
+            message:
+              "type must be Team or Individual",
+          });
+        }
       }
     }
 
@@ -2895,7 +2892,7 @@ const getAllConferences = async (req, res) => {
     const conferences = await Conference.find({ isActive: true, status: "approved" })
       .sort({ createdAt: -1 })
       .select(
-        "eventName organizer registrationType mode eventDate eventEndDate eventStartTime eventEndTime externalRegistrationLink registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees gst gstPercentage gstAmount city eligibilityDetails teamOrIndividualEvent order_count createdAt"
+        "eventName organizer registrationType mode eventDate customFees rulesUrl eventEndDate eventStartTime eventEndTime externalRegistrationLink registrationStartDate registrationEndDate totalSeats coverImage individualFees teamFees lateFees gst gstPercentage gstAmount city eligibilityDetails teamOrIndividualEvent order_count createdAt"
       );
 
     const data = await Promise.all(
@@ -3949,7 +3946,7 @@ const getEventsPage = async (req, res) => {
     })
       .sort({ createdAt: -1 })
       .select(
-        "eventName registrationType eventType eventCategory description allowedDepartments organizer mode eventDate eventEndDate eventStartTime eventEndTime onlinePlatformLink externalRegistrationLink coverImage city totalSeats individualFees teamFees registrationStartDate registrationEndDate c_by status isActive order_count createdAt"
+        "eventName registrationType eventType eventCategory customFees rulesUrl allowedDepartments organizer mode eventDate eventEndDate eventStartTime eventEndTime onlinePlatformLink externalRegistrationLink coverImage city totalSeats individualFees teamFees registrationStartDate registrationEndDate c_by status isActive order_count createdAt"
       );
 
     const data = await Promise.all(
@@ -4002,7 +3999,7 @@ const getSeminarsPage = async (req, res) => {
     })
       .sort({ createdAt: -1 })
       .select(
-        "eventName registrationType eventType description allowedDepartments organizer mode eventDate eventEndDate eventStartTime eventEndTime onlinePlatformLink externalRegistrationLink coverImage venueAddress address venueName city totalSeats individualFees teamFees lateFees gst gstPercentage gstAmount registrationStartDate registrationEndDate c_by status isActive order_count createdAt"
+        "eventName registrationType eventType customFees rulesUrl allowedDepartments organizer mode eventDate eventEndDate eventStartTime eventEndTime onlinePlatformLink externalRegistrationLink coverImage venueAddress address venueName city totalSeats individualFees teamFees lateFees gst gstPercentage gstAmount registrationStartDate registrationEndDate c_by status isActive order_count createdAt"
       )
       .lean();
 

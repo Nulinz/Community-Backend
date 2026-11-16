@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import EventRegistration from "../../models/eventRegistrationModel.js";
 import User from "../../models/userModel.js";
 import Conference from "../../models/conferenceModel.js";
@@ -221,6 +222,7 @@ export const markEventAttendance = async (req, res) => {
 /**
  * Fetch attendance stats and attendee list for a specific event.
  * Uses case-insensitive eventType matching with automatic fallback to eventId.
+ * Resilient against unpopulated users and malformed records.
  */
 export const getEventAttendanceStats = async (req, res) => {
   try {
@@ -229,6 +231,10 @@ export const getEventAttendanceStats = async (req, res) => {
 
     if (!eventId) {
       return res.status(400).json({ success: false, message: "eventId parameter is required." });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(eventId)) {
+      return res.status(400).json({ success: false, message: "Invalid eventId format." });
     }
 
     const query = { eventId };
@@ -243,31 +249,44 @@ export const getEventAttendanceStats = async (req, res) => {
       registrations = await EventRegistration.find({ eventId }).sort({ attendedAt: -1, createdAt: -1 });
     }
 
-    const totalRegistered = registrations.length;
     const isPresent = (status) => String(status || "").trim().toLowerCase() === "present";
-    const presentList = registrations.filter((r) => isPresent(r.attendanceStatus));
+
+    // Defensive batch enrichment with fallback to raw records
+    let enrichedList = [];
+    try {
+      enrichedList = await enrichRegistrationsWithUserDetails(registrations);
+    } catch (enrichErr) {
+      console.error("Warning: Failed to enrich registrations with user details:", enrichErr?.message || enrichErr);
+    }
+
+    const attendeeSource = Array.isArray(enrichedList) && enrichedList.length === registrations.length
+      ? enrichedList
+      : registrations;
+
+    const totalRegistered = attendeeSource.length;
+    const presentList = attendeeSource.filter((r) => isPresent(r.attendanceStatus));
     const totalPresent = presentList.length;
     const totalAbsent = Math.max(0, totalRegistered - totalPresent);
 
-    const enrichedList = await enrichRegistrationsWithUserDetails(registrations);
     const mapAttendee = (r, index) => ({
       index: index + 1,
+      sNo: index + 1,
       id: r.registrationId || r._id,
       _id: r.registrationId || r._id,
-      userId: r.userId,
-      fullName: r.fullName || "N/A",
-      name: r.fullName || "N/A",
-      mailId: r.mailId || "N/A",
-      mail: r.mailId || "N/A",
-      phoneNumber: r.phoneNumber || "N/A",
-      contact: r.phoneNumber || "N/A",
-      collegeName: r.collegeName || "N/A",
-      college: r.collegeName || "N/A",
+      userId: r.userId?._id || r.userId,
+      fullName: r.fullName || r.name || "N/A",
+      name: r.fullName || r.name || "N/A",
+      mailId: r.mailId || r.email || "N/A",
+      mail: r.mailId || r.email || "N/A",
+      phoneNumber: r.phoneNumber || r.phone || "N/A",
+      contact: r.phoneNumber || r.phone || "N/A",
+      collegeName: r.collegeName || r.college || "N/A",
+      college: r.collegeName || r.college || "N/A",
       department: r.department || "N/A",
-      year: r.year || "N/A",
+      year: r.year ? String(r.year) : "N/A",
       food: r.food || "no",
       accommodation: r.accommodation || "no",
-      attendedAt: r.attendedAt,
+      attendedAt: r.attendedAt || null,
       attendanceStatus: isPresent(r.attendanceStatus) ? "present" : "absent",
       createdAt: r.registeredAt || r.createdAt,
     });
@@ -282,12 +301,15 @@ export const getEventAttendanceStats = async (req, res) => {
           attendanceRate: totalRegistered > 0 ? ((totalPresent / totalRegistered) * 100).toFixed(1) : "0",
         },
         attendees: presentList.map(mapAttendee),
-        allRegistrations: registrations.map(mapAttendee),
+        allRegistrations: attendeeSource.map(mapAttendee),
       },
     });
   } catch (error) {
     console.error("Get Attendance Stats Error:", error);
-    return res.status(500).json({ success: false, message: "Internal server error." });
+    return res.status(500).json({
+      success: false,
+      message: error?.message || "Internal server error.",
+    });
   }
 };
 

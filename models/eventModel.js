@@ -123,6 +123,7 @@ const eventSchema = new mongoose.Schema(
     teamSizeMaximum: { type: Number },
 
     // Rules & Description
+    rulesUrl: { type: String, trim: true, default: "" },
     description: { type: String, trim: true },
     order_count: {
       type: Number,

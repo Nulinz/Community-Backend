@@ -52,7 +52,7 @@ if (eventData.c_by.role === "admin") {
     phone:eventData?.c_by?.phone,
     userId: eventData.c_by._id,
     companyLogo:"referral/assets/index_icon.png",
-    aboutUs: "We connect talented professionals, companies, and communities through a modern platform designed for networking, collaboration, internships, freelance opportunities, events, and career growth. Our mission is to help users build meaningful professional relationships, discover opportunities, and grow together in a trusted digital community."
+    // aboutUs: "We connect talented professionals, companies, and communities through a modern platform designed for networking, collaboration, internships, freelance opportunities, events, and career growth. Our mission is to help users build meaningful professional relationships, discover opportunities, and grow together in a trusted digital community."
   };
 
 } else {

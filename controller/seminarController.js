@@ -103,6 +103,7 @@ export const createSeminarForm = async (req, res, next) => {
             eventEndTime,
             onlinePlatformLink,
             externalRegistrationLink,
+            rulesUrl,
             customFees,
         } = rest;
 
@@ -266,6 +267,7 @@ export const createSeminarForm = async (req, res, next) => {
         seminar.teamSizeMinimum = Number(teamSizeMinimum) || 0;
         seminar.teamSizeMaximum = Number(teamSizeMaximum) || 0;
 
+        seminar.rulesUrl = toCleanString(rulesUrl);
         seminar.description = toCleanString(description);
 
         seminar.rounds = parseDynamicArray(rounds);

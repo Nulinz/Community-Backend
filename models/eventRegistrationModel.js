@@ -78,7 +78,7 @@ const eventRegistrationSchema = new mongoose.Schema(
     type:{
       type: String,
       required: true,
-      enum: ["Team", "Individual"],
+      enum: ["Team", "Individual", "Custom"],
     },
     // Accommodation
     accommodation: {

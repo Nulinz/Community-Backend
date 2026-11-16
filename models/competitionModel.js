@@ -124,8 +124,9 @@ const competitionSchema = new mongoose.Schema(
     teamSizeMaximum: { type: Number },
 
     // Rules & Description
-    ruleBook: { type: String },
-    additionalRules: { type: String, trim: true },
+    ruleBook: { type: String, default: "" },
+    rulesUrl: { type: String, trim: true, default: "" },
+    additionalRules: [{ type: String, trim: true }],
     description: { type: String, trim: true },
     order_count: {
       type: Number,

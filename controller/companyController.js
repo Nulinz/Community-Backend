@@ -229,7 +229,19 @@ export const createCompanyForm = async (req, res, next) => {
 
     const companyName = toCleanString(req.body?.companyName);
     const companyType = toCleanString(req.body?.companyType);
-    const industry = toCleanString(req.body?.industry || req.body?.sector);
+    let industry = toCleanString(req.body?.industry || req.body?.sector);
+    const otherIndustry = toCleanString(req.body?.otherIndustry || req.body?.customIndustry);
+
+    // When the user specifies a custom domain/industry under 'Other',
+    // package it as "Other [<specified value>]" to preserve the parent categorization
+    // while storing the bespoke domain entered by the client.
+    if (industry.toLowerCase() === "other") {
+      if (otherIndustry) {
+        industry = `Other [${otherIndustry}]`;
+      } else {
+        throw Object.assign(new Error("Please specify your industry / domain"), { status: 400 });
+      }
+    }
     const domains = toCleanStringArray(req.body?.domains || req.body?.domain);
     const companyTagLine = toCleanString(req.body?.companyTagLine);
     const companyCultureTags = toCleanStringArray(req.body?.companyCultureTags);
@@ -1144,7 +1156,11 @@ export const registerCompany = async (req, res, next) => {
     const phone = toCleanString(req.body?.phone || req.body?.phoneNumber);
     const password = req.body?.password;
     const companyType = toCleanString(req.body?.companyType) || "Startup";
-    const industry = toCleanString(req.body?.industry || req.body?.sector) || "";
+    let industry = toCleanString(req.body?.industry || req.body?.sector) || "";
+    const otherIndustry = toCleanString(req.body?.otherIndustry || req.body?.customIndustry);
+    if (industry.toLowerCase() === "other" && otherIndustry) {
+      industry = `Other [${otherIndustry}]`;
+    }
     const city = toCleanString(req.body?.city) || "N/A";
     const state = toCleanString(req.body?.state) || "N/A";
     const pincode = toCleanString(req.body?.pincode) || "000000";

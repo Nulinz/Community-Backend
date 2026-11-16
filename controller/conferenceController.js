@@ -100,6 +100,7 @@ export const createConferenceForm = async (req, res, next) => {
             onlinePlatformLink,
             publicationAvailability,
             externalRegistrationLink,
+            rulesUrl,
             customFees,
         } = rest;
 
@@ -269,6 +270,7 @@ export const createConferenceForm = async (req, res, next) => {
         conference.schedule = parseDynamicArray(schedule);
         conference.incharges = parseDynamicArray(incharges);
 
+        conference.rulesUrl = toCleanString(rulesUrl);
         conference.description = toCleanString(description);
         applyOrderCount(conference, rest.order_count, req.user?.role);
 

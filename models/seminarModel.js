@@ -120,6 +120,7 @@ const seminarSchema = new mongoose.Schema(
     signatureUrl: { type: String, trim: true, default: "" },
     certificateContentBody: { type: String, trim: true, default: "" },
     // Rules & Description
+    rulesUrl: { type: String, trim: true, default: "" },
     description: { type: String, trim: true },
     order_count: {
       type: Number,
