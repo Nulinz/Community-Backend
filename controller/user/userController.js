@@ -40,6 +40,101 @@ import Notification from "../../models/notificationModel.js";
 import UserDetails from "../../models/userDetails.js";
 import { resolveUserEducation } from "../../helper/resolveUserEducation.js";
 
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * Batch-fetches company logo and verification lookup maps for a list of job items.
+ * Matches creator userId only for non-admin creators so admin-created/bulk-uploaded
+ * jobs never inherit logos from unrelated companies created under the admin's c_by.
+ */
+const fetchCompanyBrandingMaps = async (items, { includeVerification = false } = {}) => {
+  const nonAdminCreatorIds = [
+    ...new Set(
+      items
+        .filter((item) => item?.c_by?._id && String(item.c_by.role || "").toLowerCase() !== "admin")
+        .map((item) => String(item.c_by._id))
+    ),
+  ];
+  const companyNames = [
+    ...new Set(items.map((item) => item?.companyName?.trim()).filter(Boolean)),
+  ];
+
+  const creatorSelect = includeVerification
+    ? "userId companyLogo companyName verificationStatus"
+    : "userId companyLogo companyName";
+  const nameSelect = includeVerification
+    ? "companyLogo companyName verificationStatus"
+    : "companyLogo companyName";
+
+  const [companiesByCreator, companiesByName] = await Promise.all([
+    nonAdminCreatorIds.length > 0
+      ? Company.find({ userId: { $in: nonAdminCreatorIds } }).select(creatorSelect).lean()
+      : [],
+    companyNames.length > 0
+      ? Company.find({
+          companyName: { $in: companyNames.map((n) => new RegExp(`^${escapeRegex(n)}$`, "i")) },
+        })
+          .select(nameSelect)
+          .lean()
+      : [],
+  ]);
+
+  const companyByCreatorMap = new Map();
+  const companyVerificationByCreatorMap = new Map();
+  companiesByCreator.forEach((c) => {
+    if (c.companyLogo && c.userId) {
+      companyByCreatorMap.set(String(c.userId), c.companyLogo);
+    }
+    if (includeVerification && c.verificationStatus && c.userId) {
+      const uid = String(c.userId);
+      const existing = companyVerificationByCreatorMap.get(uid);
+      if (!existing || c.verificationStatus === "Verified") {
+        companyVerificationByCreatorMap.set(uid, c.verificationStatus);
+      }
+    }
+  });
+
+  const companyByNameMap = new Map();
+  const companyVerificationByNameMap = new Map();
+  companiesByName.forEach((c) => {
+    const cleanName = c.companyName ? c.companyName.toLowerCase().trim() : null;
+    if (!cleanName) return;
+    if (c.companyLogo) {
+      companyByNameMap.set(cleanName, c.companyLogo);
+    }
+    if (includeVerification && c.verificationStatus) {
+      const existing = companyVerificationByNameMap.get(cleanName);
+      if (!existing || c.verificationStatus === "Verified") {
+        companyVerificationByNameMap.set(cleanName, c.verificationStatus);
+      }
+    }
+  });
+
+  return {
+    companyByCreatorMap,
+    companyByNameMap,
+    companyVerificationByCreatorMap,
+    companyVerificationByNameMap,
+  };
+};
+
+/**
+ * Resolves the company logo for a job item using explicit logo -> companyName match
+ * -> non-admin creator userId match, returning null when no valid logo exists.
+ */
+const resolveJobCompanyLogo = (item, companyByNameMap, companyByCreatorMap) => {
+  const creatorRole = item?.c_by?.role ? String(item.c_by.role).toLowerCase() : null;
+  const creatorIdStr = item?.c_by?._id ? String(item.c_by._id) : null;
+  const normalizedName = item?.companyName ? item.companyName.toLowerCase().trim() : null;
+
+  return (
+    item?.companyLogo ||
+    (normalizedName && companyByNameMap.get(normalizedName)) ||
+    (creatorRole !== "admin" && creatorIdStr ? companyByCreatorMap.get(creatorIdStr) : null) ||
+    null
+  );
+};
+
 
 const userDashboard = async (req, res) => {
   try {
@@ -434,65 +529,12 @@ const getJobs = async (req, res) => {
     const savedSet = new Set(savedJobs.map((s) => String(s.jobId)));
     const appliedSet = new Set(appliedJobs.map((a) => String(a.jobId)));
 
-    const STATIC_ADMIN_IMAGE = "referral/assets/index_icon.png";
-
-    // ── Batch lookup company logos to maximize performance and avoid N+1 queries ──
-    const creatorUserIds = jobs
-      .map((item) => item.c_by?._id)
-      .filter(Boolean);
-    const companyNames = jobs
-      .map((item) => item.companyName?.trim())
-      .filter(Boolean);
-
-    const [companiesByCreator, companiesByName] = await Promise.all([
-      creatorUserIds.length > 0
-        ? Company.find({
-            $or: [{ userId: { $in: creatorUserIds } }, { c_by: { $in: creatorUserIds } }],
-          })
-            .select("userId c_by companyLogo companyName verificationStatus")
-            .lean()
-        : [],
-      companyNames.length > 0
-        ? Company.find({
-            companyName: { $in: companyNames.map((n) => new RegExp(`^${n}$`, "i")) },
-          })
-            .select("companyLogo companyName verificationStatus")
-            .lean()
-        : [],
-    ]);
-
-    const companyByCreatorMap = new Map();
-    const companyVerificationByCreatorMap = new Map();
-    companiesByCreator.forEach((c) => {
-      if (c.companyLogo) {
-        if (c.userId) companyByCreatorMap.set(String(c.userId), c.companyLogo);
-        if (c.c_by) companyByCreatorMap.set(String(c.c_by), c.companyLogo);
-      }
-      if (c.verificationStatus && c.userId) {
-        const uid = String(c.userId);
-        const existing = companyVerificationByCreatorMap.get(uid);
-        if (!existing || c.verificationStatus === "Verified") {
-          companyVerificationByCreatorMap.set(uid, c.verificationStatus);
-        }
-      }
-    });
-
-    const companyByNameMap = new Map();
-    const companyVerificationByNameMap = new Map();
-    companiesByName.forEach((c) => {
-      const cleanName = c.companyName ? c.companyName.toLowerCase().trim() : null;
-      if (cleanName) {
-        if (c.companyLogo) {
-          companyByNameMap.set(cleanName, c.companyLogo);
-        }
-        if (c.verificationStatus) {
-          const existing = companyVerificationByNameMap.get(cleanName);
-          if (!existing || c.verificationStatus === "Verified") {
-            companyVerificationByNameMap.set(cleanName, c.verificationStatus);
-          }
-        }
-      }
-    });
+    const {
+      companyByCreatorMap,
+      companyByNameMap,
+      companyVerificationByCreatorMap,
+      companyVerificationByNameMap,
+    } = await fetchCompanyBrandingMaps(jobs, { includeVerification: true });
 
     const data = jobs.map((item) => {
       const fullJobObj = item.toObject();
@@ -501,25 +543,15 @@ const getJobs = async (req, res) => {
         ? restObj.domains
         : (domain ? domain.split(",").map((s) => s.trim()).filter(Boolean) : []);
 
+      const creatorRole = item.c_by?.role ? String(item.c_by.role).toLowerCase() : null;
       const creatorIdStr = item.c_by?._id ? String(item.c_by._id) : null;
       const normalizedName = item.companyName ? item.companyName.toLowerCase().trim() : null;
 
-      /**
-       * Resolve company logo with hierarchical fallback:
-       * 1. Explicitly saved logo on job document (e.g. chosen from dropdown or uploaded in admin panel)
-       * 2. Registered company logo matched by companyName (e.g. admin created job for an existing company)
-       * 3. Company logo matched by creator userId/c_by (if creator is a registered company)
-       * 4. Static admin branding fallback if posted by admin
-       */
-      const resolvedLogo =
-        item.companyLogo ||
-        (normalizedName && companyByNameMap.get(normalizedName)) ||
-        (creatorIdStr && companyByCreatorMap.get(creatorIdStr)) ||
-        (item.c_by?.role === "admin" ? STATIC_ADMIN_IMAGE : null);
+      const resolvedLogo = resolveJobCompanyLogo(item, companyByNameMap, companyByCreatorMap);
 
       const resolvedVerificationStatus =
         (normalizedName && companyVerificationByNameMap.get(normalizedName)) ||
-        (creatorIdStr && companyVerificationByCreatorMap.get(creatorIdStr)) ||
+        (creatorRole !== "admin" && creatorIdStr ? companyVerificationByCreatorMap.get(creatorIdStr) : null) ||
         "Pending";
 
       const isSaved = savedSet.has(String(item._id));
@@ -1009,15 +1041,13 @@ const getSavedJobs = async (req, res) => {
 
     const activeSaved = savedJobs.filter((item) => item.jobId);
     const validJobIds = activeSaved.map((item) => item.jobId._id);
-    const creatorUserIds = activeSaved.map((item) => item.jobId.c_by?._id).filter(Boolean);
-    const companyNames = activeSaved.map((item) => item.jobId.companyName?.trim()).filter(Boolean);
 
     const userObjectId = mongoose.Types.ObjectId.isValid(userId)
       ? new mongoose.Types.ObjectId(userId)
       : userId;
 
     // Batch lookup application statuses and company branding in parallel to eliminate N+1 queries
-    const [appliedJobs, companiesByCreator, companiesByName] = await Promise.all([
+    const [appliedJobs, { companyByCreatorMap, companyByNameMap }] = await Promise.all([
       validJobIds.length > 0
         ? AppliedJob.find({
             $or: [{ userId: userObjectId }, { userId: String(userId) }],
@@ -1026,40 +1056,10 @@ const getSavedJobs = async (req, res) => {
             .select("jobId")
             .lean()
         : [],
-      creatorUserIds.length > 0
-        ? Company.find({
-            $or: [{ userId: { $in: creatorUserIds } }, { c_by: { $in: creatorUserIds } }],
-          })
-            .select("userId c_by companyLogo companyName")
-            .lean()
-        : [],
-      companyNames.length > 0
-        ? Company.find({
-            companyName: { $in: companyNames.map((n) => new RegExp(`^${n}$`, "i")) },
-          })
-            .select("companyLogo companyName")
-            .lean()
-        : [],
+      fetchCompanyBrandingMaps(activeSaved.map((item) => item.jobId)),
     ]);
 
     const appliedSet = new Set(appliedJobs.map((a) => String(a.jobId)));
-
-    const companyByCreatorMap = new Map();
-    companiesByCreator.forEach((c) => {
-      if (c.companyLogo) {
-        if (c.userId) companyByCreatorMap.set(String(c.userId), c.companyLogo);
-        if (c.c_by) companyByCreatorMap.set(String(c.c_by), c.companyLogo);
-      }
-    });
-
-    const companyByNameMap = new Map();
-    companiesByName.forEach((c) => {
-      if (c.companyLogo && c.companyName) {
-        companyByNameMap.set(c.companyName.toLowerCase().trim(), c.companyLogo);
-      }
-    });
-
-    const STATIC_ADMIN_IMAGE = "referral/assets/index_icon.png";
 
     // Enrich saved jobs in memory with dynamic company logos and application statuses
     const job = [];
@@ -1069,19 +1069,7 @@ const getSavedJobs = async (req, res) => {
       const jobItem = item.jobId;
       if (!jobItem) continue;
 
-      const creatorIdStr = jobItem.c_by?._id ? String(jobItem.c_by._id) : null;
-      const normalizedName = jobItem.companyName ? jobItem.companyName.toLowerCase().trim() : null;
-
-      // Dynamic company logo resolution hierarchy:
-      // 1. Direct document companyLogo (explicitly chosen/uploaded during creation)
-      // 2. Matched by companyName from Company collection (case-insensitive)
-      // 3. Matched by creator user ID from Company collection
-      // 4. Fallback to STATIC_ADMIN_IMAGE only if created by admin and no company logo found
-      const dynamicCompanyLogo =
-        jobItem.companyLogo ||
-        (normalizedName && companyByNameMap.get(normalizedName)) ||
-        (creatorIdStr && companyByCreatorMap.get(creatorIdStr)) ||
-        (jobItem.c_by?.role === "admin" ? STATIC_ADMIN_IMAGE : null);
+      const dynamicCompanyLogo = resolveJobCompanyLogo(jobItem, companyByNameMap, companyByCreatorMap);
 
       const fullJobObj = jobItem.toObject();
       const { domain, salaryMin, salaryMax, ...rawJobObj } = fullJobObj;
@@ -1496,15 +1484,13 @@ const getAppliedJobs = async (req, res) => {
 
     const activeApplied = appliedJobs.filter((item) => item.jobId);
     const validJobIds = activeApplied.map((item) => item.jobId._id);
-    const creatorUserIds = activeApplied.map((item) => item.jobId.c_by?._id).filter(Boolean);
-    const companyNames = activeApplied.map((item) => item.jobId.companyName?.trim()).filter(Boolean);
 
     const userObjectId = mongoose.Types.ObjectId.isValid(userId)
       ? new mongoose.Types.ObjectId(userId)
       : userId;
 
     // Batch lookup saved statuses and company branding in parallel to eliminate N+1 queries
-    const [savedJobs, companiesByCreator, companiesByName] = await Promise.all([
+    const [savedJobs, { companyByCreatorMap, companyByNameMap }] = await Promise.all([
       validJobIds.length > 0
         ? SavedJob.find({
             $or: [{ userId: userObjectId }, { userId: String(userId) }],
@@ -1513,40 +1499,10 @@ const getAppliedJobs = async (req, res) => {
             .select("jobId")
             .lean()
         : [],
-      creatorUserIds.length > 0
-        ? Company.find({
-            $or: [{ userId: { $in: creatorUserIds } }, { c_by: { $in: creatorUserIds } }],
-          })
-            .select("userId c_by companyLogo companyName")
-            .lean()
-        : [],
-      companyNames.length > 0
-        ? Company.find({
-            companyName: { $in: companyNames.map((n) => new RegExp(`^${n}$`, "i")) },
-          })
-            .select("companyLogo companyName")
-            .lean()
-        : [],
+      fetchCompanyBrandingMaps(activeApplied.map((item) => item.jobId)),
     ]);
 
     const savedSet = new Set(savedJobs.map((s) => String(s.jobId)));
-
-    const companyByCreatorMap = new Map();
-    companiesByCreator.forEach((c) => {
-      if (c.companyLogo) {
-        if (c.userId) companyByCreatorMap.set(String(c.userId), c.companyLogo);
-        if (c.c_by) companyByCreatorMap.set(String(c.c_by), c.companyLogo);
-      }
-    });
-
-    const companyByNameMap = new Map();
-    companiesByName.forEach((c) => {
-      if (c.companyLogo && c.companyName) {
-        companyByNameMap.set(c.companyName.toLowerCase().trim(), c.companyLogo);
-      }
-    });
-
-    const STATIC_ADMIN_IMAGE = "referral/assets/index_icon.png";
 
     // Enrich applied jobs in memory with dynamic company logos and saved flags
     const enrichedAppliedJobs = [];
@@ -1554,19 +1510,7 @@ const getAppliedJobs = async (req, res) => {
       const job = item.jobId;
       if (!job) continue;
 
-      const creatorIdStr = job.c_by?._id ? String(job.c_by._id) : null;
-      const normalizedName = job.companyName ? job.companyName.toLowerCase().trim() : null;
-
-      // Dynamic company logo resolution hierarchy:
-      // 1. Direct document companyLogo
-      // 2. Matched by companyName from Company collection (case-insensitive)
-      // 3. Matched by creator user ID from Company collection
-      // 4. Fallback to STATIC_ADMIN_IMAGE only if created by admin and no company logo found
-      const dynamicCompanyLogo =
-        job.companyLogo ||
-        (normalizedName && companyByNameMap.get(normalizedName)) ||
-        (creatorIdStr && companyByCreatorMap.get(creatorIdStr)) ||
-        (job.c_by?.role === "admin" ? STATIC_ADMIN_IMAGE : null);
+      const dynamicCompanyLogo = resolveJobCompanyLogo(job, companyByNameMap, companyByCreatorMap);
 
       const fullJobObj = job.toObject();
       const { domain, salaryMin, salaryMax, ...rawJobObj } = fullJobObj;
@@ -1866,13 +1810,11 @@ const getJobProfile = async (req, res) => {
       });
     }
 
-    const STATIC_ADMIN_IMAGE = "referral/assets/index_icon.png";
-
     /**
      * Resolve company profile details and companyId.
-     * Business rule: If the creator role is admin, companyId must be null
-     * and fallback to the static admin branding. Otherwise, resolve the
-     * registered Company document ID to allow clients to link to the company profile.
+     * Non-admin creators match by their own userId first; admin-created postings
+     * match strictly by companyName so admin c_by never leaks unrelated companies.
+     * Returns null for companyLogo when no matching company logo exists.
      */
     let companyId = null;
     let companyDetails = {
@@ -1889,16 +1831,14 @@ const getJobProfile = async (req, res) => {
     const creatorRole = job.c_by?.role ? String(job.c_by.role).toLowerCase() : null;
 
     const company =
-      (job.c_by?._id
-        ? await Company.findOne({
-            $or: [{ userId: job.c_by._id }, { c_by: job.c_by._id }],
-          })
+      (creatorRole !== "admin" && job.c_by?._id
+        ? await Company.findOne({ userId: job.c_by._id })
             .select("_id companyLogo aboutUs websiteLink companyName companyTagLine verificationStatus")
             .lean()
         : null) ||
       (job.companyName
         ? await Company.findOne({
-            companyName: { $regex: new RegExp(`^${job.companyName.trim()}$`, "i") },
+            companyName: { $regex: new RegExp(`^${escapeRegex(job.companyName.trim())}$`, "i") },
           })
             .select("_id companyLogo aboutUs websiteLink companyName companyTagLine verificationStatus")
             .lean()
@@ -1909,7 +1849,7 @@ const getJobProfile = async (req, res) => {
       companyDetails = {
         _id: company._id,
         companyId,
-        companyLogo: company.companyLogo || job.companyLogo || (creatorRole === "admin" ? STATIC_ADMIN_IMAGE : null),
+        companyLogo: company.companyLogo || job.companyLogo || null,
         aboutUs: company.aboutUs || null,
         website: company.websiteLink || null,
         websiteLink: company.websiteLink || null,
@@ -1919,7 +1859,7 @@ const getJobProfile = async (req, res) => {
         verificationStatus: company.verificationStatus || "Pending",
       };
     } else {
-      companyDetails.companyLogo = job.companyLogo || (creatorRole === "admin" ? STATIC_ADMIN_IMAGE : null);
+      companyDetails.companyLogo = job.companyLogo || null;
       companyDetails.verificationStatus = "Pending";
     }
 
@@ -1954,6 +1894,7 @@ const getJobProfile = async (req, res) => {
       appliedCount: appliedCount || 0,
       data: {
         ...rawJobObj,
+        companyLogo: companyDetails.companyLogo,
         salary: resolvedSalary,
         budget: resolvedBudget,
         domains: itemDomains,
