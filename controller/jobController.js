@@ -786,10 +786,12 @@ export const bulkUploadJobs = async (req, res, next) => {
       return "";
     };
 
+    // Split multi-value cells on " # " (and real newlines) instead of commas/semicolons
+    // so in-sentence punctuation and tokens like "C#" are preserved.
     const parseList = (val) => {
       if (Array.isArray(val)) return val.map((s) => String(s).trim()).filter(Boolean);
       if (typeof val === "string") {
-        return val.split(/[,;\n]/).map((s) => s.trim()).filter(Boolean);
+        return val.split(/[ \t]+#[ \t]+|\r?\n/).map((s) => s.trim()).filter(Boolean);
       }
       return [];
     };
@@ -847,7 +849,9 @@ export const bulkUploadJobs = async (req, res, next) => {
 
       const jobType = getField(row, "jobType", "Job Type", "Type", "Employment Type") || "Full Time";
       const jobCategory = getField(row, "jobCategory", "Job Category", "Category") || "Jobs";
-      const description = getField(row, "description", "Description", "Job Description");
+      const description = getField(row, "description", "Description", "Job Description")
+        .replace(/[ \t]+#[ \t]+/g, "\n")
+        .trim();
       const externalLink = getField(row, "externalRegistrationLink", "External Link", "Apply Link", "Registration Link");
 
       const deadline = parseDateVal(row["Application Deadline"] || row["applicationDeadline"] || row["Deadline"] || getField(row, "deadline"));
