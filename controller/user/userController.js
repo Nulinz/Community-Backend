@@ -23,6 +23,7 @@ import { getSeatAvailability } from "../../helper/getSeatAvailability.js";
 import Conference from "../../models/conferenceModel.js";
 import Seminar from "../../models/seminarModel.js";
 import mongoose from "mongoose";
+import { trackDailyView, trackUniqueTarget } from "../../models/userMissionProgressModel.js";
 
 import CompanyFollow from "../../models/companyFollowModel.js";
 
@@ -267,7 +268,7 @@ const userDashboard = async (req, res) => {
     startOfToday.setHours(0, 0, 0, 0);
 
     const userDoc = await User.findById(userId).select(
-      "xp lifetime_xp level lastActiveDate fcm_token subscription show_levelup_animation"
+      "xp lifetime_xp level lastActiveDate fcm_token subscription show_levelup_animation hasSeenAppTour"
     );
     if (userDoc && (!userDoc.lastActiveDate || new Date(userDoc.lastActiveDate) < startOfToday)) {
       userDoc.lastActiveDate = new Date();
@@ -386,6 +387,7 @@ const userDashboard = async (req, res) => {
     return res.status(200).json({
       status: true,
       data: {
+        hasSeenAppTour: Boolean(userDoc?.hasSeenAppTour),
         userXp: {
           xp: userDoc?.xp || 0,
           lifetime_xp: userDoc?.lifetime_xp || userDoc?.xp || 0,
@@ -766,6 +768,7 @@ const getAllInternships = async (req, res) => {
 const getAllFreelances = async (req, res) => {
   try {
     const userId = req.user._id;
+    trackDailyView(userId, "envy_discover");
     const userObjectId = mongoose.Types.ObjectId.isValid(userId)
       ? new mongoose.Types.ObjectId(String(userId))
       : userId;
@@ -1403,6 +1406,12 @@ const applyJob = async (req, res) => {
       });
     }
 
+    if (jobType === "Job" || jobType === "Internship") {
+      trackUniqueTarget(userId, "opportunities", job._id);
+    } else if (jobType === "Freelance") {
+      trackUniqueTarget(userId, "envy_projects", job._id);
+    }
+
     // Guard against duplicate applications
     const existing = await AppliedJob.findOne({ userId, jobId: targetJobId });
     if (existing) {
@@ -1810,6 +1819,12 @@ const getJobProfile = async (req, res) => {
       });
     }
 
+    if (jobType === "Job" || jobType === "Internship") {
+      trackUniqueTarget(userId, "opportunities", job._id);
+    } else if (jobType === "Freelance") {
+      trackUniqueTarget(userId, "envy_projects", job._id);
+    }
+
     /**
      * Resolve company profile details and companyId.
      * Non-admin creators match by their own userId first; admin-created postings
@@ -1923,6 +1938,7 @@ const getJobProfile = async (req, res) => {
 const getAllCompetitions = async (req, res) => {
   try {
     const userId = req.user._id;
+    trackDailyView(userId, "competitions");
 
     const competitions = await Competition.find({ isActive: true, status: "approved" })
       .sort({ createdAt: -1 })
@@ -3528,6 +3544,7 @@ const toggleFollow = async (req, res) => {
 const getFollowingList = async (req, res) => {
   try {
     const userId = req.user._id;
+    trackDailyView(userId, "companies");
 
     // 1. Fetch user's company follow records ordered by most recent follow
     const followRecords = await CompanyFollow.find({ userId })
@@ -3726,6 +3743,7 @@ const getFollowingList = async (req, res) => {
 const getCompanyProfile = async (req, res) => {
   try {
     const userId = req.user._id;
+    trackDailyView(userId, "companies");
     const { id } = req.body;
 
     if (!id) {
@@ -3880,6 +3898,7 @@ const attachFlags = async (items, type) =>
 const getEventsPage = async (req, res) => {
   try {
     const userId = req.user._id;
+    trackDailyView(userId, "events");
 
     const eventsRaw = await Event.find({
       isActive: true,
@@ -4592,6 +4611,39 @@ const dismissLevelUpAnimation = async (req, res, next) => {
   }
 };
 
+/**
+ * Marks the onboarding app tour as seen/skipped for the authenticated user
+ * so it is not displayed again on subsequent logins or app launches.
+ */
+const dismissAppTour = async (req, res, next) => {
+  try {
+    const userId = req.user?._id;
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        status: false,
+        message: "Unauthorized",
+      });
+    }
+
+    await User.findByIdAndUpdate(userId, {
+      $set: { hasSeenAppTour: true },
+    });
+
+    return res.status(200).json({
+      success: true,
+      status: true,
+      message: "App tour dismissed successfully",
+      data: {
+        hasSeenAppTour: true,
+        showAppTour: false,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 const getAllRegisteredUsers = async (req, res, next) => {
   try {
     const search = req.query.search || "";
@@ -4744,6 +4796,7 @@ export {
   userDashboard,
   getSubscriptionStatus,
   dismissLevelUpAnimation,
+  dismissAppTour,
   getAllRegisteredUsers,
   getMyReferrals,
   getJobs,

@@ -34,6 +34,7 @@ import {
   userDashboard,
   getSubscriptionStatus,
   dismissLevelUpAnimation,
+  dismissAppTour,
   getAllRegisteredUsers,
   getMyReferrals,
   getJobs,
@@ -301,6 +302,8 @@ router.get("/subscription-status", isAuthenticated, getSubscriptionStatus);
 router.post("/levelup-animation", uploader.none(), isAuthenticated, dismissLevelUpAnimation);
 router.post("/subscription-status", uploader.none(), isAuthenticated, dismissLevelUpAnimation);
 router.post("/dismiss-levelup-animation", uploader.none(), isAuthenticated, dismissLevelUpAnimation);
+// Dismiss / complete onboarding app tour so it never displays again
+router.post("/app-tour/dismiss", uploader.none(), isAuthenticated, dismissAppTour);
 
 // GET /api/users/all-registered  (role = user)
 router.get("/all-registered", isAuthenticated, getAllRegisteredUsers);

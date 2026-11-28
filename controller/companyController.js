@@ -15,6 +15,7 @@ import Job from "../models/jobModel.js";
 import AppliedJob from "../models/appliedJobModel.js";
 import Event from "../models/eventModel.js";
 import Competition from "../models/competitionModel.js";
+import { trackDailyView } from "../models/userMissionProgressModel.js";
 
 
 
@@ -500,6 +501,9 @@ export const createCompanyForm = async (req, res, next) => {
 
 export const getAllCompany = async (req, res, next) => {
   try {
+    if (req.user?._id) {
+      trackDailyView(req.user._id, "companies");
+    }
     const companies = await Company.find({}).populate("userId", "email phone role is_active").lean();
 
     const flattenedCompanies = companies.map(company => {
@@ -729,6 +733,9 @@ export const getMyCompany = async (req, res, next) => {
 export const getCompanyById = async (req, res, next) => {
   try {
     const { id } = req.params;
+    if (req.user?._id) {
+      trackDailyView(req.user._id, "companies");
+    }
 
     // ── 1. Get Company ─────────────────────────────────────────
     const company = await Company.findById(id)

@@ -7,6 +7,7 @@ import AppliedJob from "../../models/appliedJobModel.js";
 import SavedJob from "../../models/savedJobModel.js";
 import UserDetails from "../../models/userDetails.js";
 import Resume from "../../models/resumeModel.js";
+import UserMissionProgress from "../../models/userMissionProgressModel.js";
 import { XP_ACTIONS, calculateLevelInfo } from "../../config/xpConfig.js";
 import { awardXP, triggerMissionNotification } from "../../services/xpService.js";
 import { sendAndSaveNotification } from "../../helper/sendAndSaveNotification.js";
@@ -100,7 +101,11 @@ export const getMissions = async (req, res, next) => {
       hasEventRegistration,
       hasCompetitionRegistration,
       hasFreelanceApp,
+      freelanceAppliedCount,
       hasSavedJob,
+      savedJobsCount,
+      followedCompaniesCount,
+      missionProgress,
       hasCompletedProfile,
       hasCreatedResume,
       hasSubscriptionPayment,
@@ -111,7 +116,11 @@ export const getMissions = async (req, res, next) => {
       EventRegistration.exists({ userId }),
       EventRegistration.exists({ userId, eventType: "Competition" }),
       AppliedJob.exists({ userId, jobType: "Freelance" }),
+      AppliedJob.countDocuments({ userId, jobType: "Freelance" }),
       SavedJob.exists({ userId }),
+      SavedJob.countDocuments({ userId }),
+      CompanyFollow.countDocuments({ userId }),
+      UserMissionProgress.findOne({ userId }).lean(),
       UserDetails.exists({
         userId,
         $or: [
@@ -139,12 +148,33 @@ export const getMissions = async (req, res, next) => {
     ).length;
 
     // Build missions list including daily activity, milestones, social follows, and referrals
+    const isLevel2 = userLevel === 2;
+    const isLevel3 = userLevel === 3;
+    const dailyLoginKey = isLevel3 ? "LVL3_DAILY_LOGIN" : isLevel2 ? "LVL2_DAILY_LOGIN" : "DAILY_LOGIN";
     const missionKeys = [
-      "DAILY_LOGIN",
+      dailyLoginKey,
       activeTimeMissionKey,
+      isLevel2 ? "LVL2_AI_STATION" : "AI_STATION",
+      ...(isLevel2
+        ? [
+            "LVL2_EXPLORE_EVENTS",
+            "LVL2_EXPLORE_COMPANIES",
+            "LVL2_EXPLORE_COMPETITIONS",
+            "LVL2_EXPLORE_10_JOBS",
+            "LVL2_SAVE_5_JOBS",
+            "LVL2_FOLLOW_5_COMPANIES",
+          ]
+        : []),
+      ...(isLevel3
+        ? [
+            "LVL3_DISCOVER_ENVY",
+            "LVL3_EXPLORE_5_ENVY",
+            "LVL3_APPLY_FIRST_ENVY",
+            "LVL3_APPLY_3_ENVY",
+          ]
+        : []),
       "FOLLOW_INSTAGRAM",
       "FOLLOW_YOUTUBE",
-      "AI_STATION",
       "INTERNSHIPS_AND_JOBS",
       "FIRST_REGISTERATION",
       "COMPLETE_PROFILE",
@@ -182,10 +212,33 @@ export const getMissions = async (req, res, next) => {
         }
       } else if (isClaimed) {
         currentProgress = config.target;
-      } else if (key === "DAILY_LOGIN") {
+      } else if (key === "DAILY_LOGIN" || key === "LVL2_DAILY_LOGIN" || key === "LVL3_DAILY_LOGIN") {
         currentProgress = user.lastActiveDate && new Date(user.lastActiveDate) >= startOfToday ? 1 : 0;
-      } else if (key === "AI_STATION") {
+      } else if (key === "AI_STATION" || key === "LVL2_AI_STATION") {
         currentProgress = user.lastAiStationDate && new Date(user.lastAiStationDate) >= startOfToday ? 1 : 0;
+      } else if (key === "LVL2_EXPLORE_EVENTS") {
+        const dt = missionProgress?.dailyViews?.events;
+        currentProgress = dt && new Date(dt) >= startOfToday ? 1 : 0;
+      } else if (key === "LVL2_EXPLORE_COMPANIES") {
+        const dt = missionProgress?.dailyViews?.companies;
+        currentProgress = dt && new Date(dt) >= startOfToday ? 1 : 0;
+      } else if (key === "LVL2_EXPLORE_COMPETITIONS") {
+        const dt = missionProgress?.dailyViews?.competitions;
+        currentProgress = dt && new Date(dt) >= startOfToday ? 1 : 0;
+      } else if (key === "LVL2_EXPLORE_10_JOBS") {
+        const viewedCount = missionProgress?.uniqueTargets?.opportunities?.length || 0;
+        currentProgress = Math.min(viewedCount, config.target);
+      } else if (key === "LVL2_SAVE_5_JOBS") {
+        currentProgress = Math.min(savedJobsCount, config.target);
+      } else if (key === "LVL2_FOLLOW_5_COMPANIES") {
+        currentProgress = Math.min(followedCompaniesCount, config.target);
+      } else if (key === "LVL3_DISCOVER_ENVY") {
+        currentProgress = missionProgress?.dailyViews?.envy_discover ? 1 : 0;
+      } else if (key === "LVL3_EXPLORE_5_ENVY") {
+        const viewedEnvy = missionProgress?.uniqueTargets?.envy_projects?.length || 0;
+        currentProgress = Math.min(viewedEnvy, config.target);
+      } else if (key === "LVL3_APPLY_FIRST_ENVY" || key === "LVL3_APPLY_3_ENVY") {
+        currentProgress = Math.min(freelanceAppliedCount, config.target);
       } else if (key === "INTERNSHIPS_AND_JOBS") {
         currentProgress = user.lastJobsViewDate ? 1 : 0;
       } else if (key.startsWith("ACTIVE_")) {
@@ -268,6 +321,11 @@ export const getMissions = async (req, res, next) => {
       );
     }
 
+    // Hide one-time missions once claimed; keep daily missions visible
+    const visibleMissions = missions.filter(
+      (m) => !(m.isDaily === false && m.status === "CLAIMED")
+    );
+
     return res.status(200).json({
       status: true,
       userSummary: {
@@ -275,7 +333,7 @@ export const getMissions = async (req, res, next) => {
         level: userLevel,
         dailyActiveMinutes: dailyMins,
       },
-      missions,
+      missions: visibleMissions,
     });
   } catch (error) {
     next(error);
@@ -320,6 +378,14 @@ export const claimMission = async (req, res, next) => {
     const isNewDay = !user.lastActiveDate || new Date(user.lastActiveDate) < startOfToday;
     const dailyMins = isNewDay ? 0 : user.dailyActiveMinutes || 0;
 
+    // Exact-level guard for level-exclusive missions (e.g. Level 2)
+    if (config.exactLevel && config.requiredLevel && userLevel !== config.requiredLevel) {
+      return res.status(400).json({
+        status: false,
+        message: `This mission is only available for Level ${config.requiredLevel} users`,
+      });
+    }
+
     // Level guards for active minute missions
     if (actionKey === "ACTIVE_30_MIN" && userLevel !== 1) {
       return res.status(400).json({
@@ -341,22 +407,73 @@ export const claimMission = async (req, res, next) => {
     }
 
     // Validate mission criteria completion before manual claim
-    if (actionKey === "DAILY_LOGIN") {
+    if (actionKey === "DAILY_LOGIN" || actionKey === "LVL2_DAILY_LOGIN" || actionKey === "LVL3_DAILY_LOGIN") {
       const hasBeenActiveToday = user.lastActiveDate && new Date(user.lastActiveDate) >= startOfToday;
       if (!hasBeenActiveToday) {
         return res.status(400).json({ status: false, message: "Daily login mission not completed today" });
       }
-    } else if (actionKey === "AI_STATION") {
+    } else if (actionKey === "AI_STATION" || actionKey === "LVL2_AI_STATION") {
       const hasUsedAiToday = user.lastAiStationDate && new Date(user.lastAiStationDate) >= startOfToday;
       if (!hasUsedAiToday) {
         return res.status(400).json({ status: false, message: "AI Station mission not completed today yet" });
       }
-    } else if (actionKey === "ACTIVE_30_MIN" && dailyMins < 30) {
-      return res.status(400).json({ status: false, message: "Target of 30 active minutes not reached yet" });
-    } else if (actionKey === "ACTIVE_60_MIN" && dailyMins < 60) {
-      return res.status(400).json({ status: false, message: "Target of 60 active minutes not reached yet" });
-    } else if (actionKey === "ACTIVE_180_MIN" && dailyMins < 180) {
-      return res.status(400).json({ status: false, message: "Target of 180 active minutes not reached yet" });
+    } else if (actionKey === "LVL2_EXPLORE_EVENTS") {
+      const progress = await UserMissionProgress.findOne({ userId }).lean();
+      const dt = progress?.dailyViews?.events;
+      if (!dt || new Date(dt) < startOfToday) {
+        return res.status(400).json({ status: false, message: "Explore Events mission not completed today yet" });
+      }
+    } else if (actionKey === "LVL2_EXPLORE_COMPANIES") {
+      const progress = await UserMissionProgress.findOne({ userId }).lean();
+      const dt = progress?.dailyViews?.companies;
+      if (!dt || new Date(dt) < startOfToday) {
+        return res.status(400).json({ status: false, message: "Explore Companies mission not completed today yet" });
+      }
+    } else if (actionKey === "LVL2_EXPLORE_COMPETITIONS") {
+      const progress = await UserMissionProgress.findOne({ userId }).lean();
+      const dt = progress?.dailyViews?.competitions;
+      if (!dt || new Date(dt) < startOfToday) {
+        return res.status(400).json({ status: false, message: "Explore Competitions mission not completed today yet" });
+      }
+    } else if (actionKey === "LVL2_EXPLORE_10_JOBS") {
+      const progress = await UserMissionProgress.findOne({ userId }).lean();
+      const count = progress?.uniqueTargets?.opportunities?.length || 0;
+      if (count < 10) {
+        return res.status(400).json({ status: false, message: "Explore 10 jobs or internships mission not completed yet" });
+      }
+    } else if (actionKey === "LVL2_SAVE_5_JOBS") {
+      const count = await SavedJob.countDocuments({ userId });
+      if (count < 5) {
+        return res.status(400).json({ status: false, message: "Save 5 jobs or internships mission not completed yet" });
+      }
+    } else if (actionKey === "LVL2_FOLLOW_5_COMPANIES") {
+      const count = await CompanyFollow.countDocuments({ userId });
+      if (count < 5) {
+        return res.status(400).json({ status: false, message: "Follow 5 companies mission not completed yet" });
+      }
+    } else if (actionKey === "LVL3_DISCOVER_ENVY") {
+      const progress = await UserMissionProgress.findOne({ userId }).lean();
+      if (!progress?.dailyViews?.envy_discover) {
+        return res.status(400).json({ status: false, message: "Discover Envy Freelancing mission not completed yet" });
+      }
+    } else if (actionKey === "LVL3_EXPLORE_5_ENVY") {
+      const progress = await UserMissionProgress.findOne({ userId }).lean();
+      const count = progress?.uniqueTargets?.envy_projects?.length || 0;
+      if (count < 5) {
+        return res.status(400).json({ status: false, message: "Explore 5 Envy projects mission not completed yet" });
+      }
+    } else if (actionKey === "LVL3_APPLY_FIRST_ENVY") {
+      const count = await AppliedJob.countDocuments({ userId, jobType: "Freelance" });
+      if (count < 1) {
+        return res.status(400).json({ status: false, message: "Apply first Envy project mission not completed yet" });
+      }
+    } else if (actionKey === "LVL3_APPLY_3_ENVY") {
+      const count = await AppliedJob.countDocuments({ userId, jobType: "Freelance" });
+      if (count < 3) {
+        return res.status(400).json({ status: false, message: "Apply 3 Envy projects mission not completed yet" });
+      }
+    } else if (actionKey.startsWith("ACTIVE_") && dailyMins < config.target) {
+      return res.status(400).json({ status: false, message: `Target of ${config.target} active minutes not reached yet` });
     } else if (actionKey === "FIRST_REGISTERATION") {
       // User account exists by definition
     } else if (actionKey === "COMPLETE_PROFILE") {

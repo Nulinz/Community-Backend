@@ -91,6 +91,7 @@ const competitionSchema = new mongoose.Schema(
     firstPrize: { type: String, trim: true },
     secondPrize: { type: String, trim: true },
     thirdPrize: { type: String, trim: true },
+    otherPrizes: { type: String, trim: true },
     participationPrize: { type: String, trim: true },
 
     // Venue

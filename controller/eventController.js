@@ -7,6 +7,7 @@ import { getEventFinancials } from "../helper/getEventFinancials.js";
 import { validateOrganizerPayout, resolveOrganizerName } from "../helper/payoutValidator.js";
 import { enrichRegistrationsWithUserDetails } from "../helper/resolveUserEducation.js";
 import { applyOrderCount, buildStatusQuery, sortByOrderCount } from "../helper/orderCountHelper.js";
+import { trackDailyView } from "../models/userMissionProgressModel.js";
 
 const toCleanString = (value) =>
     typeof value === "string" ? value.trim() : "";
@@ -67,6 +68,7 @@ export const createEventForm = async (req, res, next) => {
             firstPrize,
             secondPrize,
             thirdPrize,
+            otherPrizes,
             participationPrize,
             internshipOpportunity,
             placementOpportunity,
@@ -239,6 +241,7 @@ export const createEventForm = async (req, res, next) => {
         event.firstPrize = toCleanString(firstPrize);
         event.secondPrize = toCleanString(secondPrize);
         event.thirdPrize = toCleanString(thirdPrize);
+        event.otherPrizes = toCleanString(otherPrizes);
         event.participationPrize = toCleanString(participationPrize);
 
         event.internshipOpportunity = toCleanString(internshipOpportunity);
@@ -303,6 +306,10 @@ export const getAllEvents = async (req, res, next) => {
     try {
         const user = req.user;
         const { status } = req.query;
+
+        if (user?._id) {
+            trackDailyView(user._id, "events");
+        }
 
         const query = buildStatusQuery(user, status);
 

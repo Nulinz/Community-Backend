@@ -161,6 +161,12 @@ const userSchema = new mongoose.Schema(
       default: null,
     },
 
+    // 🔹 APP TOUR ONBOARDING
+    hasSeenAppTour: {
+      type: Boolean,
+      default: false,
+    },
+
     // 🔹 REFERRAL SYSTEM
     referralCode: {
       type: String,

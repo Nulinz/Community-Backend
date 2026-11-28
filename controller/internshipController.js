@@ -11,6 +11,7 @@ import { applyOrderCount, buildStatusQuery, sortByOrderCount } from "../helper/o
 import Company from "../models/companyModel.js";
 import User from "../models/userModel.js";
 import Resume from "../models/resumeModel.js";
+import { trackUniqueTarget } from "../models/userMissionProgressModel.js";
 
 const toCleanString = (value) =>
   typeof value === "string" ? value.trim() : "";
@@ -227,6 +228,10 @@ export const getInternshipById = async (req, res, next) => {
 
     if (!internship) {
       throw Object.assign(new Error("Internship not found"), { status: 404 });
+    }
+
+    if (req.user?._id) {
+      trackUniqueTarget(req.user._id, "opportunities", internship._id);
     }
 
     if (

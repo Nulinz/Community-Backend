@@ -5,6 +5,7 @@ import { notifyJobAudience } from "../helper/jobNotification.js";
 import { notifyCompanyFollowers } from "../helper/companyFollowNotification.js";
 import Company from "../models/companyModel.js";
 import User from "../models/userModel.js";
+import { trackDailyView, trackUniqueTarget } from "../models/userMissionProgressModel.js";
 import path from "path";
 
 const toCleanString = (value) =>
@@ -193,6 +194,10 @@ export const getAllFreelances = async (req, res, next) => {
     const user = req.user;
     const { status } = req.query;
 
+    if (user?._id) {
+      trackDailyView(user._id, "envy_discover");
+    }
+
     let query = {};
 
     switch (status) {
@@ -242,6 +247,10 @@ export const getFreelanceById = async (req, res, next) => {
 
     if (!freelance) {
       throw Object.assign(new Error("Freelance not found"), { status: 404 });
+    }
+
+    if (req.user?._id) {
+      trackUniqueTarget(req.user._id, "envy_projects", freelance._id);
     }
 
     if (
@@ -308,9 +317,20 @@ export const getFreelanceById = async (req, res, next) => {
       })
     );
 
-    // Resolve company logo from company profile or admin
-    let companyLogo = null;
-    if (freelance.c_by) {
+    // Resolve company logo: saved logo -> matching company by name -> creator's company -> admin default
+    let companyLogo = freelance.companyLogo || null;
+    if (!companyLogo && freelance.companyName) {
+      const escapedName = freelance.companyName.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const companyByName = await Company.findOne({
+        companyName: new RegExp(`^${escapedName}$`, "i"),
+      })
+        .select("companyLogo")
+        .lean();
+      if (companyByName?.companyLogo) {
+        companyLogo = companyByName.companyLogo;
+      }
+    }
+    if (!companyLogo && freelance.c_by) {
       const company = await Company.findOne({
         $or: [{ userId: freelance.c_by }, { c_by: freelance.c_by }],
       })
@@ -318,16 +338,6 @@ export const getFreelanceById = async (req, res, next) => {
         .lean();
       if (company?.companyLogo) {
         companyLogo = company.companyLogo;
-      }
-    }
-    if (!companyLogo && freelance.companyName) {
-      const companyByName = await Company.findOne({
-        companyName: new RegExp(`^${freelance.companyName.trim()}$`, "i"),
-      })
-        .select("companyLogo")
-        .lean();
-      if (companyByName?.companyLogo) {
-        companyLogo = companyByName.companyLogo;
       }
     }
     if (!companyLogo && freelance.c_by) {

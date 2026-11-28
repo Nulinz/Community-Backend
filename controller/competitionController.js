@@ -7,6 +7,7 @@ import { getEventFinancials } from "../helper/getEventFinancials.js";
 import { validateOrganizerPayout, resolveOrganizerName } from "../helper/payoutValidator.js";
 import { enrichRegistrationsWithUserDetails } from "../helper/resolveUserEducation.js";
 import { applyOrderCount, buildStatusQuery, sortByOrderCount } from "../helper/orderCountHelper.js";
+import { trackDailyView } from "../models/userMissionProgressModel.js";
 const toCleanString = (value) =>
     typeof value === "string" ? value.trim() : "";
 
@@ -99,6 +100,7 @@ export const createCompetitionForm = async (req, res, next) => {
             firstPrize,
             secondPrize,
             thirdPrize,
+            otherPrizes,
             participationPrize,
             venueName,
             address,
@@ -281,6 +283,7 @@ export const createCompetitionForm = async (req, res, next) => {
         competition.firstPrize = toCleanString(firstPrize);
         competition.secondPrize = toCleanString(secondPrize);
         competition.thirdPrize = toCleanString(thirdPrize);
+        competition.otherPrizes = toCleanString(otherPrizes);
         competition.participationPrize = toCleanString(participationPrize);
 
         competition.venueName = toCleanString(venueName);
@@ -361,6 +364,10 @@ export const getAllCompetition = async (req, res, next) => {
     try {
         const user = req.user;
         const { status } = req.query;
+
+        if (user?._id) {
+            trackDailyView(user._id, "competitions");
+        }
 
         const query = buildStatusQuery(user, status);
 

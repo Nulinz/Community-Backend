@@ -12,6 +12,7 @@ import Resume from "../models/resumeModel.js";
 import { formatJobSalary } from "../helper/salaryHelper.js";
 import { notifyCompanyFollowers } from "../helper/companyFollowNotification.js";
 import { applyOrderCount, buildStatusQuery, sortByOrderCount } from "../helper/orderCountHelper.js";
+import { trackUniqueTarget } from "../models/userMissionProgressModel.js";
 
 const toCleanString = (value) =>
   typeof value === "string" ? value.trim() : "";
@@ -252,6 +253,10 @@ export const getJobById = async (req, res, next) => {
 
     if (!job) {
       throw Object.assign(new Error("Job not found"), { status: 404 });
+    }
+
+    if (req.user?._id) {
+      trackUniqueTarget(req.user._id, "opportunities", job._id);
     }
 
     if (

@@ -441,6 +441,8 @@ export const createAdmin = async (req, res, next) => {
             password,
             phone,
             role,
+            is_active: true,
+            register_status: "completed",
         });
 
         res.status(200).json({

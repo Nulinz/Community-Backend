@@ -99,6 +99,7 @@ export const getResumeTemplates = async (req, res, next) => {
         previewUrl: `/resume/${pdfFileName}`,
         previewPdfUrl: `${baseUrl}/resume/${pdfFileName}`,
         previewHtmlUrl: `${baseUrl}/api/resume/preview/${tmpl.id}`,
+        previewImageUrl: `${baseUrl}/resume/previews/${tmpl.id}.webp`,
       };
     });
 

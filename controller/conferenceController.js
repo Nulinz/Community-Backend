@@ -64,6 +64,7 @@ export const createConferenceForm = async (req, res, next) => {
             firstPrize,
             secondPrize,
             thirdPrize,
+            otherPrizes,
             participationPrize,
             internshipOpportunity,
             placementOpportunity,
@@ -236,6 +237,7 @@ export const createConferenceForm = async (req, res, next) => {
         conference.firstPrize = toCleanString(firstPrize);
         conference.secondPrize = toCleanString(secondPrize);
         conference.thirdPrize = toCleanString(thirdPrize);
+        conference.otherPrizes = toCleanString(otherPrizes);
         conference.participationPrize = toCleanString(participationPrize);
 
         conference.internshipOpportunity = toCleanString(internshipOpportunity);
